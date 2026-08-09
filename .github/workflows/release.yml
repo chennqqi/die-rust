@@ -466,6 +466,36 @@ jobs:
           find artifacts -type f
           ls -la artifacts/*/ || true
 
+      - name: Extract changelog for this version
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          tag="${{ inputs.version || github.ref_name }}"
+          # Extract only the current version's changelog section from
+          # RELEASE_NOTES.md (from "## diec-rust <version>" to the next
+          # "## diec-rust" heading or EOF).
+          # This keeps GitHub release pages concise — each release shows
+          # only its own changes, not the full history.
+          awk -v ver="$version" '
+            BEGIN { found=0 }
+            /^## diec-rust / {
+              if (found) exit 0      # reached next version section, stop
+              if (index($0, ver)) { found=1; print; next }
+            }
+            { if (found) print }
+          ' RELEASE_NOTES.md > release_notes_current.md
+
+          # Fallback: if extraction produced empty output (e.g. version
+          # mismatch), use the full file to avoid a blank release page.
+          if [ ! -s release_notes_current.md ]; then
+            echo "WARNING: could not extract changelog for $version, using full RELEASE_NOTES.md"
+            cp RELEASE_NOTES.md release_notes_current.md
+          fi
+
+          echo "--- Extracted release notes (first 5 lines) ---"
+          head -5 release_notes_current.md
+          echo "---"
+
       - name: Create release
         shell: bash
         env:
@@ -482,6 +512,6 @@ jobs:
             echo "Creating release $tag"
             gh release create "$tag" \
               --title "diec-rust $version" \
-              --notes-file RELEASE_NOTES.md \
+              --notes-file release_notes_current.md \
               artifacts/*/*
           fi
