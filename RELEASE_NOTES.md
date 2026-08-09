@@ -1,5 +1,76 @@
 # Release Notes
 
+## diec-rust v0.7.0
+
+Phase 11 + Phase 12 GUI deep alignment release — 43 items achieving
+full feature parity with upstream DIE-engine Qt GUI.
+
+### Phase 11: GUI Deep Alignment — Complete Header Parsing & Missing Modules (8 batches)
+
+- **11.1 FileInfo complete header parsing (P0)**: HeaderField tree structure +
+  PE/ELF/Mach-O complete header parsing (pelite + goblin); FileHeaderTree
+  recursive tree component + FileInfoPanel sub-tabs
+- **11.2 File format detection extension (P0)**: Integrated diec-formats probe
+  table (20+ format detection); hand-written magic bytes as fallback
+  (PE32/PE32+ subtype distinction)
+- **11.3 PE dedicated view (P1)**: pe_viewer.rs with imports/exports/resources/
+  overlay/.NET/manifest/version info/TLS/Rich Header; PeViewPanel.tsx with
+  9 sub-tabs
+- **11.4 String search & extractor (P1)**: string_extractor.rs with ASCII/UTF-16LE
+  extraction + filter search; StringExtractor.tsx with real-time search +
+  encoding filter
+- **11.5 Archive format extension (P1)**: list_archive extended for ZIP/TAR/
+  GZIP+TAR (tar + flate2 dependencies)
+- **11.6 Visualization & section view (P2)**: SectionVisualizer.tsx with
+  color-coded section layout + entropy coloring + overlay markers
+- **11.7 Settings modal & shortcut config (P2)**: SettingsModal.tsx with
+  5-tab modal (View/Scan/Database/Engine/Shortcuts); 8 configurable shortcuts
+- **11.8 VirusTotal integration & MIME type (P2)**: FileInfo mime_type field +
+  detect_mime_type function; OnlineTools refactored with SHA256 + VirusTotal
+  jump (matching upstream Qt behavior)
+
+### Phase 12: GUI Gap v3 — 35 Remaining Items Complete Alignment
+
+- **Batch A: PE missing sub-views (5)**: IMAGE_NT_HEADERS overview,
+  RESOURCES_STRINGTABLE, .NET_METADATA_STREAM, .NET_METADATA_TABLE,
+  PE TOOLS (DosStub/Overlay dump/remove/add with .bak backup)
+- **Batch B: Mach-O missing sub-views (12)**: weak_libraries, id_library,
+  FVMLIB, IDFVMLIB, function_starts (ULEB128 decode), data_in_code,
+  code_signature (SuperBlob), SuperBlob, unix_thread, dyld_chained_fixups,
+  dyld_exports_trie (trie traversal), STRINGTABLE
+- **Batch C: ELF STRINGTABLE (1)**: SHT_STRTAB section string table parsing
+- **Batch D: String search enhancements (8)**: MapMode (file/virtual/physical),
+  FileType (auto/pe/elf/macho/dex/raw), right-click menu (Follow in Hex/Disasm/
+  Demangle/Edit String), Save results (CSV/JSON), default min length 4→5
+- **Batch E: Visualization enhancements (5)**: ZEROS_GRADIENT, TEXT_GRADIENT
+  methods, highlight feature, zoom slider (1-10px), save image (PNG)
+- **Batch F: Extractor enhancements (3)**: HEURISTIC mode (21 magic signatures),
+  deep scan toggle, analyze mode (format detection + entropy calculation)
+- **Batch G: Scan log (1)**: ScanResultDto scan_log field + frontend collapsible
+  display
+
+### Testing & Verification
+
+- **Tests**: 614 pass, 0 failures (up from 597 in v0.6.1, +17 new tests)
+- **cargo fmt --check**: PASS
+- **cargo clippy --workspace --all-targets --all-features -- -D warnings**: PASS
+- **npx tsc --noEmit**: PASS (zero TypeScript errors)
+- **New unit tests**: visualization (ZerosGradient/TextGradient), macho
+  (read_uleb128/data_in_code_kind_name/code_slot_type_name/count_exports_in_trie/
+  parse_string_table), pe (pe_subsystem_name/pe_machine_name/parse_nt_headers),
+  elf (string_table_entry_serialization/extraction_logic), string_extractor
+  (map_mode_default/file_type_default/params_default_min_length/
+  extract_with_map_mode_file)
+
+### Documentation Updates
+
+- **ROADMAP.md**: Phase 11 and Phase 12 marked as DONE with completion summaries
+- **docs/research/gui-gap-analysis-v2.md**: Phase 11 gap analysis
+- **docs/research/gui-gap-analysis-v3.md**: Phase 12 gap analysis (35 items)
+- **docs/design/phase11-gui-parity.md**: Phase 11 design document
+- **doc/requirements.md**: Requirements summary appended
+- **doc/requirements-analysis.md**: Analysis process appended
+
 ## diec-rust v0.6.0
 
 Phase 10 known issues fix and documentation cleanup release —

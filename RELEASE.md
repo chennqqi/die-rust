@@ -12,7 +12,7 @@ for diec-rust. Every item must be verified before publishing a release.
 - [x] All `unsafe` blocks have safety documentation and tests
 
 ### Testing
-- [x] `cargo test --workspace --all-features --locked` passes (506 tests)
+- [x] `cargo test --workspace --all-features --locked` passes (614 tests)
 - [x] Corpus differential tests pass (31 baseline + 20 edge samples)
 - [x] FFI tests pass (unit + integration + sanitizer)
 - [x] Edge corpus tests pass (no-crash, no-spurious, no-hang)
@@ -99,10 +99,10 @@ for diec-rust. Every item must be verified before publishing a release.
 - [x] Changelog / release notes drafted (`RELEASE_NOTES.md`)
 
 ## Version and Tag
-- [x] Version bumped in `Cargo.toml` (workspace.package.version = 0.6.0)
-- [ ] Git tag created: `v0.6.0`
-- [ ] Tag is annotated (`git cat-file -t v0.6.0` => `tag`)
-- [ ] Tag message includes release summary ("v0.6.0 - Phase 10 known issues fix and documentation cleanup")
+- [x] Version bumped in `Cargo.toml` (workspace.package.version = 0.7.0)
+- [ ] Git tag created: `v0.7.0`
+- [ ] Tag is annotated (`git cat-file -t v0.7.0` => `tag`)
+- [ ] Tag message includes release summary ("v0.7.0 - Phase 11+12 GUI deep alignment, 43 items, full feature parity")
 
 ## Post-Release
 - [x] Release notes published (`RELEASE_NOTES.md` committed)
@@ -113,6 +113,30 @@ for diec-rust. Every item must be verified before publishing a release.
 ---
 
 ## Release Sign-off
+
+### v0.7.0 — 2026-08-09
+
+- **Tag**: `v0.7.0` (annotated)
+- **Tests**: 614 pass, 0 failures (up from 597 in v0.6.1, +17 new tests)
+- **Phase 11 GUI deep alignment** (8 batches):
+  - 11.1 FileInfo complete header parsing (HeaderField tree + PE/ELF/Mach-O)
+  - 11.2 File format detection extension (diec-formats probe + magic fallback)
+  - 11.3 PE dedicated view (9 sub-tabs: imports/exports/resources/overlay/.NET/manifest/version info/TLS/Rich Header)
+  - 11.4 String search & extractor (ASCII/UTF-16LE + filter)
+  - 11.5 Archive format extension (ZIP/TAR/GZIP+TAR)
+  - 11.6 Visualization & section view (SectionVisualizer)
+  - 11.7 Settings modal & shortcut config (5 tabs, 8 shortcuts)
+  - 11.8 VirusTotal integration & MIME type
+- **Phase 12 GUI gap v3** (35 items):
+  - Batch A: PE 5 sub-views (NT_HEADERS/RESOURCES_STRINGTABLE/NET_METADATA_STREAM/NET_METADATA_TABLE/TOOLS)
+  - Batch B: Mach-O 12 sub-views (weak_libraries/id_library/FVMLIB/IDFVMLIB/function_starts/data_in_code/code_signature/SuperBlob/unix_thread/dyld_chained_fixups/dyld_exports_trie/STRINGTABLE)
+  - Batch C: ELF STRINGTABLE
+  - Batch D: String search 8 enhancements (MapMode/FileType/jump Hex/jump Disasm/Demangle/Edit String/Save/min length 5)
+  - Batch E: Visualization 5 enhancements (ZEROS_GRADIENT/TEXT_GRADIENT/highlight/zoom/save image)
+  - Batch F: Extractor 3 enhancements (HEURISTIC/deep scan/analyze mode)
+  - Batch G: Scan log display
+- **ROADMAP.md**: Phase 11 and Phase 12 marked as DONE
+- **New files**: 11 backend modules + 11 frontend components + 4 docs
 
 ### v0.6.0 — 2026-08-08
 

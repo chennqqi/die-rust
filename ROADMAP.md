@@ -687,7 +687,93 @@ bug"，但条目仍残留在 "Known Limitations" 节中，应清理或移至正�
 - 506 个测试全部通过，cargo fmt/clippy 零警告
 - GUI 构建资源已准备（db/db_extra/dbs_min/dbs_special/peid_rules/yara_rules）
 
+## Phase 11：GUI 深度对齐 — 完整头部解析与缺失模块 — DONE
+
+Phase 9 修复了信息展示格式和基础功能缺陷（20 项 P1/P2/P3），但人工实际
+使用发现对齐度仍仅约 30%。根本原因是**架构层面**的差距：FileInfoPanel
+缺少完整头部解析、格式专用视图缺失、多个工具模块未实现。
+
+差距分析：`docs/research/gui-gap-analysis-v2.md`
+设计文档：`docs/design/phase11-gui-parity.md`
+
+**Phase 11 已于 2026-08-08 关闭。** 所有 8 个任务批次已完成：
+
+- 11.1 FileInfo 完整头部解析（P0）— ✅
+  - 后端 HeaderField 树形结构 + PE/ELF/Mach-O 完整头部解析（pelite + goblin）
+  - 前端 FileHeaderTree 递归树形组件 + FileInfoPanel 子标签
+- 11.2 文件格式检测扩展（P0）— ✅
+  - 集成 diec-formats probe table（20+ 格式检测）
+  - 手写 magic bytes 作为回退（PE32/PE32+ 子类型区分）
+- 11.3 PE 专用视图（P1）— ✅
+  - pe_viewer.rs：imports/exports/resources/overlay/.NET/manifest/version info/TLS/Rich Header
+  - PeViewPanel.tsx：9 个子标签
+- 11.4 字符串搜索与提取器（P1）— ✅
+  - string_extractor.rs：ASCII/UTF-16LE 提取 + 过滤搜索
+  - StringExtractor.tsx：实时搜索 + 编码过滤
+- 11.5 归档格式扩展（P1）— ✅
+  - list_archive 扩展支持 ZIP/TAR/GZIP+TAR（tar + flate2 依赖）
+- 11.6 可视化视图与区段视图（P2）— ✅
+  - SectionVisualizer.tsx：颜色编码区段布局图 + 熵值着色 + overlay 标记
+- 11.7 Settings 模态对话框与快捷键配置（P2）— ✅
+  - SettingsModal.tsx：5 标签模态对话框（View/Scan/Database/Engine/Shortcuts）
+  - ShortcutSettings：8 个可配置快捷键
+- 11.8 VirusTotal 集成与 MIME 类型（P2）— ✅
+  - FileInfo 新增 mime_type 字段 + detect_mime_type 函数
+  - OnlineTools 重构：接收 filePath，自动获取 SHA256，点击跳转 VirusTotal（与上游 Qt 行为一致）
+
+**验证结果**：
+- 66 个 Rust 测试全部通过
+- cargo fmt/clippy 零警告
+- 前端编译通过
+### Deferred 项
+
+- NFD/InfoDB/静态脱壳/DEX 专用视图 — 需独立 ADR
+- SSDeep/TLSH 哈希 — 需 native 依赖
+- RAR 归档 — 需 native 依赖（unrar），需 ADR
+- 多语言扩展到 22 种 — 低优先级
+- 自动更新 — ADR 0019 deferred
+
 ## 后续改进项
+
+### Phase 12：GUI 差距 v3 — 35 项剩余功能完整对齐 — DONE
+
+Phase 11 完成了 8 个批次的基础对齐，但 `gui-gap-analysis-v3.md` 仍识别出
+35 项缺失功能。本阶段一次性实施全部 35 项，使 GUI 达到与上游 DIE-engine
+的完整功能对齐。
+
+差距分析：`docs/research/gui-gap-analysis-v3.md`
+
+**Phase 12 已于 2026-08-09 关闭。** 全部 35 项已完成：
+
+- **Batch A: PE 缺失子视图（5 项）** — ✅
+  - A1 IMAGE_NT_HEADERS：NT 头总览（signature/machine/entry/image_base/subsystem）
+  - A2 RESOURCES_STRINGTABLE：RT_STRING 资源字符串表
+  - A3 NET_METADATA_STREAM：.NET 元数据流详情（#~/#Strings/#US/#GUID/#Blob）
+  - A4 NET_METADATA_TABLE：.NET 元数据表（45 种表行计数）
+  - A5 TOOLS：6 个 PE 工具命令（DosStub/Overlay dump/remove/add，含 .bak 备份）
+- **Batch B: Mach-O 缺失子视图（12 项）** — ✅
+  - weak_libraries、id_library、FVMLIB、IDFVMLIB
+  - function_starts（ULEB128 解码）、data_in_code、code_signature（SuperBlob）
+  - SuperBlob、unix_thread、dyld_chained_fixups、dyld_exports_trie（trie 遍历）
+  - STRINGTABLE
+- **Batch C: ELF STRINGTABLE（1 项）** — ✅
+  - 从 SHT_STRTAB 节区解析字符串表条目
+- **Batch D: 字符串搜索增强（8 项）** — ✅
+  - MapMode（file/virtual/physical）、FileType（auto/pe/elf/macho/dex/raw）
+  - 右键菜单（Follow in Hex/Disasm/Demangle/Edit String）
+  - 保存结果（CSV/JSON）、默认长度 4→5
+- **Batch E: 可视化增强（5 项）** — ✅
+  - ZEROS_GRADIENT、TEXT_GRADIENT 方法
+  - 高亮功能（点击 Canvas 添加）、缩放滑块（1-10px）、保存图片（PNG）
+- **Batch F: 提取器增强（3 项）** — ✅
+  - HEURISTIC 模式（21 种 magic 签名扫描）、深度扫描开关、分析模式（格式识别 + 熵）
+- **Batch G: 扫描日志（1 项）** — ✅
+  - ScanResultDto 新增 scan_log 字段，前端折叠显示
+
+**验证结果**：
+- 614 个测试全部通过（+19 新增测试：visualization 2 + macho 5 + pe 4 + elf 2 + string_extractor 4 + extractor 2）
+- cargo fmt/clippy 零警告
+- TypeScript 编译零错误
 
 ### Host API 完善（差分兼容性）
 

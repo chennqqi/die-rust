@@ -19,6 +19,18 @@ pub struct AppSettings {
     pub database: DatabaseSettings,
     /// Engine enable flags (DIE, NFD, PEID, YARA).
     pub engine: EngineSettings,
+    /// Online tools settings (VirusTotal API key, etc.).
+    pub online_tools: OnlineToolsSettings,
+    /// Keyboard shortcut configuration.
+    pub shortcuts: ShortcutSettings,
+}
+
+/// Online tools settings (upstream `XOptions::ID_ONLINETOOLS_*`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OnlineToolsSettings {
+    /// VirusTotal API key (empty = browser jump mode, non-empty = API query mode).
+    /// Upstream uses MD5 hash for both modes.
+    pub virustotal_apikey: String,
 }
 
 /// View-related settings (upstream `XOptions::ID_VIEW_*`).
@@ -109,6 +121,30 @@ pub struct EngineSettings {
     pub yara_enabled: bool,
 }
 
+/// Keyboard shortcut configuration (upstream `XShortcuts`).
+///
+/// Each shortcut is a comma-separated list of modifier+key strings,
+/// e.g. "Ctrl+O", "Ctrl+Shift+S".
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShortcutSettings {
+    /// Open file (default: Ctrl+O).
+    pub open_file: String,
+    /// Save results (default: Ctrl+S).
+    pub save_results: String,
+    /// Scan file (default: F5).
+    pub scan: String,
+    /// Stop scan (default: Escape).
+    pub stop_scan: String,
+    /// Toggle hex view (default: Ctrl+H).
+    pub toggle_hex: String,
+    /// Toggle strings view (default: Ctrl+T).
+    pub toggle_strings: String,
+    /// Open settings (default: Ctrl+,).
+    pub open_settings: String,
+    /// Quit application (default: Ctrl+Q).
+    pub quit: String,
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -155,6 +191,19 @@ impl Default for AppSettings {
                 nfd_enabled: false,
                 peid_enabled: false,
                 yara_enabled: false,
+            },
+            online_tools: OnlineToolsSettings {
+                virustotal_apikey: String::new(),
+            },
+            shortcuts: ShortcutSettings {
+                open_file: "Ctrl+O".to_string(),
+                save_results: "Ctrl+S".to_string(),
+                scan: "F5".to_string(),
+                stop_scan: "Escape".to_string(),
+                toggle_hex: "Ctrl+H".to_string(),
+                toggle_strings: "Ctrl+T".to_string(),
+                open_settings: "Ctrl+,".to_string(),
+                quit: "Ctrl+Q".to_string(),
             },
         }
     }

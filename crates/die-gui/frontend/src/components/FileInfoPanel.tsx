@@ -9,7 +9,14 @@ import {
   Activity,
   Copy,
   Check,
+  GitBranch,
 } from "lucide-react";
+import { FileHeaderTree, type HeaderField } from "./FileHeaderTree";
+import PeViewPanel from "./PeViewPanel";
+import { ElfViewPanel } from "./ElfViewPanel";
+import { MachoViewPanel } from "./MachoViewPanel";
+import StringExtractor from "./StringExtractor";
+import SectionVisualizer from "./SectionVisualizer";
 
 interface FileHashes {
   md5: string;
@@ -43,9 +50,11 @@ interface FileInfo {
   format: string;
   sections: SectionInfo[];
   symbols: SymbolInfo[];
+  header_tree: HeaderField[];
+  mime_type?: string;
 }
 
-type SubTab = "info" | "sections" | "symbols" | "entropy";
+type SubTab = "info" | "headers" | "sections" | "symbols" | "entropy" | "pe" | "elf" | "macho" | "strings" | "visual";
 
 export function FileInfoPanel({ path }: { path: string }) {
   const { t } = useTranslation();
@@ -102,9 +111,21 @@ export function FileInfoPanel({ path }: { path: string }) {
         style={{ background: "rgb(var(--bg-panel))" }}
       >
         <SubTabButton active={subTab === "info"} onClick={() => setSubTab("info")} icon={FileText} label={t("fileInfo.title")} />
+        <SubTabButton active={subTab === "headers"} onClick={() => setSubTab("headers")} icon={GitBranch} label={t("fileInfo.headers", "Headers")} />
         <SubTabButton active={subTab === "sections"} onClick={() => setSubTab("sections")} icon={Layers} label={`${t("fileInfo.sections")} (${info.sections.length})`} />
         <SubTabButton active={subTab === "symbols"} onClick={() => setSubTab("symbols")} icon={Code2} label={`${t("fileInfo.symbols")} (${info.symbols.length})`} />
         <SubTabButton active={subTab === "entropy"} onClick={() => setSubTab("entropy")} icon={Activity} label={t("fileInfo.entropy")} />
+        {(info.format === "PE32" || info.format === "PE32+" || info.format === "PE") && (
+          <SubTabButton active={subTab === "pe"} onClick={() => setSubTab("pe")} icon={GitBranch} label="PE View" />
+        )}
+        {(info.format === "ELF32" || info.format === "ELF64" || info.format === "ELF") && (
+          <SubTabButton active={subTab === "elf"} onClick={() => setSubTab("elf")} icon={GitBranch} label="ELF View" />
+        )}
+        {(info.format === "Mach-O 32" || info.format === "Mach-O 64" || info.format === "Mach-O FAT") && (
+          <SubTabButton active={subTab === "macho"} onClick={() => setSubTab("macho")} icon={GitBranch} label="Mach-O View" />
+        )}
+        <SubTabButton active={subTab === "strings"} onClick={() => setSubTab("strings")} icon={Code2} label="Strings" />
+        <SubTabButton active={subTab === "visual"} onClick={() => setSubTab("visual")} icon={Activity} label="Visual" />
       </div>
 
       {/* Content */}
@@ -115,6 +136,9 @@ export function FileInfoPanel({ path }: { path: string }) {
             <InfoRow label={t("fileInfo.title")} value={info.path} mono />
             <InfoRow label={t("fileInfo.size")} value={`${info.size_human} (${info.size.toLocaleString()} bytes)`} />
             <InfoRow label={t("fileInfo.format")} value={info.format} />
+            {info.mime_type && (
+              <InfoRow label="MIME Type" value={info.mime_type} mono />
+            )}
             <InfoRow
               label={t("fileInfo.entropy")}
               value={`${info.entropy.toFixed(4)} ${entropyLabel(info.entropy)}`}
@@ -145,6 +169,10 @@ export function FileInfoPanel({ path }: { path: string }) {
               />
             </div>
           </div>
+        )}
+
+        {subTab === "headers" && (
+          <FileHeaderTree fields={info.header_tree ?? []} />
         )}
 
         {subTab === "sections" && (
@@ -220,6 +248,26 @@ export function FileInfoPanel({ path }: { path: string }) {
 
         {subTab === "entropy" && (
           <EntropyView path={path} overall={info.entropy} />
+        )}
+
+        {subTab === "pe" && (
+          <PeViewPanel filePath={path} />
+        )}
+
+        {subTab === "elf" && (
+          <ElfViewPanel filePath={path} />
+        )}
+
+        {subTab === "macho" && (
+          <MachoViewPanel filePath={path} />
+        )}
+
+        {subTab === "strings" && (
+          <StringExtractor filePath={path} />
+        )}
+
+        {subTab === "visual" && (
+          <SectionVisualizer filePath={path} />
         )}
       </div>
     </div>

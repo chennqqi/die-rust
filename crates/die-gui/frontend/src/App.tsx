@@ -37,6 +37,8 @@ import {
   Map,
   Archive,
   Repeat,
+  Grid3x3,
+  Scissors,
 } from "lucide-react";
 import { HexViewer } from "./components/HexViewer";
 import { Disassembler } from "./components/Disassembler";
@@ -51,6 +53,12 @@ import { SignatureHighlighter } from "./components/SignatureHighlighter";
 import { MemoryMapViewer } from "./components/MemoryMapViewer";
 import { ArchiveViewer } from "./components/ArchiveViewer";
 import { DataConverter } from "./components/DataConverter";
+import VisualizationPanel from "./components/VisualizationPanel";
+import ExtractorPanel from "./components/ExtractorPanel";
+import StringExtractor from "./components/StringExtractor";
+import MiscViewPanel from "./components/MiscViewPanel";
+import SearchPanel from "./components/SearchPanel";
+import SettingsModal from "./components/SettingsModal";
 
 interface ScanDetectionDto {
   file_type: string;
@@ -88,6 +96,7 @@ interface ScanResultDto {
   structured_diagnostics: StructuredDiagnosticDto[];
   profiling: SignatureProfileDto[];
   scan_time_ms: number;
+  scan_log?: string[];
 }
 
 /** Database path info from list_database_paths IPC command. */
@@ -185,21 +194,27 @@ const defaultSettings: AppSettings = {
   engine: { die_enabled: true, nfd_enabled: false, peid_enabled: false, yara_enabled: false },
 };
 
-type TabId = "scan" | "info" | "hex" | "disasm" | "demangle" | "sigs" | "yara" | "peid" | "online" | "memmap" | "archive" | "converter";
+type TabId = "scan" | "info" | "hex" | "disasm" | "demangle" | "sigs" | "yara" | "peid" | "online" | "memmap" | "archive" | "converter" | "visualization" | "extractor" | "misc" | "search" | "strings";
 
-const TAB_KEYS: { id: TabId; labelKey: string; icon: typeof FileSearch }[] = [
+const TAB_KEYS: { id: TabId; labelKey: string; icon: typeof FileSearch; advanced?: boolean }[] = [
   { id: "scan", labelKey: "tabs.scan", icon: ScanSearch },
   { id: "info", labelKey: "tabs.info", icon: FileSearchIcon },
-  { id: "hex", labelKey: "tabs.hex", icon: Binary },
-  { id: "disasm", labelKey: "tabs.disasm", icon: Code2 },
-  { id: "demangle", labelKey: "tabs.demangle", icon: FileText },
-  { id: "sigs", labelKey: "tabs.signatures", icon: Tags },
-  { id: "yara", labelKey: "tabs.yara", icon: Shield },
-  { id: "peid", labelKey: "tabs.peid", icon: ScanSearch },
-  { id: "memmap", labelKey: "tabs.memmap", icon: Map },
-  { id: "archive", labelKey: "tabs.archive", icon: Archive },
-  { id: "converter", labelKey: "tabs.converter", icon: Repeat },
   { id: "online", labelKey: "tabs.online", icon: Globe },
+  // Advanced tabs (only shown when Advanced mode is enabled)
+  { id: "hex", labelKey: "tabs.hex", icon: Binary, advanced: true },
+  { id: "disasm", labelKey: "tabs.disasm", icon: Code2, advanced: true },
+  { id: "demangle", labelKey: "tabs.demangle", icon: FileText, advanced: true },
+  { id: "sigs", labelKey: "tabs.signatures", icon: Tags, advanced: true },
+  { id: "yara", labelKey: "tabs.yara", icon: Shield, advanced: true },
+  { id: "peid", labelKey: "tabs.peid", icon: ScanSearch, advanced: true },
+  { id: "memmap", labelKey: "tabs.memmap", icon: Map, advanced: true },
+  { id: "archive", labelKey: "tabs.archive", icon: Archive, advanced: true },
+  { id: "converter", labelKey: "tabs.converter", icon: Repeat, advanced: true },
+  { id: "visualization", labelKey: "tabs.visualization", icon: Grid3x3, advanced: true },
+  { id: "extractor", labelKey: "tabs.extractor", icon: Scissors, advanced: true },
+  { id: "misc", labelKey: "tabs.misc", icon: FileText, advanced: true },
+  { id: "search", labelKey: "tabs.search", icon: ScanSearch, advanced: true },
+  { id: "strings", labelKey: "tabs.strings", icon: FileText, advanced: true },
 ];
 
 export default function App() {
@@ -212,10 +227,12 @@ export default function App() {
   const [scanPhase, setScanPhase] = useState<string>("");
   const [dragOver, setDragOver] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [advancedMode, setAdvancedMode] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [flags, setFlags] = useState<ScanFlagsDto>(defaultFlags);
   const [selectedDatabase, setSelectedDatabase] = useState<string>("main");
   const [dirProgress, setDirProgress] = useState<{ current: number; total: number } | null>(null);
+  const [fileInfo, setFileInfo] = useState<{ format: string; base_address: string; entry_point: string; format_count: number } | null>(null);
   const [ctxMenuStatus, setCtxMenuStatus] = useState<"installed" | "not_installed" | "checking" | "unsupported">("checking");
   const [ctxMenuMsg, setCtxMenuMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("scan");
@@ -235,6 +252,8 @@ export default function App() {
       .then((s) => {
         setSettings(s);
         setFlags(s.scan.flags);
+        // Apply saved advanced mode.
+        setAdvancedMode(s.view.advanced);
         // Apply saved language to i18n.
         if (s.view.language) {
           i18n.changeLanguage(s.view.language);
@@ -242,6 +261,17 @@ export default function App() {
       })
       .catch(() => {});
   }, [i18n]);
+
+  // Fetch file info (format, base address, entry point) when file path changes.
+  useEffect(() => {
+    if (!filePath) {
+      setFileInfo(null);
+      return;
+    }
+    invoke<{ format: string; base_address: string; entry_point: string; format_count: number }>("get_file_info", { path: filePath })
+      .then((info) => setFileInfo(info))
+      .catch(() => setFileInfo(null));
+  }, [filePath]);
 
   // Listen for scan progress events from the backend.
   useEffect(() => {
@@ -922,7 +952,7 @@ export default function App() {
         className="flex items-center gap-0 px-1 border-b border-border-c"
         style={{ background: "rgb(var(--bg-panel))" }}
       >
-        {TAB_KEYS.map((tab) => {
+        {TAB_KEYS.filter((tab) => advancedMode || !tab.advanced).map((tab) => {
           const Icon = tab.icon;
           return (
             <button
@@ -937,6 +967,28 @@ export default function App() {
             </button>
           );
         })}
+        {/* Advanced mode toggle */}
+        <button
+          onClick={() => {
+            const newMode = !advancedMode;
+            setAdvancedMode(newMode);
+            // Persist to settings.
+            const newSettings = { ...settings, view: { ...settings.view, advanced: newMode } };
+            setSettings(newSettings);
+            invoke("save_settings", { settings: newSettings }).catch(() => {});
+            // If switching to basic mode and current tab is advanced, switch to scan
+            if (!newMode && TAB_KEYS.find((tab) => tab.id === activeTab)?.advanced) {
+              setActiveTab("scan");
+            }
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs ml-auto ${
+            advancedMode ? "tab-active" : "tab-inactive"
+          }`}
+          title={advancedMode ? "Switch to Basic mode" : "Switch to Advanced mode"}
+        >
+          <SettingsIcon size={13} />
+          {advancedMode ? "Basic" : "Advanced"}
+        </button>
       </div>
 
       {/* Main content area */}
@@ -998,6 +1050,25 @@ export default function App() {
             {/* Advanced mode: Type/Flags toolbar (mirrors upstream comboBoxType/comboBoxFlags) */}
             {settings.view.advanced && filePath && (
               <AdvancedToolbar flags={flags} onFlagsChange={setFlags} />
+            )}
+
+            {/* Format info bar: shows file type, base address, entry point, format count */}
+            {filePath && fileInfo && (
+              <div
+                className="flex items-center gap-3 px-3 py-1 border-b border-border-c text-xs text-fg-muted"
+                style={{ background: "rgb(var(--bg-panel))" }}
+              >
+                <span>Format: <span className="text-fg-secondary font-mono">{fileInfo.format}</span></span>
+                {fileInfo.base_address !== "0" && (
+                  <span>Base: <span className="text-fg-secondary font-mono">0x{BigInt(fileInfo.base_address).toString(16)}</span></span>
+                )}
+                {fileInfo.entry_point !== "0" && (
+                  <span>Entry: <span className="text-fg-secondary font-mono">0x{BigInt(fileInfo.entry_point).toString(16)}</span></span>
+                )}
+                {fileInfo.format_count > 0 && (
+                  <span>Sections: <span className="text-fg-secondary font-mono">{fileInfo.format_count}</span></span>
+                )}
+              </div>
             )}
 
             {/* Progress bar during directory scan */}
@@ -1095,7 +1166,7 @@ export default function App() {
         {activeTab === "sigs" && <SignatureBrowser />}
         {activeTab === "yara" && filePath && <YaraScanner path={filePath} />}
         {activeTab === "peid" && filePath && <PeidScanner path={filePath} />}
-        {activeTab === "online" && <OnlineTools hash="" />}
+        {activeTab === "online" && <OnlineTools filePath={filePath} />}
 
         {/* Memory map tab */}
         {activeTab === "memmap" && <MemoryMapViewer filePath={filePath} />}
@@ -1105,6 +1176,36 @@ export default function App() {
 
         {/* Data converter tab */}
         {activeTab === "converter" && <DataConverter />}
+
+        {/* Visualization tab */}
+        {activeTab === "visualization" && <VisualizationPanel filePath={filePath} />}
+
+        {/* Extractor tab */}
+        {activeTab === "extractor" && <ExtractorPanel filePath={filePath} />}
+
+        {/* Strings tab */}
+        {activeTab === "strings" && (
+          <StringExtractor
+            filePath={filePath}
+            onHexJump={(offset) => {
+              setFilePath(filePath);
+              setActiveTab("hex");
+              // Hex viewer should pick up the offset from state or event.
+              console.log("Jump to hex at", offset);
+            }}
+            onDisasmJump={(offset) => {
+              setFilePath(filePath);
+              setActiveTab("disasm");
+              console.log("Jump to disasm at", offset);
+            }}
+          />
+        )}
+
+        {/* Misc formats tab (DEX/MSDOS/NE/LE) */}
+        {activeTab === "misc" && <MiscViewPanel filePath={filePath} />}
+
+        {/* Search tab (signature/value search + packer detection) */}
+        {activeTab === "search" && <SearchPanel filePath={filePath} />}
       </div>
 
       {/* Context menu for detection items */}
@@ -1176,6 +1277,9 @@ export default function App() {
         <div className="flex-1" />
         <span className="text-fg-muted">DIE v0.4.7</span>
       </div>
+
+      {/* Settings modal dialog */}
+      <SettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 }
@@ -1416,6 +1520,20 @@ function DetectionTreeView({
           </div>
         </details>
       )}
+
+      {/* Scan log */}
+      {result.scan_log && result.scan_log.length > 0 && (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-xs text-fg-secondary hover:text-fg flex items-center gap-1">
+            <FileText size={12} /> Scan Log ({result.scan_log.length})
+          </summary>
+          <div className="mt-1 border border-border-c rounded p-2 bg-bg-secondary max-h-48 overflow-auto">
+            <pre className="text-[10px] text-fg-muted whitespace-pre-wrap font-mono">
+              {result.scan_log.join("\n")}
+            </pre>
+          </div>
+        </details>
+      )}
     </div>
   );
 }
@@ -1492,6 +1610,19 @@ function SignatureSourcePanel({ detection }: { detection: ScanDetectionDto }) {
       .finally(() => setLoading(false));
   }, [detection]);
 
+  // Build extra info rows from detection metadata.
+  const extraInfoRows: [string, string][] = [];
+  if (detection.version) extraInfoRows.push(["Version", detection.version]);
+  if (detection.options) extraInfoRows.push(["Options", detection.options]);
+  if (detection.offset != null) extraInfoRows.push(["Offset", `0x${detection.offset.toString(16)}`]);
+  if (detection.size != null) extraInfoRows.push(["Size", String(detection.size)]);
+  if (detection.file_part) extraInfoRows.push(["File Part", detection.file_part]);
+  if (detection.is_heuristic) extraInfoRows.push(["Heuristic", "Yes"]);
+  if (detection.is_a_heuristic) extraInfoRows.push(["A-Heuristic", "Yes"]);
+  if (detection.original_name) extraInfoRows.push(["Original Name", detection.original_name]);
+  if (detection.id) extraInfoRows.push(["ID", detection.id]);
+  if (detection.parent_id) extraInfoRows.push(["Parent ID", detection.parent_id]);
+
   return (
     <div className="flex flex-col h-full" style={{ background: "rgb(var(--bg-panel))" }}>
       {/* Panel header */}
@@ -1507,6 +1638,15 @@ function SignatureSourcePanel({ detection }: { detection: ScanDetectionDto }) {
           <span className="text-xs text-fg-muted mono selectable">{detection.signature_path}</span>
         )}
       </div>
+
+      {/* Extra info bar */}
+      {extraInfoRows.length > 0 && (
+        <div className="flex items-center gap-3 px-3 py-1 border-b border-border-c text-xs text-fg-muted flex-wrap">
+          {extraInfoRows.map(([k, v], i) => (
+            <span key={i}>{k}: <span className="text-fg-secondary font-mono">{v}</span></span>
+          ))}
+        </div>
+      )}
 
       {/* Source content with syntax highlighting */}
       <div className="flex-1 overflow-auto">

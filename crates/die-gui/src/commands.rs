@@ -189,6 +189,9 @@ pub struct ScanResultDto {
     pub profiling: Vec<SignatureProfileDto>,
     /// Scan time in milliseconds.
     pub scan_time_ms: u64,
+    /// Scan log entries (rule loading, matching, skipping details).
+    #[serde(default)]
+    pub scan_log: Vec<String>,
 }
 
 impl From<ScanResult> for ScanResultDto {
@@ -215,10 +218,11 @@ impl From<ScanResult> for ScanResultDto {
         Self {
             path: r.path,
             detections,
-            diagnostics: r.diagnostics,
+            diagnostics: r.diagnostics.clone(),
             structured_diagnostics,
             profiling,
             scan_time_ms: 0,
+            scan_log: r.diagnostics,
         }
     }
 }
@@ -977,6 +981,265 @@ pub async fn get_file_info(path: String) -> Result<crate::file_info::FileInfo, G
     result.map_err(|e| GuiError::new("FILE_INFO_ERROR", e))
 }
 
+/// Get 2D visualization data for a file.
+#[tauri::command]
+pub async fn get_visualization(
+    path: String,
+    method: crate::visualization::VizMethod,
+    block_size: Option<u32>,
+    width: Option<u32>,
+) -> Result<crate::visualization::VisualizationData, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        crate::visualization::generate_visualization(&path, method, block_size, width)
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("VISUALIZATION_ERROR", e))
+}
+
+/// List extractable items from a file.
+#[tauri::command]
+pub async fn list_extractable(path: String) -> Result<crate::extractor::ExtractItemList, GuiError> {
+    let result = tokio::task::spawn_blocking(move || crate::extractor::list_extractable(&path))
+        .await
+        .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("EXTRACTOR_ERROR", e))
+}
+
+/// Get DEX view data for a file.
+#[tauri::command]
+pub async fn get_dex_view(path: String) -> Result<Option<crate::misc_viewer::DexView>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        std::fs::read(&path)
+            .ok()
+            .and_then(|data| crate::misc_viewer::parse_dex_view(&data))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    Ok(result)
+}
+
+/// Get MSDOS view data for a file.
+#[tauri::command]
+pub async fn get_msdos_view(
+    path: String,
+) -> Result<Option<crate::misc_viewer::MsdosView>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        std::fs::read(&path)
+            .ok()
+            .and_then(|data| crate::misc_viewer::parse_msdos_view(&data))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    Ok(result)
+}
+
+/// Get NE view data for a file.
+#[tauri::command]
+pub async fn get_ne_view(path: String) -> Result<Option<crate::misc_viewer::NeView>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        std::fs::read(&path)
+            .ok()
+            .and_then(|data| crate::misc_viewer::parse_ne_view(&data))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    Ok(result)
+}
+
+/// Get LE view data for a file.
+#[tauri::command]
+pub async fn get_le_view(path: String) -> Result<Option<crate::misc_viewer::LeView>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        std::fs::read(&path)
+            .ok()
+            .and_then(|data| crate::misc_viewer::parse_le_view(&data))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    Ok(result)
+}
+
+/// Search for a hex signature pattern with wildcards.
+#[tauri::command]
+pub async fn search_signature(
+    path: String,
+    pattern: String,
+    start_offset: u64,
+    max_hits: usize,
+) -> Result<crate::search::SearchResult, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        crate::search::search_signature(&path, &pattern, start_offset, max_hits)
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("SEARCH_ERROR", e))
+}
+
+/// Search for an integer value in the file.
+#[tauri::command]
+pub async fn search_value(
+    path: String,
+    value: u64,
+    value_type: crate::search::ValueType,
+    start_offset: u64,
+    max_hits: usize,
+) -> Result<crate::search::SearchResult, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        crate::search::search_value(&path, value, value_type, start_offset, max_hits)
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("SEARCH_ERROR", e))
+}
+
+/// Detect common packers in a file.
+#[tauri::command]
+pub async fn detect_packers(path: String) -> Result<Vec<crate::search::PackerInfo>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || crate::search::detect_packers(&path))
+        .await
+        .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("SEARCH_ERROR", e))
+}
+
+// =========================================================================
+// PE TOOLS: DosStub and Overlay dump/remove/add commands.
+// =========================================================================
+
+/// Dump DOS stub bytes from a PE file.
+#[tauri::command]
+pub async fn pe_dump_dos_stub(path: String) -> Result<Vec<u8>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        crate::pe_viewer::dump_dos_stub(&data)
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("PE_TOOLS_ERROR", e))
+}
+
+/// Remove DOS stub from a PE file (creates .bak backup).
+#[tauri::command]
+pub async fn pe_remove_dos_stub(path: String) -> Result<(), GuiError> {
+    let result = tokio::task::spawn_blocking(move || crate::pe_viewer::remove_dos_stub(&path))
+        .await
+        .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("PE_TOOLS_ERROR", e))
+}
+
+/// Add DOS stub to a PE file (creates .bak backup).
+#[tauri::command]
+pub async fn pe_add_dos_stub(path: String, stub_bytes: Vec<u8>) -> Result<(), GuiError> {
+    let result =
+        tokio::task::spawn_blocking(move || crate::pe_viewer::add_dos_stub(&path, &stub_bytes))
+            .await
+            .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("PE_TOOLS_ERROR", e))
+}
+
+/// Dump overlay bytes from a PE file.
+#[tauri::command]
+pub async fn pe_dump_overlay(path: String) -> Result<Vec<u8>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || crate::pe_viewer::dump_overlay(&path))
+        .await
+        .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("PE_TOOLS_ERROR", e))
+}
+
+/// Remove overlay from a PE file (creates .bak backup).
+#[tauri::command]
+pub async fn pe_remove_overlay(path: String) -> Result<(), GuiError> {
+    let result = tokio::task::spawn_blocking(move || crate::pe_viewer::remove_overlay(&path))
+        .await
+        .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("PE_TOOLS_ERROR", e))
+}
+
+/// Add overlay to a PE file (creates .bak backup).
+#[tauri::command]
+pub async fn pe_add_overlay(path: String, overlay_bytes: Vec<u8>) -> Result<(), GuiError> {
+    let result =
+        tokio::task::spawn_blocking(move || crate::pe_viewer::add_overlay(&path, &overlay_bytes))
+            .await
+            .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("PE_TOOLS_ERROR", e))
+}
+
+/// Edit a string at a given file offset (creates .bak backup).
+#[tauri::command]
+pub async fn edit_string_at_offset(
+    path: String,
+    offset: usize,
+    new_value: String,
+    is_utf16: bool,
+) -> Result<(), GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        crate::string_extractor::edit_string_at_offset(&path, offset, &new_value, is_utf16)
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("STRING_EDIT_ERROR", e))
+}
+
+/// Extract an item from a file to an output directory.
+#[tauri::command]
+pub async fn extract_item(
+    path: String,
+    item_name: String,
+    output_dir: String,
+) -> Result<String, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        crate::extractor::extract_item(&path, &item_name, &output_dir)
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("EXTRACTOR_ERROR", e))
+}
+
+/// Extract a raw byte range from a file.
+#[tauri::command]
+pub async fn extract_range(
+    path: String,
+    offset: u64,
+    size: u64,
+    output_dir: String,
+    output_name: String,
+) -> Result<String, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        crate::extractor::extract_range(&path, offset, size, &output_dir, &output_name)
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("EXTRACTOR_ERROR", e))
+}
+
+/// Heuristic extraction: scan for embedded file magic signatures.
+#[tauri::command]
+pub async fn extract_heuristic(
+    path: String,
+    deep_scan: bool,
+) -> Result<Vec<crate::extractor::ExtractItem>, GuiError> {
+    let result =
+        tokio::task::spawn_blocking(move || crate::extractor::extract_heuristic(&path, deep_scan))
+            .await
+            .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("EXTRACTOR_ERROR", e))
+}
+
+/// Analyze an extractable item: identify format and compute entropy.
+#[tauri::command]
+pub async fn analyze_item(
+    path: String,
+    offset: u64,
+    size: u64,
+) -> Result<crate::extractor::AnalyzeResult, GuiError> {
+    let result =
+        tokio::task::spawn_blocking(move || crate::extractor::analyze_item(&path, offset, size))
+            .await
+            .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("EXTRACTOR_ERROR", e))
+}
+
 /// Get entropy graph data for a file (block-level entropy for plotting).
 #[tauri::command]
 pub async fn get_entropy_graph(
@@ -991,10 +1254,75 @@ pub async fn get_entropy_graph(
     result.map_err(|e| GuiError::new("ENTROPY_ERROR", e))
 }
 
+/// Get PE-specific view data: imports, exports, resources, overlay, .NET,
+/// manifest, version info, TLS, Rich Header.
+#[tauri::command]
+pub async fn get_pe_view(path: String) -> Result<Option<crate::pe_viewer::PeView>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok::<_, String>(crate::pe_viewer::parse_pe_view(&data))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("PE_VIEW_ERROR", e))
+}
+
+/// Get ELF-specific view data: program headers, section headers, dynamic
+/// entries, libraries, interpreter, notes, and symbol table.
+#[tauri::command]
+pub async fn get_elf_view(path: String) -> Result<Option<crate::elf_viewer::ElfView>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok::<_, String>(crate::elf_viewer::parse_elf_view(&data))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("ELF_VIEW_ERROR", e))
+}
+
+/// Get Mach-O-specific view data: header, load commands, segments,
+/// sections, and libraries.
+#[tauri::command]
+pub async fn get_macho_view(
+    path: String,
+) -> Result<Option<crate::macho_viewer::MachView>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok::<_, String>(crate::macho_viewer::parse_macho_view(&data))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("MACHO_VIEW_ERROR", e))
+}
+
+/// Extract strings from a binary file (ASCII and UTF-16LE).
+#[tauri::command]
+pub async fn extract_strings(
+    path: String,
+    params: crate::string_extractor::StringExtractParams,
+) -> Result<Vec<crate::string_extractor::StringEntry>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok::<_, String>(crate::string_extractor::extract_strings(&data, &params))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("STRING_EXTRACT_ERROR", e))
+}
+
 /// Write text content to a file (for "Save results" feature).
 #[tauri::command]
 pub async fn write_text_file(path: String, content: String) -> Result<(), GuiError> {
     tokio::task::spawn_blocking(move || std::fs::write(&path, content))
+        .await
+        .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
+        .map_err(|e| GuiError::new("FILE_WRITE_ERROR", e.to_string()))
+}
+
+/// Write binary data to a file.
+#[tauri::command]
+pub async fn write_binary_file(path: String, data: Vec<u8>) -> Result<(), GuiError> {
+    tokio::task::spawn_blocking(move || std::fs::write(&path, &data))
         .await
         .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
         .map_err(|e| GuiError::new("FILE_WRITE_ERROR", e.to_string()))
@@ -1031,40 +1359,194 @@ pub struct ArchiveResultDto {
 #[tauri::command]
 pub async fn list_archive(path: String) -> Result<ArchiveResultDto, GuiError> {
     let result = tokio::task::spawn_blocking(move || -> Result<ArchiveResultDto, String> {
-        let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
-        let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
-        let mut entries = Vec::with_capacity(archive.len());
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
 
-        for i in 0..archive.len() {
-            let entry = match archive.by_index(i) {
-                Ok(e) => e,
-                Err(_) => continue,
-            };
-            let name = entry.name().to_string();
-            let is_dir = entry.is_dir();
-            let size = entry.size();
-            let compressed_size = entry.compressed_size();
-            let modified = entry.last_modified().map(|d| format!("{}", d));
-            entries.push(ArchiveEntryDto {
-                name,
-                size,
-                compressed_size,
-                is_directory: is_dir,
-                modified,
+        // Detect archive format by magic bytes.
+        if data.len() >= 4 && &data[0..4] == b"PK\x03\x04" {
+            // ZIP archive.
+            let cursor = std::io::Cursor::new(data);
+            let mut archive = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
+            let mut entries = Vec::with_capacity(archive.len());
+            for i in 0..archive.len() {
+                let entry = match archive.by_index(i) {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                entries.push(ArchiveEntryDto {
+                    name: entry.name().to_string(),
+                    size: entry.size(),
+                    compressed_size: entry.compressed_size(),
+                    is_directory: entry.is_dir(),
+                    modified: entry.last_modified().map(|d| format!("{}", d)),
+                });
+            }
+            return Ok(ArchiveResultDto {
+                format: "ZIP".to_string(),
+                total_entries: entries.len(),
+                entries,
             });
         }
 
-        Ok(ArchiveResultDto {
-            format: "ZIP".to_string(),
-            total_entries: entries.len(),
-            entries,
-        })
+        // GZIP: 1F 8B — try decompress and parse as TAR.
+        if data.len() >= 2 && data[0] == 0x1F && data[1] == 0x8B {
+            let decoder = flate2::read::GzDecoder::new(&data[..]);
+            let mut archive = tar::Archive::new(decoder);
+            let mut entries = Vec::new();
+            let iter = match archive.entries() {
+                Ok(it) => it,
+                Err(_) => return Err("Failed to read GZIP/TAR entries.".to_string()),
+            };
+            for entry_result in iter {
+                let entry = match entry_result {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                let header = entry.header();
+                entries.push(ArchiveEntryDto {
+                    name: header
+                        .path()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default(),
+                    size: header.size().unwrap_or(0),
+                    compressed_size: 0,
+                    is_directory: header.entry_type().is_dir(),
+                    modified: header
+                        .mtime()
+                        .ok()
+                        .filter(|&s| s > 0)
+                        .map(chrono_secs_to_string),
+                });
+            }
+            return Ok(ArchiveResultDto {
+                format: "GZIP/TAR".to_string(),
+                total_entries: entries.len(),
+                entries,
+            });
+        }
+
+        // TAR: check for "ustar" magic at offset 257.
+        if data.len() >= 262 && &data[257..262] == b"ustar" {
+            let cursor = std::io::Cursor::new(data);
+            let mut archive = tar::Archive::new(cursor);
+            let mut entries = Vec::new();
+            let iter = match archive.entries() {
+                Ok(it) => it,
+                Err(_) => return Err("Failed to read TAR entries.".to_string()),
+            };
+            for entry_result in iter {
+                let entry = match entry_result {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                let header = entry.header();
+                entries.push(ArchiveEntryDto {
+                    name: header
+                        .path()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default(),
+                    size: header.size().unwrap_or(0),
+                    compressed_size: 0,
+                    is_directory: header.entry_type().is_dir(),
+                    modified: header
+                        .mtime()
+                        .ok()
+                        .filter(|&s| s > 0)
+                        .map(chrono_secs_to_string),
+                });
+            }
+            return Ok(ArchiveResultDto {
+                format: "TAR".to_string(),
+                total_entries: entries.len(),
+                entries,
+            });
+        }
+
+        // Fallback: try ZIP (some ZIP variants have different magic).
+        let cursor = std::io::Cursor::new(data);
+        if let Ok(mut archive) = zip::ZipArchive::new(cursor) {
+            let mut entries = Vec::with_capacity(archive.len());
+            for i in 0..archive.len() {
+                let entry = match archive.by_index(i) {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                entries.push(ArchiveEntryDto {
+                    name: entry.name().to_string(),
+                    size: entry.size(),
+                    compressed_size: entry.compressed_size(),
+                    is_directory: entry.is_dir(),
+                    modified: entry.last_modified().map(|d| format!("{}", d)),
+                });
+            }
+            return Ok(ArchiveResultDto {
+                format: "ZIP".to_string(),
+                total_entries: entries.len(),
+                entries,
+            });
+        }
+
+        Err("Unsupported archive format. Supported: ZIP, TAR, GZIP/TAR.".to_string())
     })
     .await
     .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
     .map_err(|e| GuiError::new("ARCHIVE_READ_ERROR", e))?;
 
     Ok(result)
+}
+
+/// Convert Unix seconds since epoch to a human-readable date string.
+fn chrono_secs_to_string(secs: u64) -> String {
+    // Simple conversion without chrono dependency.
+    // Format: YYYY-MM-DD HH:MM:SS
+    let days = secs / 86400;
+    let rem_secs = secs % 86400;
+    let hours = rem_secs / 3600;
+    let minutes = (rem_secs % 3600) / 60;
+    let seconds = rem_secs % 60;
+
+    // Calculate date from days since 1970-01-01.
+    let (year, month, day) = days_to_date(days);
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        year, month, day, hours, minutes, seconds
+    )
+}
+
+/// Convert days since 1970-01-01 to (year, month, day).
+fn days_to_date(days: u64) -> (u64, u64, u64) {
+    let mut year = 1970u64;
+    let mut remaining_days = days;
+
+    loop {
+        let days_in_year = if is_leap_year(year) { 366 } else { 365 };
+        if remaining_days < days_in_year {
+            break;
+        }
+        remaining_days -= days_in_year;
+        year += 1;
+    }
+
+    let month_lengths = if is_leap_year(year) {
+        [31u64, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31u64, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+
+    let mut month = 1u64;
+    for &mlen in &month_lengths {
+        if remaining_days < mlen {
+            break;
+        }
+        remaining_days -= mlen;
+        month += 1;
+    }
+
+    (year, month, remaining_days + 1)
+}
+
+/// Check if a year is a leap year.
+fn is_leap_year(year: u64) -> bool {
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 // ---------------------------------------------------------------------------
@@ -1415,4 +1897,50 @@ fn delete_reg_tree(root: &winreg::RegKey, path: &str) {
     }
     // Then delete the key itself.
     let _ = root.delete_subkey(path);
+}
+
+/// Open the VirusTotal website for a file in the default browser.
+///
+/// Uses **MD5** to match upstream `XVirusTotalWidget::showInBrowser`
+/// (`xvirustotalwidget.cpp:245-248`, `xvirustotal.cpp:146-149`).
+#[tauri::command]
+pub async fn virustotal_open_browser(path: String) -> Result<(), GuiError> {
+    let md5 = tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok::<_, String>(crate::file_info::compute_md5(&data))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
+    .map_err(|e| GuiError::new("FILE_READ_FAILED", e))?;
+
+    crate::virustotal::open_in_browser(&md5);
+    Ok(())
+}
+
+/// Query the VirusTotal API v3 for file scan info.
+///
+/// Requires an API key. Uses MD5 as the file identifier, matching
+/// upstream `xvirustotalwidget.cpp:56`.
+#[tauri::command]
+pub async fn virustotal_query(
+    path: String,
+    api_key: String,
+) -> Result<crate::virustotal::VtScanInfo, GuiError> {
+    if api_key.is_empty() {
+        return Err(GuiError::new(
+            "NO_API_KEY",
+            "VirusTotal API key is not configured",
+        ));
+    }
+
+    let md5 = tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok::<_, String>(crate::file_info::compute_md5(&data))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
+    .map_err(|e| GuiError::new("FILE_READ_FAILED", e))?;
+
+    let info = crate::virustotal::query_scan_info(&md5, &api_key).await;
+    Ok(info)
 }

@@ -995,3 +995,50 @@
   - ADR 0027 已 Accepted，记录偏离上游决策
 - 511 个测试全部通过（+5 去重测试）
 - 项目已具备发布 v0.6.0 条件
+
+## 2026-08-08: GUI 与上游深度对齐（Phase 11）
+- 人工实际使用发现 Phase 9 后 GUI 与上游 Qt die 差距仍很大（约 30% 对齐度）
+- 两大问题：(1) 相同模块展示的数据不一样 (2) 很多功能模块还没有实现
+- 需要再次深入总结差距并制定计划，一个 phase 中多拆分几个任务
+- 用户实际体验最重要，功能上不能有明显差距
+
+## 2026-08-08: GUI 功能逐一対齐上游（用户反馈）
+- 用户反馈：随便看一个功能就发现实现和上游差距很大（如 VirusTotal 实现错误）
+- 根本原因：之前基于差距分析文档"猜测"上游行为，而非实际查看上游源码
+- 用户要求：
+  1. 先梳理上游 Qt 版本实现的所有功能，及功能实现逻辑、使用逻辑
+  2. 梳理当前版本的功能及实现，与 Qt 版本梳理结果进行比对
+  3. 根据比对结果逐一改进
+- 已启动三个并行 subagent 探索：
+  - 上游 die_widget FormatsWidget 源码
+  - 上游 FormatWidgets 仓库源码（PE/ELF/Mach-O 专用视图、VirusTotal、字符串搜索等）
+  - 当前 die-gui 完整功能实现
+
+## 2026-08-08 GUI 上游对齐 Phase 12（基于源码审查）
+
+用户要求：基于上游 DIE-engine 源码实际审查，系统性地识别并实现缺失的 GUI 功能，以达到完整 GUI 对齐。
+
+### 完成项
+1. **差距分析文档 v3**：基于上游源码（die_widget/FormatWidgets/XOnlineTools/XVisualizationWidget/XExtractorWidget）逐文件审查，生成 `docs/research/gui-gap-analysis-v3.md`，包含 46 个 PE 子视图、25 个 ELF 子视图、45+ Mach-O 子视图的详细对比
+2. **VirusTotal 修复（P0）**：将 hash 类型从 SHA256 改为 MD5（匹配上游 `xvirustotalwidget.cpp:56`），添加 API key 配置到 Settings，实现完整 VT API v3 查询模式（扫描结果表格、检测率、首次/最后扫描时间）
+3. **ELF 专用视图（P1）**：新增 `elf_viewer.rs`，解析 Program Headers/Section Headers/Dynamic Entries/Libraries/Interpreter/Notes/Symbols/Runpath，前端 `ElfViewPanel.tsx` 提供 7 个子视图
+4. **Mach-O 专用视图（P1）**：新增 `macho_viewer.rs`，解析 Load Commands/Segments/Sections/Libraries/Entry Point，前端 `MachoViewPanel.tsx` 提供 5 个子视图
+5. **PE 专用视图扩展（P1）**：扩展 `pe_viewer.rs`，新增 Data Directory Entries（16 个目录）、Debug Directory、Base Relocation Blocks、Load Config、Certificates，前端 PeViewPanel 新增 5 个子视图
+
+### 测试
+- 75 个单元测试 + 2 个 GUI-CLI 差分测试全部通过
+- cargo clippy 零警告，cargo fmt 零差异
+- TypeScript 编译零错误
+
+## 2026-08-08 GUI Phase 12 Batch 2-6: 专用视图与功能对齐
+- Mach-O扩展22个子视图(uuid/symtab/dysymtab/dyld_info/version_min/build_version/rpath/source_version/dylinker/linkedit_data/encryption_info/entry_point)
+- ELF Rela/Rel重定位视图
+- 2D可视化视图(熵/梯度/零字节/文本方法+PE/ELF/Mach-O区域着色)
+- 文件提取器(RAW/FORMAT模式提取overlay/resource/section)
+- 字符串搜索增强(Null-terminated/Links/RegExp通配符模式)
+- Advanced模式开关(Basic/Advanced切换,持久化到设置)
+- 格式信息栏(文件类型/基地址/入口点/节区数显示)
+- DEX/MSDOS/NE/LE专用视图
+- 签名搜索(十六进制通配符)/值搜索(u8-u64 LE/BE)/静态脱壳检测(UPX/MPRESS/PECompact/ASPack/Themida/VMProtect等)
+- 扫描结果额外信息(版本/选项/偏移/大小/启发式标志/原始名称在详情面板显示)
+- [2026-08-09] GUI差距v3剩余35项功能实施：PE NT_HEADERS/RESOURCES_STRINGTABLE/NET_METADATA_STREAM/NET_METADATA_TABLE/TOOLS(6个命令)；Mach-O weak_libraries/id_library/FVMLIB/IDFVMLIB/function_starts/data_in_code/code_signature/SuperBlob/unix_thread/dyld_chained_fixups/dyld_exports_trie/STRINGTABLE；ELF STRINGTABLE；字符串搜索MapMode/FileType/跳转Hex/跳转Disasm/Demangle/编辑字符串/保存结果/默认长度5；可视化ZEROS_GRADIENT/TEXT_GRADIENT/高亮/缩放/保存图片；提取器HEURISTIC模式/深度扫描/分析模式；扫描日志。597个测试全部通过。

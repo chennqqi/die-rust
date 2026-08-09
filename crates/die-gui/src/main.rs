@@ -11,11 +11,20 @@
 mod commands;
 mod demangle;
 mod disassembler;
+mod elf_viewer;
+mod extractor;
 mod file_info;
 mod hex_viewer;
+mod macho_viewer;
+mod misc_viewer;
+mod pe_viewer;
 mod peid_scanner;
+mod search;
 mod settings;
 mod state;
+mod string_extractor;
+mod virustotal;
+mod visualization;
 mod yara_scanner;
 
 use state::AppState;
@@ -71,7 +80,32 @@ fn main() {
             commands::yara_scan,
             commands::peid_scan,
             commands::get_file_info,
+            commands::get_visualization,
+            commands::list_extractable,
+            commands::extract_item,
+            commands::extract_range,
+            commands::get_dex_view,
+            commands::get_msdos_view,
+            commands::get_ne_view,
+            commands::get_le_view,
+            commands::search_signature,
+            commands::search_value,
+            commands::detect_packers,
+            commands::pe_dump_dos_stub,
+            commands::pe_remove_dos_stub,
+            commands::pe_add_dos_stub,
+            commands::pe_dump_overlay,
+            commands::pe_remove_overlay,
+            commands::pe_add_overlay,
+            commands::edit_string_at_offset,
+            commands::extract_heuristic,
+            commands::analyze_item,
+            commands::write_binary_file,
             commands::get_entropy_graph,
+            commands::get_pe_view,
+            commands::get_elf_view,
+            commands::get_macho_view,
+            commands::extract_strings,
             commands::write_text_file,
             commands::save_signature_source,
             commands::run_signature,
@@ -82,6 +116,8 @@ fn main() {
             commands::get_context_menu_status,
             commands::add_context_menu,
             commands::remove_context_menu,
+            commands::virustotal_open_browser,
+            commands::virustotal_query,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DIE application");

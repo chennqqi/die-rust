@@ -16,6 +16,7 @@ path = "src/main.rs"
 diec-engine = { workspace = true }
 diec-core = { workspace = true }
 diec-output = { workspace = true }
+diec-formats = { workspace = true }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
@@ -36,10 +37,16 @@ sha1 = "0.10"
 md-5 = "0.10"
 hex = "0.4"
 goblin = { version = "0.9" }
+pelite = { workspace = true }
 zip = { version = "8.6", default-features = false, features = ["deflate"] }
+tar = "0.4"
+flate2 = "1.1"
 yaxpeax-arm = "0.4.0"
 yaxpeax-arch = "0.3.2"
 crc32fast = "1.5.0"
+# VirusTotal API integration (upstream XOnlineTools)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+open = "5"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
