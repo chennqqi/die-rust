@@ -10,11 +10,15 @@
 
 mod delimited;
 mod json;
+pub mod struct_formatter;
 mod text;
 mod xml;
 
 pub use delimited::{render_csv, render_tsv};
 pub use json::render_json;
+pub use struct_formatter::{
+    render_struct_csv, render_struct_json, render_struct_text, render_struct_tsv, render_struct_xml,
+};
 pub use text::{render_text, render_text_formatted};
 pub use xml::render_xml;
 

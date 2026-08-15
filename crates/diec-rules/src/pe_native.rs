@@ -1118,6 +1118,103 @@ fn count_resources_dir(dir: &pelite::resources::Directory<'_>, visit: &CountReso
 /// Helper struct for counting resources.
 struct CountResources<'a>(&'a std::cell::Cell<usize>);
 
+/// A resource data entry with its extracted bytes and metadata.
+///
+/// Used by the nested scanner to recursively scan PE resources.
+#[derive(Debug, Clone)]
+pub struct ResourceData {
+    /// Resource type path (e.g., "RT_VERSION/1/0").
+    pub type_path: String,
+    /// The resource data bytes.
+    pub data: Vec<u8>,
+}
+
+/// Enumerate all resource data entries in a PE file and extract their bytes.
+///
+/// Returns a list of resource data entries. Returns an empty vector if the
+/// file is not a valid PE or has no resources.
+///
+/// Upstream uses `getFileParts()` to enumerate resources for recursive scanning.
+/// This is the Rust equivalent.
+pub fn get_resource_data(data: &[u8]) -> Vec<ResourceData> {
+    if let Some(file) = pe64_from_bytes(data) {
+        return collect_resource_data_pe64(&file);
+    }
+    if let Some(file) = pe32_from_bytes(data) {
+        return collect_resource_data_pe32(&file);
+    }
+    Vec::new()
+}
+
+/// Collect resource data from a PE64 file.
+fn collect_resource_data_pe64(file: &pelite::pe64::PeFile<'_>) -> Vec<ResourceData> {
+    let mut entries = Vec::new();
+    let Ok(res) = file.resources() else {
+        return entries;
+    };
+    let Ok(root) = res.root() else {
+        return entries;
+    };
+    collect_resource_data_dir(&root, "", &mut entries);
+    entries
+}
+
+/// Collect resource data from a PE32 file.
+fn collect_resource_data_pe32(file: &pelite::pe32::PeFile<'_>) -> Vec<ResourceData> {
+    let mut entries = Vec::new();
+    let Ok(res) = file.resources() else {
+        return entries;
+    };
+    let Ok(root) = res.root() else {
+        return entries;
+    };
+    collect_resource_data_dir(&root, "", &mut entries);
+    entries
+}
+
+/// Format a resource Name as a string.
+fn format_resource_name(name: &pelite::resources::Name<'_>) -> String {
+    match name {
+        pelite::resources::Name::Wide(s) => String::from_utf16_lossy(s),
+        pelite::resources::Name::Id(id) => format!("#{id}"),
+        pelite::resources::Name::Str(s) => s.to_string(),
+    }
+}
+
+/// Recursively walk a resource directory and collect data entries.
+fn collect_resource_data_dir(
+    dir: &pelite::resources::Directory<'_>,
+    parent_type: &str,
+    entries: &mut Vec<ResourceData>,
+) {
+    for entry in dir.entries() {
+        let Ok(e) = entry.entry() else {
+            continue;
+        };
+        // Build type/name string.
+        let type_name = match entry.name() {
+            Ok(ref n) => format_resource_name(n),
+            Err(_) => format!("#{}", entry.image().Name),
+        };
+        let full_type = if parent_type.is_empty() {
+            type_name.clone()
+        } else {
+            format!("{parent_type}/{type_name}")
+        };
+        if let Some(subdir) = e.dir() {
+            collect_resource_data_dir(&subdir, &full_type, entries);
+        } else if let Some(data) = e.data() {
+            // Extract the actual resource bytes.
+            if let Ok(bytes) = data.bytes() {
+                entries.push(ResourceData {
+                    type_path: full_type,
+                    data: bytes.to_vec(),
+                });
+            }
+        }
+    }
+}
+
 /// Check if a resource name is present in the resource directory.
 ///
 /// Returns false if not a valid PE or resource not found.

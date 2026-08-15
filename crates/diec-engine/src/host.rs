@@ -42,6 +42,21 @@ pub struct ScanFlags {
     /// file type are run, bypassing automatic format detection. This maps to
     /// the upstream `comboBoxType` file type selector in the GUI.
     pub file_type: Option<String>,
+    /// Intra-file recursive scan (--recursivescan / -r).
+    ///
+    /// When true, PE resources and overlay are extracted and recursively
+    /// scanned as sub-devices. Matches upstream `bIsRecursiveScan`.
+    /// See ADR 0028.
+    pub recursive: bool,
+    /// Scan PE resources (--resources). When true, only resources are
+    /// extracted and scanned. Implied by `recursive`.
+    pub resources: bool,
+    /// Scan PE overlay (--overlays). When true, only overlay is extracted
+    /// and scanned. Implied by `recursive`.
+    pub overlays: bool,
+    /// Scan archive members (--archives). When true, archive members are
+    /// extracted and recursively scanned. See ADR 0030.
+    pub archives: bool,
 }
 
 /// A host API implementation backed by an in-memory byte buffer.
@@ -413,7 +428,7 @@ impl HostApi for BufferHost {
     }
 
     fn is_recursive(&self) -> bool {
-        false
+        self.flags.recursive || self.flags.resources || self.flags.overlays
     }
 
     fn entropy(&self, offset: u64, size: u64) -> Result<f64, HostApiError> {

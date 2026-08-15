@@ -67,3 +67,14 @@
   `--alltypes` 模式默认结果层去重，去重键排除 `file_type`，
   `--no-dedup` / `DIEC_SCAN_FLAG_NO_DEDUP=0x40` 可关闭以匹配上游行为
   （Accepted, 2026-08-08）。
+- [`0028-r-semantic-alignment.md`](0028-r-semantic-alignment.md)：
+  `-r`/`--recursivescan` 语义对齐上游（文件内部 resource/overlay 递归），
+  目录递归迁移到新选项 `--recursive-dir`/`-R`，破坏性变更
+  （Accepted, 2026-08-15）。
+- [`0029-rars-rar-library.md`](0029-rars-rar-library.md)：
+  选用 `rars`（WTFPL）纯 Rust RAR 解包库，避免上游 XArchive UnRAR 源码
+  翻译的许可证问题，WTFPL 兼容 MIT（Accepted, 2026-08-15）。
+- [`0030-archive-extraction-safety-bounds.md`](0030-archive-extraction-safety-bounds.md)：
+  archive 成员解包安全边界：单成员 128 MiB、总解压 512 MiB、压缩比 100:1、
+  成员数 20/100000、递归深度 32，比上游更严格的安全改进
+  （Accepted, 2026-08-15）。

@@ -25,10 +25,23 @@
 
 ## 已知限制
 
-- `getDisasmString` 返回空字符串（未集成 Capstone）；依赖反汇编的保护器规则
-  （PELock、Arxan、VMProtect、GenericHeuristicAnalysis）会漏检测
-- 部分检测名称/版本号与上游有差异（submodule 规则版本与上游 3.21 自带规则版本不同）
-- `format` 类型检测在某些情况下可能产生重复条目
+无。
+
+## 已知差异（非缺陷）
+
+- **规则版本差异**：4 个语料样本的检测结果多于上游 DIE 3.21，因为 vendored
+  规则数据库比上游 3.21 自带规则更新。详见 `COMPATIBILITY.md` § Mismatch
+  Details。这些不是引擎 bug。
+- **结果去重**：`--alltypes` 模式默认对结果去重（上游不去重）。使用
+  `--no-dedup` 可匹配上游行为。详见 ADR 0027。
+- **RAR 归档解包**：上游 XArchive 的 RAR decoder 是 UnRAR 源码的近逐字翻译
+  （94.21% token 覆盖率，跨 17 个 UnRAR 源文件），但标注 MIT 许可证时未保留
+  UnRAR license 对修改源码分发要求的 notice 和 acknowledgments。出于许可证
+  合规，diec-rust **不复制、翻译或改写**上游 RAR decoder。RAR 成员解包改用
+  `rars`（WTFPL），一个独立的纯 Rust RAR 实现。由于实现独立，RAR 解包行为
+  在边缘场景（如 CAB LZX/Quantum 方法、加密归档、损坏头部）可能与上游有差异。
+  详见 `docs/research/rar-decoder-provenance.md`（上游来源审计）和
+  ADR 0029（`rars` 选型决策）。
 
 ## Benchmark
 

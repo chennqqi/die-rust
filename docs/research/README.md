@@ -721,5 +721,9 @@ Phase 0 计划形成：
   三个 GUI 变体（`die`/`diel`/`diec`）的程序结构、功能清单、组件依赖和
   交互流程分析，固定到 `DIE-engine@ab0ea3e`，含 `die_widget`/`XOptions`/
   `XScanEngine` submodule 源码分析（Accepted）。
+- [`cli-upstream-gap-closure.md`](cli-upstream-gap-closure.md)：diec CLI 与
+  上游 release `diec` 的全部可观察行为差距分析，含 6 项缺口（G1-G6）、
+  上游行为规范、diec 现有基础设施评估、RAR 许可证调研和 ADR 需求，为
+  ROADMAP Phase 13 提供证据基础（Draft）。
 
 每份文档遵守 [`../README.md`](../README.md) 的证据和状态约定。实验附件如需版本化，应使用文本格式并放入主题对应的子目录。

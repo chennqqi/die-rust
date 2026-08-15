@@ -3,7 +3,7 @@
 This document tracks compatibility between diec-rust and the upstream
 DIE-engine project. It is updated with each release.
 
-Last updated: 2026-08-05
+Last updated: 2026-08-15
 
 ## Baseline
 
@@ -191,4 +191,58 @@ These are NOT engine bugs:
 | Edge corpus tests | 3 | ✅ all pass |
 | GUI differential tests | 2 | ✅ all pass (v0.4.0) |
 | Fuzz targets | 6 | ✅ compile |
-| **Total** | **480** | ✅ 0 failures |
+| **Total** | **684** | ✅ 0 failures |
+
+## Phase 13: CLI Parity & Nested Scanning (2026-08-15)
+
+### `--struct` Mode (13.1-13.3)
+
+The `--struct`/`-S` CLI option is now fully implemented, matching upstream
+DIE-engine's structure inspection mode:
+
+- **General methods**: Hash#MD5, Hash#SHA1, Hash#SHA256, Info, Entropy,
+  Check format
+- **Format-specific methods**: PE (6 methods), ELF (2), Mach-O (2), DEX (1)
+- **Output formats**: text, JSON, XML, CSV, TSV
+- **Mode priority**: `--struct` > `--entropy`/`--info` > normal scan
+
+### Intra-file Recursive Scanning (13.4, ADR 0028)
+
+The `-r`/`--recursivescan` flag now matches upstream semantics:
+
+- **`-r`/`--recursivescan`**: Intra-file recursive scan (PE resources +
+  overlay). Extracts PE resources and overlay, scans each as a sub-device.
+- **`-R`/`--recursive-dir`**: Directory-level recursion (replaces old `-r`
+  directory behavior). `--recursive` retained as alias for backward
+  compatibility.
+- **`--resources`**: Scan only PE resources.
+- **`--overlays`**: Scan only PE overlay.
+- **FFI flags**: `DIEC_SCAN_FLAG_RECURSIVE` (0x80),
+  `DIEC_SCAN_FLAG_RESOURCES` (0x100), `DIEC_SCAN_FLAG_OVERLAYS` (0x200).
+
+### Archive Member Extraction (13.5, ADR 0029/0030)
+
+The `--archives` flag enables archive member extraction and recursive
+scanning:
+
+- **Supported formats**: ZIP, 7Z, RAR (CAB and ISO9660 deferred)
+- **Safety bounds** (ADR 0030, stricter than upstream):
+  - Single-member limit: 128 MiB
+  - Total decompressed limit: 512 MiB
+  - Compression ratio limit: 100:1
+  - Member count: 20 (default), 100000 (aggressive)
+- **RAR library**: `rars` 0.6.0 (MIT/Apache-2.0, pure Rust)
+- **FFI flag**: `DIEC_SCAN_FLAG_ARCHIVES` (0x400)
+
+### Known Differences from Upstream
+
+1. **Archive safety bounds**: diec-rust enforces stricter limits than
+   upstream (which has no size/ratio limits). Highly compressed archives
+   (ratio > 100:1) or very large members (> 128 MiB) are skipped. This is
+   an intentional safety improvement (ADR 0030).
+
+2. **CAB and ISO9660**: Not yet implemented. Upstream supports all 5
+   archive formats; diec-rust currently supports 3 (ZIP/7Z/RAR).
+
+3. **`--recursive` backward compatibility**: `--recursive` is retained as
+   an alias for `--recursive-dir` to avoid breaking existing scripts.

@@ -6,7 +6,10 @@
 #![forbid(unsafe_code)]
 
 use diec_core::cancel::CancellationToken;
-use diec_engine::{DatabaseBuilder, ScanFlags, scan_once};
+use diec_engine::{
+    DatabaseBuilder, ScanFlags, StructSelector, evaluate_struct_default, general_method_names,
+    scan_once,
+};
 use std::process::ExitCode;
 
 /// CLI exit codes (see docs/design/api.md section 16).
@@ -30,7 +33,11 @@ fn print_usage() {
     eprintln!("  --tsv                     Output as TSV");
     eprintln!("  --plaintext               Output as plain text");
     eprintln!("  --output <format>         Output format: text, json, xml, csv, tsv, plaintext");
-    eprintln!("  --recursive, -r           Recursively scan directories");
+    eprintln!(
+        "  --recursivescan, -r       Enable intra-file recursive scan (PE resources + overlay)"
+    );
+    eprintln!("  --recursive-dir, -R       Recursively scan directories");
+    eprintln!("  --archives                Extract and scan archive members (ZIP/7Z/RAR)");
     eprintln!("  --deepscan, -d            Enable deep scan mode");
     eprintln!("  --heuristicscan           Enable heuristic scan mode");
     eprintln!("  --verbose                 Enable verbose output");
@@ -43,6 +50,7 @@ fn print_usage() {
     eprintln!("  --messages                Display scan messages and warnings");
     eprintln!("  --entropy                 Show entropy information");
     eprintln!("  --info                    Show file info");
+    eprintln!("  --struct, -S <value>      Show structure info (e.g., Hash#MD5, Info, Entropy)");
     eprintln!("  --showdatabase            Show database paths and rule counts");
     eprintln!("  --showmethods, --showstructs");
     eprintln!("                            List available struct methods");
@@ -54,15 +62,20 @@ fn print_usage() {
 /// collect all files within it recursively. Otherwise return the path
 /// as-is (if it's a file) or report an error (if it's a directory and
 /// recursive is false).
-fn expand_target(target: &str, recursive: bool, files: &mut Vec<String>, errors: &mut Vec<String>) {
+fn expand_target(
+    target: &str,
+    recursive_dir: bool,
+    files: &mut Vec<String>,
+    errors: &mut Vec<String>,
+) {
     let path = std::path::Path::new(target);
     if !path.exists() {
         errors.push(format!("path not found: {target}"));
         return;
     }
     if path.is_dir() {
-        if !recursive {
-            errors.push(format!("is a directory (use --recursive): {target}"));
+        if !recursive_dir {
+            errors.push(format!("is a directory (use --recursive-dir): {target}"));
             return;
         }
         collect_files(path, files);
@@ -115,13 +128,14 @@ fn main() -> ExitCode {
 
     let mut db_path = String::new();
     let mut output_format = "text".to_string();
-    let mut recursive = false;
+    let mut recursive_dir = false;
     let mut flags = ScanFlags::default();
     let mut format_result = false;
     let mut profiling = false;
     let mut messages = false;
     let mut entropy_mode = false;
     let mut info_mode = false;
+    let mut struct_value: Option<String> = None;
     let mut extra_db_path = String::new();
     let mut custom_db_path = String::new();
     let mut show_database = false;
@@ -139,8 +153,18 @@ fn main() -> ExitCode {
                 println!("diec {}", env!("CARGO_PKG_VERSION"));
                 return ExitCode::from(EXIT_OK);
             }
-            "--recursive" | "-r" => {
-                recursive = true;
+            // -r/--recursivescan: intra-file recursive scanning (PE resources + overlay).
+            // This matches upstream DIE-engine semantics. See ADR 0028.
+            "--recursivescan" | "-r" => {
+                flags.recursive = true;
+            }
+            // --recursive-dir/-R: directory-level recursion (replaces old -r directory behavior).
+            "--recursive-dir" | "-R" | "--recursive" => {
+                recursive_dir = true;
+            }
+            // --archives: extract and scan archive members (ZIP/7Z/RAR).
+            "--archives" => {
+                flags.archives = true;
             }
             "--deepscan" | "-d" => {
                 flags.deep = true;
@@ -177,6 +201,14 @@ fn main() -> ExitCode {
             }
             "--info" => {
                 info_mode = true;
+            }
+            "--struct" | "-S" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("error: --struct requires a value argument");
+                    return ExitCode::from(EXIT_USAGE);
+                }
+                struct_value = Some(args[i].clone());
             }
             "--extradb" | "--extradatabase" => {
                 i += 1;
@@ -259,26 +291,10 @@ fn main() -> ExitCode {
     }
 
     // --showstructs: list available struct methods (no database or files needed).
+    // Upstream outputs exactly 4 general methods (hardcoded FT_UNKNOWN).
     if show_structs {
         println!("Structures:");
-        let methods = [
-            "ELF.isSignaturePresent",
-            "ELF.isEntryPointPresent",
-            "ELF.isSectionNamePresent",
-            "ELF.isSegmentNamePresent",
-            "PE.isSignaturePresent",
-            "PE.isSectionNamePresent",
-            "PE.isDirectoryNamePresent",
-            "PE.isResourceNamePresent",
-            "PE.isImportNamePresent",
-            "PE.isExportNamePresent",
-            "PE.isNetModuleNamePresent",
-            "MACH.isSignaturePresent",
-            "MACH.isSectionNamePresent",
-            "MACH.isSegmentNamePresent",
-            "MACH.isEntryPointPresent",
-        ];
-        for m in &methods {
+        for m in general_method_names() {
             println!("\t{m}");
         }
         return ExitCode::from(EXIT_OK);
@@ -288,7 +304,7 @@ fn main() -> ExitCode {
     let mut files = Vec::new();
     let mut expand_errors = Vec::new();
     for target in &targets {
-        expand_target(target, recursive, &mut files, &mut expand_errors);
+        expand_target(target, recursive_dir, &mut files, &mut expand_errors);
     }
     for err in &expand_errors {
         eprintln!("error: {err}");
@@ -318,6 +334,57 @@ fn main() -> ExitCode {
                 }
                 _ => {
                     println!("{file}: entropy: {entropy:.6} ({})", data.len());
+                }
+            }
+        }
+        return ExitCode::from(EXIT_OK);
+    }
+
+    // --struct mode: display structure info, no rule database needed.
+    // Priority: entropy > struct > info > normal scan.
+    if let Some(ref raw) = struct_value
+        && let Some(selector) = StructSelector::parse(raw)
+    {
+        for file in &files {
+            let data = match std::fs::read(file) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("error: reading {file}: {e}");
+                    continue;
+                }
+            };
+            let node = evaluate_struct_default(&selector, file, &data);
+            // Multi-target framing: print "<filename>:\n" before output.
+            if files.len() > 1 {
+                println!("{file}:");
+            }
+            match output_format.as_str() {
+                "json" => {
+                    if let Some(ref n) = node {
+                        println!("{}", diec_output::render_struct_json(n));
+                    } else {
+                        println!("{{\"data\":\"\"}}");
+                    }
+                }
+                "xml" => {
+                    if let Some(ref n) = node {
+                        print!("{}", diec_output::render_struct_xml(n));
+                    }
+                }
+                "csv" => {
+                    if let Some(ref n) = node {
+                        print!("{}", diec_output::render_struct_csv(n));
+                    }
+                }
+                "tsv" => {
+                    if let Some(ref n) = node {
+                        print!("{}", diec_output::render_struct_tsv(n));
+                    }
+                }
+                _ => {
+                    if let Some(ref n) = node {
+                        print!("{}", diec_output::render_struct_text(n));
+                    }
                 }
             }
         }

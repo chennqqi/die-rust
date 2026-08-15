@@ -100,6 +100,10 @@ impl From<ScanFlagsDto> for ScanFlags {
             hide_unknown: dto.hide_unknown,
             no_dedup: dto.no_dedup,
             file_type: dto.file_type,
+            recursive: dto.recursive,
+            resources: dto.resources,
+            overlays: dto.overlay,
+            archives: dto.archives,
         }
     }
 }

@@ -541,6 +541,24 @@ pub fn scan_bytes(
         dedup_detections(&mut detections);
     }
 
+    // Intra-file recursive scanning (ADR 0028): if recursive/resources/overlays
+    // flag is set and the file is a PE, extract resources and overlay and
+    // recursively scan each as a sub-device.
+    if (flags.recursive || flags.resources || flags.overlays) && diec_rules::pe_native::is_pe(&data)
+    {
+        let nested_detections = scan_nested_pe_inline(file_name, &data, &flags, cancel, database)?;
+        detections.extend(nested_detections);
+    }
+
+    // Archive member recursive scanning (ADR 0030): if archives flag is set
+    // and the file is a supported archive, extract members and recursively
+    // scan each.
+    if flags.archives && crate::archive_unpack::is_archive(&data) {
+        let archive_detections =
+            scan_archive_members_inline(file_name, &data, &flags, cancel, database)?;
+        detections.extend(archive_detections);
+    }
+
     Ok(ScanResult {
         path: file_name.to_string(),
         detections,
@@ -548,6 +566,75 @@ pub fn scan_bytes(
         structured_diagnostics,
         profiling,
     })
+}
+
+/// Inline nested PE scanner for `scan_bytes` (free function version).
+///
+/// Creates a closure that calls `scan_bytes` recursively with `recursive`
+/// disabled to prevent infinite loops.
+fn scan_nested_pe_inline(
+    file_name: &str,
+    data: &[u8],
+    flags: &crate::host::ScanFlags,
+    cancel: &CancellationToken,
+    database: &Database,
+) -> Result<Vec<ScanDetection>, ScanError> {
+    let scan_fn =
+        |name: &str, bytes: &[u8], sub_flags: &crate::host::ScanFlags, ct: &CancellationToken| {
+            // Create a sub-scan with the nested data.
+            // We use a simplified scan that only collects detections.
+            let sub_result = scan_bytes(database, name, bytes.to_vec(), sub_flags.clone(), ct)?;
+            Ok(sub_result.detections)
+        };
+    crate::nested_scan::scan_nested_pe(file_name, data, flags, cancel, &scan_fn)
+}
+
+/// Inline archive member scanner for `scan_bytes` (free function version).
+///
+/// Extracts archive members and recursively scans each as a sub-device.
+fn scan_archive_members_inline(
+    file_name: &str,
+    data: &[u8],
+    flags: &crate::host::ScanFlags,
+    cancel: &CancellationToken,
+    database: &Database,
+) -> Result<Vec<ScanDetection>, ScanError> {
+    let members = crate::archive_unpack::extract_archive(data, flags);
+    let mut nested_detections = Vec::new();
+
+    for member in members {
+        if cancel.is_cancelled() {
+            return Err(ScanError::Cancelled);
+        }
+        if member.data.is_empty() {
+            continue;
+        }
+
+        let member_name = format!("{file_name}:Archive({})", member.name);
+        let child_flags = crate::host::ScanFlags {
+            // Nested scans don't recurse further (avoid infinite loops).
+            recursive: false,
+            resources: false,
+            overlays: false,
+            archives: false,
+            ..flags.clone()
+        };
+
+        match scan_bytes(database, &member_name, member.data, child_flags, cancel) {
+            Ok(sub_result) => {
+                for mut det in sub_result.detections {
+                    det.file_part = Some("Archive".to_string());
+                    nested_detections.push(det);
+                }
+            }
+            Err(ScanError::Cancelled) => return Err(ScanError::Cancelled),
+            Err(_) => {
+                // Skip failed nested scans.
+            }
+        }
+    }
+
+    Ok(nested_detections)
 }
 
 // ---------------------------------------------------------------------------
@@ -778,6 +865,25 @@ impl Scanner {
             dedup_detections(&mut detections);
         }
 
+        // Intra-file recursive scanning (ADR 0028): if recursive/resources/overlays
+        // flag is set and the file is a PE, extract resources and overlay and
+        // recursively scan each as a sub-device.
+        if (flags.recursive || flags.resources || flags.overlays)
+            && diec_rules::pe_native::is_pe(&data)
+        {
+            let nested_detections = self.scan_nested_pe_inline(file_name, &data, &flags, cancel)?;
+            detections.extend(nested_detections);
+        }
+
+        // Archive member recursive scanning (ADR 0030): if archives flag is set
+        // and the file is a supported archive, extract members and recursively
+        // scan each.
+        if flags.archives && crate::archive_unpack::is_archive(&data) {
+            let archive_detections =
+                self.scan_archive_members_inline(file_name, &data, &flags, cancel)?;
+            detections.extend(archive_detections);
+        }
+
         Ok(ScanResult {
             path: file_name.to_string(),
             detections,
@@ -785,6 +891,103 @@ impl Scanner {
             structured_diagnostics,
             profiling,
         })
+    }
+
+    /// Inline nested PE scanner for `Scanner::scan_bytes`.
+    ///
+    /// Creates a closure that calls `self.scan_bytes` recursively with
+    /// `recursive` disabled to prevent infinite loops.
+    fn scan_nested_pe_inline(
+        &mut self,
+        file_name: &str,
+        data: &[u8],
+        flags: &crate::host::ScanFlags,
+        cancel: &CancellationToken,
+    ) -> Result<Vec<ScanDetection>, ScanError> {
+        // We can't capture `self` in a closure that also calls `self.scan_bytes`
+        // due to borrow checker constraints. Instead, we extract the parts
+        // directly here and scan each one.
+        let parts = crate::nested_scan::extract_nested_parts(data, flags);
+        let mut nested_detections = Vec::new();
+
+        for part in parts {
+            if cancel.is_cancelled() {
+                return Err(ScanError::Cancelled);
+            }
+            if part.data.is_empty() {
+                continue;
+            }
+
+            let part_name = format!("{file_name}:{}({})", part.part_type, part.name);
+            let child_flags = crate::host::ScanFlags {
+                recursive: false,
+                resources: false,
+                overlays: false,
+                ..flags.clone()
+            };
+
+            match self.scan_bytes(&part_name, part.data, child_flags, cancel) {
+                Ok(sub_result) => {
+                    for mut det in sub_result.detections {
+                        det.file_part = Some(part.part_type.to_string());
+                        nested_detections.push(det);
+                    }
+                }
+                Err(ScanError::Cancelled) => return Err(ScanError::Cancelled),
+                Err(_) => {
+                    // Skip failed nested scans.
+                }
+            }
+        }
+
+        Ok(nested_detections)
+    }
+
+    /// Inline archive member scanner for `Scanner::scan_bytes`.
+    ///
+    /// Extracts archive members and recursively scans each as a sub-device.
+    fn scan_archive_members_inline(
+        &mut self,
+        file_name: &str,
+        data: &[u8],
+        flags: &crate::host::ScanFlags,
+        cancel: &CancellationToken,
+    ) -> Result<Vec<ScanDetection>, ScanError> {
+        let members = crate::archive_unpack::extract_archive(data, flags);
+        let mut nested_detections = Vec::new();
+
+        for member in members {
+            if cancel.is_cancelled() {
+                return Err(ScanError::Cancelled);
+            }
+            if member.data.is_empty() {
+                continue;
+            }
+
+            let member_name = format!("{file_name}:Archive({})", member.name);
+            let child_flags = crate::host::ScanFlags {
+                recursive: false,
+                resources: false,
+                overlays: false,
+                archives: false,
+                ..flags.clone()
+            };
+
+            match self.scan_bytes(&member_name, member.data, child_flags, cancel) {
+                Ok(sub_result) => {
+                    for mut det in sub_result.detections {
+                        det.file_part = Some("Archive".to_string());
+                        nested_detections.push(det);
+                    }
+                }
+                Err(ScanError::Cancelled) => return Err(ScanError::Cancelled),
+                Err(_) => {
+                    // Skip failed nested scans.
+                }
+            }
+        }
+
+        Ok(nested_detections)
     }
 
     /// Create a new runtime for a file type, load the framework, and

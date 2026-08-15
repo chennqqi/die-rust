@@ -221,3 +221,55 @@
 - Cargo.toml 版本号更新为 0.6.0
 - [2026-08-09] GUI差距v3剩余35项功能分析：对照gui-gap-analysis-v3.md逐项审查后端pe_viewer.rs/macho_viewer.rs/elf_viewer.rs/string_extractor.rs/visualization.rs/extractor.rs和前端PeViewPanel/MachoViewPanel/ElfViewPanel/StringExtractor/VisualizationPanel/ExtractorPanel/App.tsx，确认PE缺5子视图(NT_HEADERS/RESOURCES_STRINGTABLE/NET_METADATA_STREAM/NET_METADATA_TABLE/TOOLS)，Mach-O缺12子视图(weak_libraries/id_library/FVMLIB/IDFVMLIB/function_starts/data_in_code/code_signature/SuperBlob/unix_thread/dyld_chained_fixups/dyld_exports_trie/STRINGTABLE)，ELF缺STRINGTABLE，字符串搜索缺8项(MapMode/FileType/跳转Hex/跳转Disasm/Demangle/编辑字符串/保存结果/默认长度5)，可视化缺5项(ZEROS_GRADIENT/TEXT_GRADIENT/高亮/缩放/保存图片)，提取器缺3项(HEURISTIC/深度扫描/分析模式)，扫描日志缺1项。全部一次性实施。
 - [2026-08-09] 为Phase 12新增17个后端单元测试：visualization.rs(ZerosGradient/TextGradient)、macho_viewer.rs(read_uleb128/data_in_code_kind_name/code_slot_type_name/count_exports_in_trie/parse_string_table)、pe_viewer.rs(pe_subsystem_name/pe_machine_name/parse_nt_headers_minimal/parse_nt_headers_not_pe)、elf_viewer.rs(string_table_entry_serialization/extraction_logic)、string_extractor.rs(map_mode_default/file_type_default/params_default_min_length/extract_with_map_mode_file)。总测试数597→614。
+
+## 2026-08-15: diec CLI 与上游差距评估
+
+### 分析过程
+- 查阅 COMPATIBILITY.md：规则加载 1186/1186=100%，差分测试 31+20 样本 0 引擎不匹配，CLI 14+ 选项全部 ✅，Host API 全部 ✅
+- 查阅 capability-matrix.md：68 个 CAP-* 能力在 Linux Qt5/Qt6 和 Windows 全部 Observed
+- 查阅 cli-special-modes.md：--entropy/--info/--struct/--showstructs 上游行为已完整记录
+- 查阅 ROADMAP.md Phase 4：CLI 标记 DONE，仅 --test/--createtest 未实现（上游也 TODO）
+- 查阅 diec-cli/src/main.rs：确认 --struct <value> 模式未实现（仅有 --showstructs 列表）
+- 查阅 nested-scan-behavior.md：上游 -r 启用 resource/overlay 内部递归，diec -r 仅做目录递归
+- 查阅 diec-engine/src/scanner.rs：确认无 archive 成员解包、无 resource/overlay 递归扫描实现
+
+### 结论
+diec CLI 缺口远小于 GUI。缺口分两类：
+1. diec 自身实现缺口（来自 diec）：
+   - --struct <value> 模式未实现（CAP-CLI-MODE-003）
+   - resource/overlay 内部递归扫描未实现（-r 语义与上游不同）
+   - archive 成员解包递归扫描未实现（上游 release CLI 也未暴露，但 engine 有能力）
+2. 非 diec 缺口（来自规则版本/测试范围/平台）：
+   - 规则版本差异（submodule 规则比上游 3.21 bundled 更新，非引擎 bug）
+   - macOS 平台 68 项 platform-missing（测试基础设施缺口）
+   - 大型语料覆盖不足（31 基线样本 vs 上游 68 CAP-* 项）
+   - --test/--createtest 未实现（上游也标记为 TODO/no-op）
+
+## 2026-08-15: Phase 13 规划分析
+
+### 分析过程
+- 并行启动 4 个调研子代理：--struct 模式、resource/overlay 递归、archive 解包、测试覆盖
+- 调研结果汇总：
+  1. --struct：中等复杂度，约 15-20 工作日，通用方法 4 个 + 格式专用方法 11 个
+  2. resource/overlay：高复杂度，-r 语义冲突需破坏性变更，PE resource 枚举需新建
+  3. archive 解包：高复杂度，5 种格式，RAR 有许可证问题
+  4. 测试覆盖：macOS 中等（17 个脚本已存在），语料高（42 个新样本）
+
+### RAR 许可证调研
+- 上游 XArchive 直接翻译 UnRAR 源码（94.21% token 覆盖）标注 MIT，未保留 UnRAR notice
+- diec-rust 已明确不复制/翻译/改写 XArchive RAR decoder
+- 纯 Rust RAR 库调研：
+  - rars (bitplane)：WTFPL + "don't blame me"，纯 Rust，覆盖 RAR 1.5-7
+  - weaver-unrar (scryer-media)：GPL-3.0-or-later，copyleft，与项目要求冲突
+  - unrar crate：UnRAR C 库包装器，需 native 依赖
+- 用户决策：使用 rars (WTFPL)，需 ADR 0029 记录
+
+### 决策记录
+- -r 语义：对齐上游（破坏性变更），目录递归迁移到 --recursive-dir
+- archive 解包：全部 5 种格式纳入，RAR 用 rars (WTFPL)
+- macOS + 语料：纳入本 Phase
+
+### Phase 13 结构
+- 8 个子任务：13.1-13.8
+- 3 个 ADR：0028/0029/0030
+- 退出条件：差分测试 0 不匹配，macOS 68 项闭合，语料覆盖 68 CAP-* 项

@@ -35,6 +35,18 @@ pub struct ScanFlagsRequest {
     /// Disable result deduplication (--no-dedup).
     #[serde(default)]
     pub no_dedup: bool,
+    /// Intra-file recursive scan (-r/--recursivescan).
+    #[serde(default)]
+    pub recursive: bool,
+    /// Scan PE resources.
+    #[serde(default)]
+    pub resources: bool,
+    /// Scan PE overlay.
+    #[serde(default)]
+    pub overlays: bool,
+    /// Scan archive members.
+    #[serde(default)]
+    pub archives: bool,
 }
 
 impl From<ScanFlagsRequest> for diec_engine::ScanFlags {
@@ -48,6 +60,10 @@ impl From<ScanFlagsRequest> for diec_engine::ScanFlags {
             verbose: req.verbose,
             no_dedup: req.no_dedup,
             file_type: None,
+            recursive: req.recursive,
+            resources: req.resources,
+            overlays: req.overlays,
+            archives: req.archives,
         }
     }
 }
@@ -243,6 +259,10 @@ pub async fn scan_bytes(
         verbose: params.verbose.unwrap_or(false),
         no_dedup: false,
         file_type: None,
+        recursive: params.recursive.unwrap_or(false),
+        resources: params.resources.unwrap_or(false),
+        overlays: params.overlays.unwrap_or(false),
+        archives: params.archives.unwrap_or(false),
     };
 
     let file_name = params.name.unwrap_or_else(|| "uploaded.bin".to_string());
@@ -282,6 +302,10 @@ pub struct ScanBytesQuery {
     pub aggressive: Option<bool>,
     pub hide_unknown: Option<bool>,
     pub verbose: Option<bool>,
+    pub recursive: Option<bool>,
+    pub resources: Option<bool>,
+    pub overlays: Option<bool>,
+    pub archives: Option<bool>,
 }
 
 /// Build a `ScanResponse` from a `ScanResult`.

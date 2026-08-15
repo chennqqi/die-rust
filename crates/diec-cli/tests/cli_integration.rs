@@ -217,7 +217,8 @@ fn cli_recursive_directory_scan() {
 
     let dir_str = dir.to_str().unwrap();
     let db = db_root();
-    let (success, stdout, stderr) = run_diec(&["--db", &db, "--recursive", dir_str]);
+    // ADR 0028: --recursive-dir (-R) replaces old --recursive for directory recursion.
+    let (success, stdout, stderr) = run_diec(&["--db", &db, "--recursive-dir", dir_str]);
 
     assert!(success, "diec should exit 0, stderr: {stderr}");
     assert!(stdout.contains("7-Zip"), "should detect 7z: {stdout}");
@@ -243,13 +244,126 @@ fn cli_directory_without_recursive_errors() {
     let dir_str = dir.to_str().unwrap();
     let (success, _stdout, stderr) = run_diec(&[dir_str]);
 
-    assert!(!success, "diec should fail without --recursive on a dir");
     assert!(
-        stderr.contains("is a directory") || stderr.contains("--recursive"),
+        !success,
+        "diec should fail without --recursive-dir on a dir"
+    );
+    assert!(
+        stderr.contains("is a directory") || stderr.contains("--recursive-dir"),
         "stderr should mention directory: {stderr}"
     );
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn cli_recursivescan_pe_intra_file() {
+    if !std::path::Path::new(&db_root()).is_dir() {
+        eprintln!("Skipping: upstream database not found");
+        return;
+    }
+    if !std::path::Path::new(&diec_binary()).exists() {
+        eprintln!("Skipping: diec binary not built");
+        return;
+    }
+
+    // ADR 0028: -r/--recursivescan enables intra-file recursive scanning
+    // (PE resources + overlay), NOT directory recursion.
+    // Test on a PE file from the corpus.
+    let pe_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("corpus")
+        .join("minimal.exe");
+    if !pe_path.exists() {
+        eprintln!("Skipping: corpus/minimal.exe not found");
+        return;
+    }
+
+    let pe_str = pe_path.to_str().unwrap();
+    let db = db_root();
+
+    // Without -r: should NOT have nested resource detections.
+    let (success, stdout_base, _stderr) = run_diec(&["--db", &db, pe_str]);
+    assert!(success, "diec should exit 0 without -r");
+
+    // With -r: should have nested resource detections (may have more detections).
+    let (success, stdout_recursive, _stderr) = run_diec(&["--db", &db, "-r", pe_str]);
+    assert!(success, "diec should exit 0 with -r");
+
+    // The -r output should be at least as long as the base output
+    // (it may have additional nested detections).
+    assert!(
+        stdout_recursive.len() >= stdout_base.len(),
+        "-r should produce at least as much output as without -r"
+    );
+}
+
+#[test]
+fn cli_archives_zip_extraction() {
+    if !std::path::Path::new(&db_root()).is_dir() {
+        eprintln!("Skipping: upstream database not found");
+        return;
+    }
+    if !std::path::Path::new(&diec_binary()).exists() {
+        eprintln!("Skipping: diec binary not built");
+        return;
+    }
+
+    // Use the nested ZIP corpus file that contains embedded PE/ELF members.
+    let zip_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("corpus")
+        .join("nested-zip-with-pe.zip");
+    if !zip_path.exists() {
+        eprintln!("Skipping: corpus/nested-zip-with-pe.zip not found");
+        return;
+    }
+
+    let zip_str = zip_path.to_str().unwrap();
+    let db = db_root();
+
+    // Without --archives: should detect ZIP but not nested members.
+    let (success, stdout_base, _stderr) = run_diec(&["--db", &db, zip_str]);
+    assert!(success, "diec should exit 0 without --archives");
+
+    // With --archives: should detect ZIP and attempt to scan members.
+    let (success, stdout_archives, _stderr) = run_diec(&["--db", &db, "--archives", zip_str]);
+    assert!(
+        success,
+        "diec should exit 0 with --archives, stderr: {_stderr}"
+    );
+
+    // The --archives output should be at least as long as the base output.
+    assert!(
+        stdout_archives.len() >= stdout_base.len(),
+        "--archives should produce at least as much output as without --archives"
+    );
+}
+
+#[test]
+fn cli_help_shows_new_flags() {
+    if !std::path::Path::new(&diec_binary()).exists() {
+        eprintln!("Skipping: diec binary not built");
+        return;
+    }
+
+    let (success, stdout, _stderr) = run_diec(&["--help"]);
+    assert!(success);
+    // ADR 0028: -r is now recursivescan, -R is recursive-dir.
+    assert!(
+        stdout.contains("--recursivescan") || _stderr.contains("--recursivescan"),
+        "help should show --recursivescan"
+    );
+    assert!(
+        stdout.contains("--recursive-dir") || _stderr.contains("--recursive-dir"),
+        "help should show --recursive-dir"
+    );
+    assert!(
+        stdout.contains("--archives") || _stderr.contains("--archives"),
+        "help should show --archives"
+    );
 }
 
 #[test]
@@ -627,9 +741,197 @@ fn cli_showstructs() {
         stdout.contains("Structures"),
         "showstructs should list structures: {stdout}"
     );
+    // Upstream --showstructs outputs 4 general methods (hardcoded FT_UNKNOWN).
     assert!(
-        stdout.contains("isSignaturePresent"),
-        "showstructs should list struct methods: {stdout}"
+        stdout.contains("Info"),
+        "showstructs should list Info method: {stdout}"
+    );
+    assert!(
+        stdout.contains("Hash"),
+        "showstructs should list Hash method: {stdout}"
+    );
+    assert!(
+        stdout.contains("Entropy"),
+        "showstructs should list Entropy method: {stdout}"
+    );
+    assert!(
+        stdout.contains("Check format"),
+        "showstructs should list Check format method: {stdout}"
+    );
+}
+
+#[test]
+fn cli_struct_hash_mode() {
+    if !std::path::Path::new(&diec_binary()).exists() {
+        eprintln!("Skipping: diec binary not built");
+        return;
+    }
+
+    let data = b"hello world";
+    let path = write_temp_file("test_struct_hash.bin", data);
+
+    // --struct Hash should output all 7 hash algorithms.
+    let (success, stdout, _stderr) = run_diec(&["--struct", "Hash", &path]);
+    assert!(success, "diec --struct Hash should exit 0: {_stderr}");
+    assert!(
+        stdout.contains("MD5"),
+        "--struct Hash should contain MD5: {stdout}"
+    );
+    assert!(
+        stdout.contains("SHA256"),
+        "--struct Hash should contain SHA256: {stdout}"
+    );
+    // MD5 of "hello world" is 5eb63bbbe01eeed093cb22bb8f5acdc3.
+    assert!(
+        stdout.contains("5eb63bbbe01eeed093cb22bb8f5acdc3"),
+        "--struct Hash MD5 value should match: {stdout}"
+    );
+}
+
+#[test]
+fn cli_struct_hash_md5_filter() {
+    if !std::path::Path::new(&diec_binary()).exists() {
+        eprintln!("Skipping: diec binary not built");
+        return;
+    }
+
+    let data = b"hello world";
+    let path = write_temp_file("test_struct_md5.bin", data);
+
+    // --struct Hash#MD5 should output only MD5.
+    let (success, stdout, _stderr) = run_diec(&["--struct", "Hash#MD5", &path]);
+    assert!(success, "diec --struct Hash#MD5 should exit 0: {_stderr}");
+    assert!(
+        stdout.contains("MD5"),
+        "--struct Hash#MD5 should contain MD5: {stdout}"
+    );
+    assert!(
+        !stdout.contains("SHA256"),
+        "--struct Hash#MD5 should NOT contain SHA256: {stdout}"
+    );
+}
+
+#[test]
+fn cli_struct_empty_file_hash() {
+    if !std::path::Path::new(&diec_binary()).exists() {
+        eprintln!("Skipping: diec binary not built");
+        return;
+    }
+
+    let path = write_temp_file("test_struct_empty.bin", b"");
+
+    // Empty file Hash#MD5 should return empty string (upstream boundary behavior).
+    let (success, stdout, _stderr) = run_diec(&["--struct", "Hash#MD5", &path]);
+    assert!(
+        success,
+        "diec --struct Hash#MD5 on empty file should exit 0: {_stderr}"
+    );
+    // The MD5 value should be empty, not the standard empty-input MD5.
+    assert!(
+        !stdout.contains("d41d8cd98f00b204e9800998ecf8427e"),
+        "empty file MD5 should be empty string, not standard empty MD5: {stdout}"
+    );
+}
+
+#[test]
+fn cli_struct_info_mode() {
+    if !std::path::Path::new(&diec_binary()).exists() {
+        eprintln!("Skipping: diec binary not built");
+        return;
+    }
+
+    let data = b"hello world";
+    let path = write_temp_file("test_struct_info.bin", data);
+
+    let (success, stdout, _stderr) = run_diec(&["--struct", "Info", &path]);
+    assert!(success, "diec --struct Info should exit 0: {_stderr}");
+    assert!(
+        stdout.contains("File name"),
+        "--struct Info should contain File name: {stdout}"
+    );
+    assert!(
+        stdout.contains("Size"),
+        "--struct Info should contain Size: {stdout}"
+    );
+}
+
+#[test]
+fn cli_struct_entropy_mode() {
+    if !std::path::Path::new(&diec_binary()).exists() {
+        eprintln!("Skipping: diec binary not built");
+        return;
+    }
+
+    let data = b"hello world";
+    let path = write_temp_file("test_struct_entropy.bin", data);
+
+    let (success, stdout, _stderr) = run_diec(&["--struct", "Entropy", &path]);
+    assert!(success, "diec --struct Entropy should exit 0: {_stderr}");
+    assert!(
+        stdout.contains("total"),
+        "--struct Entropy should contain total: {stdout}"
+    );
+}
+
+#[test]
+fn cli_struct_unknown_method() {
+    if !std::path::Path::new(&diec_binary()).exists() {
+        eprintln!("Skipping: diec binary not built");
+        return;
+    }
+
+    let data = b"hello world";
+    let path = write_temp_file("test_struct_unknown.bin", data);
+
+    // Unknown method should not error, exit 0.
+    let (success, _stdout, _stderr) = run_diec(&["--struct", "NoSuchMethod", &path]);
+    assert!(
+        success,
+        "diec --struct NoSuchMethod should exit 0: {_stderr}"
+    );
+}
+
+#[test]
+fn cli_struct_json_output() {
+    if !std::path::Path::new(&diec_binary()).exists() {
+        eprintln!("Skipping: diec binary not built");
+        return;
+    }
+
+    let data = b"hello world";
+    let path = write_temp_file("test_struct_json.bin", data);
+
+    let (success, stdout, _stderr) = run_diec(&["--struct", "Hash#MD5", "--json", &path]);
+    assert!(
+        success,
+        "diec --struct Hash#MD5 --json should exit 0: {_stderr}"
+    );
+    assert!(
+        stdout.contains("\"data\""),
+        "--struct --json should contain data key: {stdout}"
+    );
+    assert!(
+        stdout.contains("5eb63bbbe01eeed093cb22bb8f5acdc3"),
+        "--struct --json should contain MD5 value: {stdout}"
+    );
+}
+
+#[test]
+fn cli_struct_short_flag() {
+    if !std::path::Path::new(&diec_binary()).exists() {
+        eprintln!("Skipping: diec binary not built");
+        return;
+    }
+
+    let data = b"hello world";
+    let path = write_temp_file("test_struct_short.bin", data);
+
+    // -S is the short form of --struct.
+    let (success, stdout, _stderr) = run_diec(&["-S", "Hash#MD5", &path]);
+    assert!(success, "diec -S Hash#MD5 should exit 0: {_stderr}");
+    assert!(
+        stdout.contains("MD5"),
+        "-S Hash#MD5 should contain MD5: {stdout}"
     );
 }
 
@@ -783,9 +1085,14 @@ fn cli_upstream_database_and_struct_aliases() {
     // Upstream uses --showmethods rather than --showstructs.
     let (success, stdout, _stderr) = run_diec(&["--showmethods"]);
     assert!(success, "diec --showmethods should exit 0");
+    // Upstream --showmethods outputs 4 general methods (same as --showstructs).
     assert!(
-        stdout.contains("isSignaturePresent"),
-        "--showmethods should list methods: {stdout}"
+        stdout.contains("Hash"),
+        "--showmethods should list Hash method: {stdout}"
+    );
+    assert!(
+        stdout.contains("Entropy"),
+        "--showmethods should list Entropy method: {stdout}"
     );
 }
 

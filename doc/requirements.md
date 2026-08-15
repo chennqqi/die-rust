@@ -1042,3 +1042,76 @@
 - 签名搜索(十六进制通配符)/值搜索(u8-u64 LE/BE)/静态脱壳检测(UPX/MPRESS/PECompact/ASPack/Themida/VMProtect等)
 - 扫描结果额外信息(版本/选项/偏移/大小/启发式标志/原始名称在详情面板显示)
 - [2026-08-09] GUI差距v3剩余35项功能实施：PE NT_HEADERS/RESOURCES_STRINGTABLE/NET_METADATA_STREAM/NET_METADATA_TABLE/TOOLS(6个命令)；Mach-O weak_libraries/id_library/FVMLIB/IDFVMLIB/function_starts/data_in_code/code_signature/SuperBlob/unix_thread/dyld_chained_fixups/dyld_exports_trie/STRINGTABLE；ELF STRINGTABLE；字符串搜索MapMode/FileType/跳转Hex/跳转Disasm/Demangle/编辑字符串/保存结果/默认长度5；可视化ZEROS_GRADIENT/TEXT_GRADIENT/高亮/缩放/保存图片；提取器HEURISTIC模式/深度扫描/分析模式；扫描日志。597个测试全部通过。
+
+## 2026-08-15: diec CLI 与上游差距评估
+- 用户询问 diec CLI 与上游 DIE-engine 的差距是否很大，以及部分缺口是否来自 diec 自身
+- 分析结论：diec CLI 核心功能基本对齐，缺口远小于 GUI；部分缺口确实来自 diec 自身实现
+
+## 2026-08-15: 规划 Phase 13 — diec CLI 100% 上游对齐
+- 用户要求规划新的 roadmap phase，100% 对齐 diec 和上游
+- 调研 4 个子任务：--struct 模式、resource/overlay 递归、archive 解包、测试覆盖
+- 用户决策：
+  1. -r 语义对齐上游（破坏性变更，目录递归迁移到 --recursive-dir）
+  2. archive 解包全部 5 种格式纳入，RAR 用 rars (WTFPL) 纯 Rust 库
+  3. macOS 平台基线闭合 + 大型语料补充纳入本 Phase
+- Phase 13 包含 8 个子任务：13.1-13.3 (--struct)、13.4 (resource/overlay)、13.5 (archive)、13.6 (macOS)、13.7 (语料)、13.8 (文档)
+- 3 个 ADR 需求：0028 (-r 语义变更)、0029 (rars WTFPL 选型)、0030 (archive 安全边界)
+- 已写入 ROADMAP.md 和 AGENTS.md
+
+## 2026-08-15: 创建 Phase 13 差距分析和设计文档
+- 创建 docs/research/cli-upstream-gap-closure.md（381 行，6 项缺口 G1-G6 详细分析）
+- 创建 docs/design/phase13-cli-parity.md（371 行，8 个子任务设计）
+- 创建 ADR 0028: -r 语义对齐上游（113 行，破坏性变更）
+- 创建 ADR 0029: rars (WTFPL) RAR 解包库选型（117 行）
+- 创建 ADR 0030: archive 成员解包安全边界（123 行，压缩炸弹防护）
+- 更新 docs/research/README.md 和 docs/design/decisions/README.md 索引
+- 更新 README.md 和 README.zh-CN.md 添加 RAR 实现差异记录
+
+## 2026-08-15: 实现 13.1 --struct 通用方法
+- 新建 crates/diec-engine/src/struct_mode.rs（601 行）
+- 实现 StructSelector 解析（# 分隔、大小写不敏感、wildcard 语义）
+- 实现 4 个通用方法：Hash（7 种算法）、Info、Entropy、Check format
+- 修正 --showstructs 输出为上游 4 个通用方法（替代旧的格式特定方法列表）
+- CLI 新增 --struct/-S <value> 选项，模式优先级 entropy > struct > info > normal
+- 新增依赖：md-5, md4, sha1, sha2, hex
+- 18 个 struct_mode 单元测试 + 8 个 CLI 集成测试
+- 640 个 workspace 测试全部通过，cargo fmt/clippy 零警告
+
+## 2026-08-15: 实现 13.2 + 13.3 格式专用方法和输出格式化
+- 13.2: 新建 4 个格式专用方法模块（PE 6 + ELF 2 + Mach-O 2 + DEX 1）
+  - pe_struct.rs, elf_struct.rs, macho_struct.rs, dex_struct.rs
+  - 使用 diec-rules 原生解析（pelite/goblin）+ DEX 自行解析
+  - 格式检测使用原生 is_pe/is_elf/is_macho（不依赖 probe table，避免 MSDOS 误判）
+  - 11 个格式专用方法单元测试
+- 13.3: 新建 diec-output/src/struct_formatter.rs（5 种输出格式）
+  - JSON: 顶层 data 对象，叶子值 string
+  - XML: 递归 record 元素，叶子值在 value attribute
+  - CSV/TSV: 无 header，父节点 name-only 行
+  - Text: key: value 层级缩进
+  - CLI 移除内联格式化函数，改用 diec-output
+  - 7 个 struct_formatter 单元测试
+- 663 个 workspace 测试全部通过，cargo fmt/clippy 零警告
+
+## 2026-08-15: 13.4 resource/overlay 内部递归扫描 + -r 语义对齐
+- 用户确认继续实现 13.4
+- 破坏性变更：-r 当前为目录递归，上游 -r 为文件内部递归（resource/overlay）
+- 需要新增 --nested 选项保留目录递归功能（向后兼容）
+- 需要扩展 ScanFlags 添加 nested 相关字段
+- 需要 PE resource 枚举 + overlay 检测 + 递归扫描子文件
+
+## 2026-08-15: 实现 13.4 resource/overlay 内部递归扫描 + -r 语义对齐
+- ScanFlags 新增 3 个字段：recursive, resources, overlays
+- is_recursive() host API 返回 flags.recursive || flags.resources || flags.overlays
+- 新建 nested_scan.rs：PE resource 枚举 + overlay 提取 + 递归子扫描
+- pe_native.rs 新增 get_resource_data()：使用 pelite 提取 PE 资源字节
+- scan_bytes 和 Scanner::scan_bytes 集成嵌套扫描（仅 PE，递归标志为 true 时）
+- CLI 语义变更（ADR 0028）：
+  - -r/--recursivescan → 文件内部递归（PE resources + overlay）
+  - -R/--recursive-dir → 目录递归（替代旧 -r 目录行为）
+  - --recursive 保留为 --recursive-dir 别名（向后兼容）
+- FFI 新增 3 个扫描标志位：0x80 (RECURSIVE), 0x100 (RESOURCES), 0x200 (OVERLAYS)
+- diec.h 新增 DIEC_SCAN_FLAG_RECURSIVE/RESOURCES/OVERLAYS 宏定义
+- server ScanFlagsRequest/ScanBytesQuery 新增 recursive/resources/overlays 字段
+- GUI ScanFlagsDto 已有 recursive/resources/overlay 字段，From impl 映射到新字段
+- 6 个 nested_scan 单元测试 + 1 个 CLI 集成测试（cli_recursivescan_pe_intra_file）
+- 670 个 workspace 测试全部通过，cargo fmt/clippy 零警告

@@ -40,6 +40,17 @@ None at this time.
 - **Result deduplication**: `--alltypes` mode deduplicates results by default
   (upstream does not). Use `--no-dedup` to match upstream behavior. See
   ADR 0027.
+- **RAR archive extraction**: Upstream XArchive's RAR decoder is a near-verbatim
+  translation of UnRAR source code (94.21% token coverage across 17 UnRAR
+  files) but is labeled MIT without retaining the UnRAR license notice or
+  acknowledgments required for modified-source redistribution. For license
+  compliance, diec-rust does NOT copy, translate, or derive from the upstream
+  RAR decoder. Instead, RAR member extraction uses `rars` (WTFPL), an
+  independent pure-Rust RAR implementation. Due to the independent
+  implementation, RAR extraction behavior may differ from upstream on edge
+  cases (e.g., CAB LZX/Quantum methods, encrypted archives, corrupted
+  headers). See `docs/research/rar-decoder-provenance.md` for the upstream
+  source audit and ADR 0029 for the `rars` selection decision.
 
 ## Benchmark
 

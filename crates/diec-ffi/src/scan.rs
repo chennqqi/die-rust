@@ -157,6 +157,19 @@ fn options_to_flags(options: Option<&DiecScanOptions>) -> ScanFlags {
         if opts.flags & 0x40 != 0 {
             flags.no_dedup = true;
         }
+        // ADR 0028: intra-file recursive scanning flags.
+        if opts.flags & 0x80 != 0 {
+            flags.recursive = true;
+        }
+        if opts.flags & 0x100 != 0 {
+            flags.resources = true;
+        }
+        if opts.flags & 0x200 != 0 {
+            flags.overlays = true;
+        }
+        if opts.flags & 0x400 != 0 {
+            flags.archives = true;
+        }
     }
     flags
 }

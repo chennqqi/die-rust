@@ -735,6 +735,284 @@ Phase 9 修复了信息展示格式和基础功能缺陷（20 项 P1/P2/P3），
 
 ## 后续改进项
 
+### Phase 13：diec CLI 100% 上游对齐 — IN PROGRESS
+
+Phase 12 完成了 GUI 的 35 项剩余功能对齐，但 diec CLI 自身仍有 3 项实现缺口
+与上游 DIE-engine 不一致。本 Phase 一次性补齐全部缺口，使 diec CLI 达到与
+上游 release `diec` 的 100% 可观察行为对齐，同时闭合 macOS 平台基线和语料
+覆盖缺口。
+
+差距分析：`docs/research/cli-upstream-gap-closure.md`
+设计文档：`docs/design/phase13-cli-parity.md`
+
+**缺口清单**（3 项 diec 自身实现缺口 + 2 项测试覆盖缺口）：
+
+| ID | 缺口 | 来源 | 影响 |
+|----|------|------|------|
+| G1 | `--struct <value>` 模式未实现（CAP-CLI-MODE-003） | diec | 通用 Hash/Info/Entropy + PE/ELF/Mach-O/DEX 专用结构无法查询 |
+| G2 | `--showstructs` 输出与上游不一致 | diec | 输出格式特定方法列表而非上游 4 个通用方法 |
+| G3 | resource/overlay 内部递归扫描未实现（`-r` 语义错位） | diec | `-r` 做目录递归而非上游的文件内部递归 |
+| G4 | archive 成员解包递归扫描未实现 | diec | engine 层缺 ZIP/7Z/RAR/CAB/ISO9660 成员解包能力 |
+| G5 | macOS 68 项 platform-missing | 测试基础设施 | macOS 平台能力基线未闭合 |
+| G6 | 大型语料覆盖不足（26 样本 vs 68 CAP-* 项） | 测试基础设施 | 差分测试语料覆盖范围不足 |
+
+**ADR 需求**：
+- ADR 0028：`-r` 语义对齐上游（破坏性变更，目录递归迁移到新选项）
+- ADR 0029：`rars` (WTFPL) RAR 解包库选型
+- ADR 0030：archive 成员解包递归扫描安全边界（压缩炸弹防护）
+
+#### 13.1 `--struct <value>` 通用方法实现 — P0
+
+实现 `--struct <value>` 模式的 4 个通用结构方法，匹配上游
+`XFileInfo::processFile()` 行为。
+
+- **StructSelector 解析**：`#` 分隔层级过滤、大小写不敏感、wildcard 语义
+  - `Hash#MD5` 只返回 MD5 子记录
+  - `hAsH#mD5` 与 `Hash#MD5` 完全相同
+  - `Hash#MD5#Ignored` 额外 section 被当作 wildcard
+  - `Hash##MD5` 保留空 `Hash` parent
+  - `NoSuch#MD5` 返回空 `data`
+  - `--struct ""` 退回普通 scan
+- **Hash 方法**：MD4、MD5、SHA1、SHA224、SHA256、SHA384、SHA512
+  - 复用 die-gui/file_info.rs 已有 MD5/SHA1/SHA256
+  - 新增 MD4（`md-4` crate）、SHA224/SHA384/SHA512（`sha2` crate 已有）
+  - 空文件 `Hash#MD5` 返回空字符串（非标准空输入 MD5，上游边界行为）
+- **Info 方法**：文件名、大小、类型、MIME、扩展名、架构、端序等
+  - 扩展当前 `--info` 模式为 struct 可查询的 Info 方法
+  - 字段集合依格式变化（PE32 增加架构/模式/OS/类型/端序）
+- **Entropy 方法**：分区/区域 Shannon 熵
+  - 复用现有 `compute_entropy` 函数
+  - 区域来自格式探测的 memory-map（非固定大小分块）
+- **Check format 方法**：格式检查信息
+- **`--showstructs` 修正**：输出上游的 4 个通用方法（Info、Hash、Entropy、
+  Check format），而非当前格式特定方法列表
+
+新建模块：
+- `crates/diec-engine/src/struct_mode.rs` — StructSelector 解析 + 方法分发
+- `crates/diec-engine/src/hash_methods.rs` — 7 种哈希算法
+
+差分测试：5 个基线样本 × Hash/Hash#MD5/Info/Entropy/Check format × 6 种输出格式
+
+#### 13.2 `--struct <value>` 格式专用方法实现 — P0
+
+实现 PE/ELF/Mach-O/DEX 格式专用结构方法，匹配上游
+`XFileInfo::getMethodNames()` 的格式特定分支。
+
+- **PE32 专用方法**（6 个）：
+  - `Entry point` — PE 入口点地址
+  - `IMAGE_DOS_HEADER` — DOS 头字段
+  - `IMAGE_NT_HEADERS` — NT 头字段
+  - `IMAGE_SECTION_HEADER` — 节区头列表
+  - `IMAGE_RESOURCE_DIRECTORY` — 资源目录
+  - `IMAGE_EXPORT_DIRECTORY` — 导出表
+  - 复用 `pe_native.rs` 的 pelite 解析能力
+- **ELF64 专用方法**（2 个）：
+  - `Entry point` — ELF 入口点地址
+  - `Elf_Ehdr` — ELF 头字段
+  - 复用 `elf_native.rs` 的 goblin 解析能力
+- **Mach-O 64 专用方法**（2 个）：
+  - `Entry point` — Mach-O 入口点地址
+  - `Header` — Mach-O 头字段
+  - 复用 `macho_native.rs` 的 goblin 解析能力
+- **DEX 专用方法**（1 个）：
+  - `Header` — DEX 头字段
+  - 新增 DEX 头解析（magic、checksum、file_size、header_size等）
+
+新建模块：
+- `crates/diec-engine/src/pe_struct.rs` — PE 专用结构方法
+- `crates/diec-engine/src/elf_struct.rs` — ELF 专用结构方法
+- `crates/diec-engine/src/macho_struct.rs` — Mach-O 专用结构方法
+- `crates/diec-engine/src/dex_struct.rs` — DEX 专用结构方法
+
+差分测试：minimal.exe × 6 PE 方法、minimal.elf × 2 ELF 方法、
+minimal.macho × 2 Mach-O 方法、minimal.dex × 1 DEX 方法
+
+#### 13.3 `--struct` 输出格式化与模式优先级 — P0
+
+实现 struct 模式的所有输出格式和模式优先级，匹配上游
+`ScanFiles()` 分派顺序。
+
+- **模式优先级**：`--entropy > --struct > --info > normal scan`
+- **输出格式优先级**（专用模式）：`JSON > XML > CSV > TSV > formatted/plain text`
+- **JSON 格式**：顶层对象 `data`，叶子值全部序列化为 string
+- **XML 格式**：递归 `record` 元素，叶子值在 `value` attribute
+- **CSV/TSV 格式**：无 header，父节点输出为只有 name 和空 value 的一行
+- **text 格式**：`key: value` 层级缩进
+- **多目标 framing**：按输入顺序先打印 `<filename>:\n`，随后串接独立 JSON
+- **未知方法**：不报错，JSON 为 `{"data": ""}`，退出码 0
+- **`--plaintext`**：与不传输出格式开关逐字节相同（无专用分支）
+
+新建模块：
+- `crates/diec-output/src/struct_formatter.rs` — struct 模式 5 种输出格式
+
+差分测试：95 种输入/模式组合 × 190 次 oracle 执行（匹配 cli-special-modes.md 基线）
+
+#### 13.4 resource/overlay 内部递归扫描 — P0
+
+实现 PE resource 和 overlay 的内部递归扫描，对齐上游 `-r`/`--recursivescan`
+语义。**此为破坏性变更**（ADR 0028）。
+
+- **ADR 0028：`-r` 语义对齐上游**
+  - `-r`/`--recursivescan` 改为启用文件内部 resource/overlay 递归扫描
+  - 目录递归迁移到新选项 `--recursive-dir`（或 `-R`）
+  - 在 `--help` 和 README 中明确说明语义变更
+  - 现有使用 `diec -r directory` 的用户需改为 `diec --recursive-dir directory`
+- **PE resource 枚举**：
+  - 在 `pe_native.rs` 新增 `get_file_parts()` 函数
+  - 递归遍历 pelite resource tree（type/name/language 目录）
+  - 收集 data entries 的 offset/size/resource_id
+  - 上限 10000 个 resource（匹配上游 `XPE::getFileParts()`）
+- **PE overlay 检测**：
+  - 计算从 header/section 最大末端到文件末尾的 offset/size
+  - overlay 始终扫描（不受 isScanable 过滤）
+- **递归扫描逻辑**：
+  - 主扫描完成后，检查 `flags.recursive`
+  - 对每个 file part 提取字节切片，递归调用 `scan_bytes()`
+  - 递归调用复制完整 ScanFlags（resource 内可继续找 resource/overlay）
+  - 设置子 detection 的 parent_id、file_part、offset、size
+- **边界控制**：
+  - resource nLimit：默认 20，aggressive 2000
+  - 非 aggressive 模式先探测子设备类型，只扫描 `isScanable()` 的 resource
+  - aggressive 模式扫描所有 resource（包括不可识别的）
+- **ScanFlags 扩展**：
+  - 添加 `recursive: bool`（文件内部递归，对应上游 bIsRecursiveScan）
+  - 添加 `resources: bool`（独立 resource 扫描，对应上游 bIsResourcesScan）
+  - 添加 `overlays: bool`（独立 overlay 扫描，对应上游 bIsOverlayScan）
+  - `is_recursive()` 返回 `flags.recursive || flags.resources || flags.overlays`
+- **Host API**：实现 `is_recursive()` 返回正确值（当前硬编码 false）
+- **CLI 适配**：
+  - `-r`/`--recursivescan` → `flags.recursive = true`
+  - 新增 `--recursive-dir`/`-R` → 目录递归
+  - `--aggressivescan` + `-r` → nLimit 2000，扫描不可识别 resource
+
+修改模块：
+- `crates/diec-rules/src/pe_native.rs` — 新增 `get_file_parts()`
+- `crates/diec-engine/src/host.rs` — ScanFlags 扩展 + `is_recursive()`
+- `crates/diec-engine/src/scanner.rs` — 递归扫描逻辑
+- `crates/diec-cli/src/main.rs` — `-r` 语义变更 + `--recursive-dir`
+- `crates/diec-ffi/src/scan.rs` — FFI ScanFlags 映射
+- `crates/diec-server/` — server ScanFlags 映射
+
+差分测试：8 个嵌套语料样本 × 4 种模式（default/aggressive/recursive/recursive+aggressive）
+
+#### 13.5 archive 成员解包递归扫描 — P1
+
+实现 ZIP/7Z/RAR/CAB/ISO9660 五种格式的成员解包和递归扫描。上游 release CLI
+未暴露 `--archivescan` 选项，但 engine 层有此能力。本子任务实现 engine 层
+能力并添加 CLI 选项。
+
+- **ADR 0029：`rars` (WTFPL) RAR 解包库选型**
+  - 纯 Rust 实现，无 native 依赖
+  - WTFPL 许可证宽松（允许商用/修改/分发），兼容 MIT
+  - 覆盖 RAR 1.5-7 全系列
+  - 非 standard SPDX，需 ADR 记录决策
+- **ADR 0030：archive 解包安全边界**
+  - 压缩炸弹防护：单成员大小限制、总解压字节数限制、压缩比限制
+  - 递归深度限制（复用 diec-core limits.rs 已有框架）
+  - 成员数量限制（默认 20，aggressive 100000，匹配上游）
+- **解包器实现**（新建 `diec-unpack` crate 或扩展 `diec-formats`）：
+  - ZIP：使用 `zip` crate（die-gui 已依赖）
+  - 7Z：使用 `sevenz-rust` crate
+  - RAR：使用 `rars` crate（ADR 0029）
+  - CAB：使用 `cab` crate 或自行实现 Store/MSZIP
+  - ISO9660：使用 `iso9660` crate 或自行实现
+- **递归扫描编排**：
+  - `ScanFlags` 添加 `archives: bool`（对应上游 bIsArchivesScan）
+  - 主扫描完成后，检查 `flags.archives`
+  - 对每个 archive 成员解包，递归调用 `scan_bytes()`
+  - aggressive 模式无条件扫描，否则先探测成员类型
+  - 成员标记为 `FILEPART_STREAM`，保留 offset/size/original_name
+- **CLI 适配**：
+  - 新增 `--archivescan` 选项（上游 release CLI 未暴露，为 engine 能力扩展）
+  - `--aggressivescan` + `--archivescan` → nLimit 100000
+- **密码处理**：
+  - 新增 `--password` CLI 选项
+  - 7Z AES / RAR 加密支持
+  - 密码错误时不产生 child（匹配上游行为）
+
+新建模块：
+- `crates/diec-unpack/src/` — 5 种格式解包器
+- `crates/diec-engine/src/archive_scan.rs` — archive 递归扫描逻辑
+
+差分测试：17 个 archive 语料样本 × archive/aggressive 组合（匹配
+archive-format-behavior.md 基线）
+
+#### 13.6 macOS 平台基线闭合 — P1
+
+闭合 macOS x86_64 Qt5 平台的 68 项 `platform-missing` 能力基线。
+
+- **运行 17 个已存在的 macOS 采集脚本**：
+  - `tools/upstream/collect_macos_*.py`（13 个采集脚本）
+  - 对应的 `validate_macos_*.py` 验证脚本
+- **验证 17 个 candidate reports**：
+  - `docs/research/data/macos-qt5/*.json`（已采集但未验证）
+- **生成 macOS closure plan**：
+  - 68 行逐项审计为 `evidence_complete`
+  - 绑定 17 份 macOS runtime 证据
+- **重新生成 coverage 报告**：
+  - 运行 `build_capability_coverage.py`
+  - 将 macOS 68 行从 `platform_missing` 提升为 `runtime_observed`
+  - 闭合 `CAP-GAP-008` macOS 部分
+- **CI 增强**：
+  - 添加 macOS 专用 CI job 运行差分测试
+  - 当前 macOS CI 仅运行基本测试，未运行差分测试
+
+前提条件：需要在 macOS 环境执行（macOS-14 runner 或本地 macOS 主机）
+
+#### 13.7 大型语料补充 — P2
+
+补充差分测试语料，从 26 个基线样本扩展到覆盖 68 个 CAP-* 能力项。
+
+- **语料生成**（复用 `tools/corpus/generate_*.py` 60+ 个生成脚本）：
+  - 边缘情况样本（截断头部、畸形结构、超大字段、空容器）
+  - 特殊路径样本（NFC/NFD、中文、emoji、空格、hidden、前导短横线）
+  - 文件系统样本（symlink、alias、mode-000、depth-64、self-cycle）
+  - 大型目录样本（flat/nested 4096 项）
+  - TOCTOU 样本（stable old/new、enumeration vs open race）
+  - 归档格式样本（多记录、迭代边界、截断、结构变体、对抗性）
+  - 数据库样本（ZIP database、load-error、cache）
+  - 规则编排样本（format-specific vs Binary、优先级、去重）
+  - 结果模型样本（scalar metadata、error/debug/handler lists）
+- **差分测试扩展**：
+  - 新增样本添加到 `corpus_differential.rs`
+  - 更新 `baseline-corpus.json`
+  - 添加样本生成指南文档
+- **自动化增强**：
+  - 语料生成集成到 CI pre-test 阶段
+  - 自动验证样本完整性
+
+#### 13.8 兼容性报告更新与文档 — P2
+
+更新兼容性文档，反映 Phase 13 的全部变更。
+
+- **COMPATIBILITY.md 更新**：
+  - CLI 兼容性表新增 `--struct <value>`、`--archivescan`、`--recursive-dir`
+  - Host API 兼容性表新增 resource/overlay 递归扫描
+  - Known Differences 更新 `-r` 语义变更（ADR 0028）
+  - 规则版本差异处理：保持当前状态（选项 A），明确文档说明
+- **README.md 更新**：
+  - CLI 选项说明更新（`-r` 语义变更、新选项）
+  - Known Limitations 移除已闭合项
+- **RELEASE.md / RELEASE_NOTES.md**：
+  - 新版本发布信息
+- **AGENTS.md 更新**：
+  - 当前阶段描述更新
+- **能力矩阵更新**：
+  - `capability-matrix.md` 中 CAP-CLI-MODE-003 状态更新
+  - `capability-coverage-report.md` macOS 状态更新
+
+**退出条件**：
+- `--struct <value>` 全部通用 + 格式专用方法实现，差分测试 0 不匹配
+- `--showstructs` 输出与上游逐字节相同
+- resource/overlay 递归扫描实现，8 个嵌套语料差分测试 0 不匹配
+- archive 成员解包递归扫描实现（5 种格式），17 个 archive 语料差分测试 0 不匹配
+- macOS 68 项 platform-missing 全部闭合为 runtime_observed
+- 大型语料覆盖 68 个 CAP-* 能力项
+- `cargo fmt --check`、`cargo clippy --workspace --all-targets --all-features -- -D warnings`、
+  `cargo test --workspace --all-features` 全部通过
+- 3 个 ADR（0028/0029/0030）Accepted
+- COMPATIBILITY.md、README.md、能力矩阵全部更新
+
 ### Phase 12：GUI 差距 v3 — 35 项剩余功能完整对齐 — DONE
 
 Phase 11 完成了 8 个批次的基础对齐，但 `gui-gap-analysis-v3.md` 仍识别出

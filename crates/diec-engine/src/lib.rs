@@ -11,13 +11,19 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod archive_unpack;
 mod database;
 pub mod host;
+mod nested_scan;
 mod scanner;
+pub mod struct_mode;
 
 pub use database::{Database, DatabaseBuilder, DatabaseError, DatabaseVersion};
 pub use host::{BufferHost, ScanFlags};
 pub use scanner::{ScanDetection, ScanError, ScanResult, Scanner, scan_bytes, scan_once};
+pub use struct_mode::{
+    StructNode, StructSelector, evaluate_struct, evaluate_struct_default, general_method_names,
+};
 
 #[cfg(test)]
 mod tests {

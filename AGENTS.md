@@ -17,6 +17,7 @@
 - Phase 10 已知问题修复与文档纠正于 2026-08-08 关闭（ADR 0027 结果去重、README 文档清理、--alltypes 默认去重 + --no-dedup 逃生通道）。
 - Phase 11 GUI 深度对齐于 2026-08-08 关闭（8 批次：FileInfo 完整头部解析、格式检测扩展、PE 专用视图 9 子标签、字符串搜索与提取器、归档格式扩展、可视化与区段视图、Settings 模态对话框、VirusTotal 集成与 MIME 类型）。
 - Phase 12 GUI 差距 v3 于 2026-08-09 关闭（35 项：PE 5 子视图 + Mach-O 12 子视图 + ELF STRINGTABLE + 字符串搜索 8 项增强 + 可视化 5 项增强 + 提取器 3 项增强 + 扫描日志，614 个测试全部通过）。
+- Phase 13 diec CLI 100% 上游对齐于 2026-08-15 启动（--struct 完整实现、resource/overlay 递归扫描 -r 语义对齐、archive 成员解包 5 种格式、macOS 平台基线闭合、大型语料补充，ADR 0028/0029/0030）。
 
 Phase 7 在不破坏兼容基线的前提下持续跟进上游 DIE-engine 规则与 host API 变化，
 保持发布物健康度。当前进展：
