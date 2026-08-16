@@ -2,7 +2,7 @@
 
 This document records the supply chain security audit for diec-rust.
 
-Last updated: 2026-08-05
+Last updated: 2026-08-15
 
 ## Dependency Policy
 

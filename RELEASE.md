@@ -12,7 +12,7 @@ for diec-rust. Every item must be verified before publishing a release.
 - [x] All `unsafe` blocks have safety documentation and tests
 
 ### Testing
-- [x] `cargo test --workspace --all-features --locked` passes (614 tests)
+- [x] `cargo test --workspace --all-features --locked` passes (686 tests)
 - [x] Corpus differential tests pass (31 baseline + 20 edge samples)
 - [x] FFI tests pass (unit + integration + sanitizer)
 - [x] Edge corpus tests pass (no-crash, no-spurious, no-hang)

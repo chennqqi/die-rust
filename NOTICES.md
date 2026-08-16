@@ -59,6 +59,9 @@ diec-rust. It is maintained manually and verified via `cargo license`.
 | md-5 | Apache-2.0 OR MIT | MD5 hashing |
 | hex | Apache-2.0 OR MIT | Hex encoding/decoding |
 | zip | MIT | ZIP archive reading |
+| sevenz-rust | Apache-2.0 | 7Z archive extraction (ADR 0029) |
+| rars | MIT OR Apache-2.0 | RAR archive extraction (ADR 0029) |
+| serde | MIT OR Apache-2.0 | Serialization for IPC |
 | winreg | MIT | Windows registry access (context menu) |
 
 ### GUI Frontend Dependencies (npm)

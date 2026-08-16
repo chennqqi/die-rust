@@ -23,7 +23,7 @@ i18n.use(initReactI18next).init({
         tabs: {
           scan: "Scan",
           info: "Info",
-          struct: "Struktur",
+          struct: "Struct",
           hex: "Hex",
           disasm: "Disasm",
           demangle: "Demangle",
@@ -611,7 +611,7 @@ i18n.use(initReactI18next).init({
         tabs: {
           scan: "Scannen",
           info: "Info",
-          struct: "Structure",
+          struct: "Struktur",
           hex: "Hex",
           disasm: "Disasm",
           demangle: "Demangle",
@@ -649,6 +649,7 @@ i18n.use(initReactI18next).init({
         tabs: {
           scan: "Scanner",
           info: "Info",
+          struct: "Structure",
           hex: "Hex",
           disasm: "Désassemblage",
           demangle: "Demangle",
