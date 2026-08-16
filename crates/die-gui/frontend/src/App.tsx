@@ -48,6 +48,7 @@ import { YaraScanner } from "./components/YaraScanner";
 import { PeidScanner } from "./components/PeidScanner";
 import { OnlineTools } from "./components/OnlineTools";
 import { FileInfoPanel } from "./components/FileInfoPanel";
+import { StructPanel } from "./components/StructPanel";
 import { SplitPane } from "./components/SplitPane";
 import { SignatureHighlighter } from "./components/SignatureHighlighter";
 import { MemoryMapViewer } from "./components/MemoryMapViewer";
@@ -194,11 +195,12 @@ const defaultSettings: AppSettings = {
   engine: { die_enabled: true, nfd_enabled: false, peid_enabled: false, yara_enabled: false },
 };
 
-type TabId = "scan" | "info" | "hex" | "disasm" | "demangle" | "sigs" | "yara" | "peid" | "online" | "memmap" | "archive" | "converter" | "visualization" | "extractor" | "misc" | "search" | "strings";
+type TabId = "scan" | "info" | "struct" | "hex" | "disasm" | "demangle" | "sigs" | "yara" | "peid" | "online" | "memmap" | "archive" | "converter" | "visualization" | "extractor" | "misc" | "search" | "strings";
 
 const TAB_KEYS: { id: TabId; labelKey: string; icon: typeof FileSearch; advanced?: boolean }[] = [
   { id: "scan", labelKey: "tabs.scan", icon: ScanSearch },
   { id: "info", labelKey: "tabs.info", icon: FileSearchIcon },
+  { id: "struct", labelKey: "tabs.struct", icon: FileSearchIcon },
   { id: "online", labelKey: "tabs.online", icon: Globe },
   // Advanced tabs (only shown when Advanced mode is enabled)
   { id: "hex", labelKey: "tabs.hex", icon: Binary, advanced: true },
@@ -1142,6 +1144,9 @@ export default function App() {
         )}
 
         {activeTab === "info" && filePath && <FileInfoPanel path={filePath} />}
+
+        {/* Struct tab (--struct/--entropy/--info GUI mode) */}
+        {activeTab === "struct" && filePath && <StructPanel path={filePath} />}
         {activeTab === "hex" && filePath && (
           <HexViewer
             path={filePath}
@@ -1684,6 +1689,7 @@ function AdvancedToolbar({
     { labelKey: "advancedToolbar.heuristic", apply: { deep: false, heuristic: true, aggressive: false } },
     { labelKey: "advancedToolbar.aggressive", apply: { deep: true, heuristic: true, aggressive: true } },
     { labelKey: "advancedToolbar.allTypes", apply: { alltypes: true } },
+    { labelKey: "advancedToolbar.recursiveScan", apply: { recursive: true, resources: true, overlay: true } },
   ];
 
   // File type options matching upstream comboBoxType.
@@ -1757,11 +1763,65 @@ function AdvancedToolbar({
       <label className="flex items-center gap-1 cursor-pointer hover:text-fg-primary">
         <input
           type="checkbox"
+          checked={flags.aggressive}
+          onChange={(e) => onFlagsChange({ ...flags, aggressive: e.target.checked })}
+          className="accent-blue-500"
+        />
+        {t("advancedToolbar.aggressive")}
+      </label>
+      <label className="flex items-center gap-1 cursor-pointer hover:text-fg-primary">
+        <input
+          type="checkbox"
           checked={flags.alltypes}
           onChange={(e) => onFlagsChange({ ...flags, alltypes: e.target.checked })}
           className="accent-blue-500"
         />
         {t("advancedToolbar.allTypes")}
+      </label>
+      <label className="flex items-center gap-1 cursor-pointer hover:text-fg-primary">
+        <input
+          type="checkbox"
+          checked={flags.recursive}
+          onChange={(e) => onFlagsChange({ ...flags, recursive: e.target.checked })}
+          className="accent-blue-500"
+        />
+        {t("advancedToolbar.recursive")}
+      </label>
+      <label className="flex items-center gap-1 cursor-pointer hover:text-fg-primary">
+        <input
+          type="checkbox"
+          checked={flags.resources}
+          onChange={(e) => onFlagsChange({ ...flags, resources: e.target.checked })}
+          className="accent-blue-500"
+        />
+        {t("advancedToolbar.resources")}
+      </label>
+      <label className="flex items-center gap-1 cursor-pointer hover:text-fg-primary">
+        <input
+          type="checkbox"
+          checked={flags.overlay}
+          onChange={(e) => onFlagsChange({ ...flags, overlay: e.target.checked })}
+          className="accent-blue-500"
+        />
+        {t("advancedToolbar.overlay")}
+      </label>
+      <label className="flex items-center gap-1 cursor-pointer hover:text-fg-primary">
+        <input
+          type="checkbox"
+          checked={flags.archives}
+          onChange={(e) => onFlagsChange({ ...flags, archives: e.target.checked })}
+          className="accent-blue-500"
+        />
+        {t("advancedToolbar.archives")}
+      </label>
+      <label className="flex items-center gap-1 cursor-pointer hover:text-fg-primary">
+        <input
+          type="checkbox"
+          checked={flags.hide_unknown}
+          onChange={(e) => onFlagsChange({ ...flags, hide_unknown: e.target.checked })}
+          className="accent-blue-500"
+        />
+        {t("advancedToolbar.hideUnknown")}
       </label>
       <label className="flex items-center gap-1 cursor-pointer hover:text-fg-primary">
         <input

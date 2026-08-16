@@ -28,7 +28,7 @@ use diec_formats::ProbeTable;
 ///
 /// Leaf nodes have `value = Some(...)` and empty `children`.
 /// Parent nodes have `value = None` and non-empty `children`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct StructNode {
     /// Field name (e.g., "Hash", "MD5", "File name").
     pub name: String,
@@ -166,7 +166,7 @@ fn hash_algorithms() -> &'static [(&'static str, HashFn)] {
 }
 
 /// Compute Shannon entropy of a byte buffer (0.0 to 8.0).
-fn shannon_entropy(data: &[u8]) -> f64 {
+pub fn shannon_entropy(data: &[u8]) -> f64 {
     if data.is_empty() {
         return 0.0;
     }

@@ -118,6 +118,10 @@ fn main() {
             commands::remove_context_menu,
             commands::virustotal_open_browser,
             commands::virustotal_query,
+            commands::evaluate_struct,
+            commands::list_struct_methods,
+            commands::get_entropy_info,
+            commands::get_scan_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DIE application");

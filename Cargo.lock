@@ -1460,6 +1460,7 @@ dependencies = [
  "md-5",
  "md4",
  "rars",
+ "serde",
  "sevenz-rust",
  "sha1 0.10.7",
  "sha2 0.10.9",

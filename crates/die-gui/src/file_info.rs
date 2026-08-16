@@ -218,6 +218,12 @@ pub fn compute_md5(data: &[u8]) -> String {
     hex::encode(md5::Md5::digest(data))
 }
 
+/// Compute the SHA-256 hex digest of a byte slice.
+pub fn compute_sha256(data: &[u8]) -> String {
+    use sha2::Digest;
+    hex::encode(sha2::Sha256::digest(data))
+}
+
 /// Detect the binary format from magic bytes.
 ///
 /// First tries diec-formats probe table (20+ format probes) for Strong

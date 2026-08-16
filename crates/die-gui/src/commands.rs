@@ -1948,3 +1948,130 @@ pub async fn virustotal_query(
     let info = crate::virustotal::query_scan_info(&md5, &api_key).await;
     Ok(info)
 }
+
+// ---------------------------------------------------------------------------
+// Struct / Entropy / Info mode commands (Phase 13 CLI parity)
+// ---------------------------------------------------------------------------
+
+/// A serializable struct node tree for the `--struct` GUI mode.
+///
+/// Mirrors `diec_engine::StructNode` but with serde derives for IPC.
+pub type StructNodeDto = diec_engine::struct_mode::StructNode;
+
+/// Evaluate a `--struct` selector on a file and return the structured result.
+///
+/// `selector` is the same string as CLI `--struct` value, e.g. "Hash#MD5",
+/// "Info", "Entropy", "Check format", or format-specific like "PE#Imports".
+#[tauri::command]
+pub async fn evaluate_struct(
+    path: String,
+    selector: String,
+) -> Result<Option<StructNodeDto>, GuiError> {
+    let parsed = diec_engine::struct_mode::StructSelector::parse(&selector).ok_or_else(|| {
+        GuiError::new(
+            "INVALID_SELECTOR",
+            format!("Cannot parse selector: {selector}"),
+        )
+    })?;
+
+    let result = tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok::<_, String>(diec_engine::struct_mode::evaluate_struct_default(
+            &parsed, &path, &data,
+        ))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
+    .map_err(|e| GuiError::new("FILE_READ_FAILED", e))?;
+
+    Ok(result)
+}
+
+/// List available struct method names for the GUI method picker.
+///
+/// Returns general methods (Info, Hash, Entropy, Check format) plus
+/// format-specific method names.
+#[tauri::command]
+pub async fn list_struct_methods() -> Vec<String> {
+    let mut methods: Vec<String> = diec_engine::struct_mode::general_method_names()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    // Format-specific methods.
+    methods.extend_from_slice(&[
+        "PE#Imports".to_string(),
+        "PE#Exports".to_string(),
+        "PE#Resources".to_string(),
+        "PE#Overlay".to_string(),
+        "PE#Rich".to_string(),
+        "PE#Directories".to_string(),
+        "ELF#Header".to_string(),
+        "ELF#Sections".to_string(),
+        "Mach-O#Header".to_string(),
+        "Mach-O#Segments".to_string(),
+        "DEX#Header".to_string(),
+    ]);
+    methods
+}
+
+/// Compute entropy information for a file (GUI `--entropy` mode).
+///
+/// Returns the overall file entropy and optional per-section entropy.
+#[tauri::command]
+pub async fn get_entropy_info(path: String) -> Result<EntropyInfoDto, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        let entropy = diec_engine::struct_mode::shannon_entropy(&data);
+        Ok::<_, String>(EntropyInfoDto {
+            file_size: data.len() as u64,
+            entropy,
+        })
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
+    .map_err(|e| GuiError::new("FILE_READ_FAILED", e))?;
+
+    Ok(result)
+}
+
+/// Entropy information DTO.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntropyInfoDto {
+    /// File size in bytes.
+    pub file_size: u64,
+    /// Shannon entropy (0.0 - 8.0).
+    pub entropy: f64,
+}
+
+/// Get file info (GUI `--info` mode).
+///
+/// Returns basic file metadata: size, type, hash.
+#[tauri::command]
+pub async fn get_scan_info(path: String) -> Result<ScanInfoDto, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        let md5 = crate::file_info::compute_md5(&data);
+        let sha256 = crate::file_info::compute_sha256(&data);
+        Ok::<_, String>(ScanInfoDto {
+            file_size: data.len() as u64,
+            md5,
+            sha256,
+        })
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
+    .map_err(|e| GuiError::new("FILE_READ_FAILED", e))?;
+
+    Ok(result)
+}
+
+/// File info DTO for `--info` mode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanInfoDto {
+    /// File size in bytes.
+    pub file_size: u64,
+    /// MD5 hash hex string.
+    pub md5: String,
+    /// SHA-256 hash hex string.
+    pub sha256: String,
+}
