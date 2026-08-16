@@ -1,5 +1,82 @@
 # Release Notes
 
+## diec-rust v0.8.0
+
+Phase 13 CLI parity release — `--struct` mode, intra-file recursive
+scanning, archive member extraction, and GUI synchronization.
+
+### Phase 13: CLI Parity (8 sub-tasks)
+
+#### 13.1-13.3: `--struct` Mode
+
+The `--struct`/`-S` CLI option is now fully implemented, matching upstream
+DIE-engine's structure inspection mode:
+
+- **General methods**: Hash#MD5, Hash#SHA1, Hash#SHA256, Info, Entropy,
+  Check format
+- **Format-specific methods**: PE (6: Imports/Exports/Resources/Overlay/
+  Rich/Directories), ELF (2: Header/Sections), Mach-O (2: Header/Segments),
+  DEX (1: Header)
+- **Output formats**: text, JSON, XML, CSV, TSV
+- **Mode priority**: `--struct` > `--entropy`/`--info` > normal scan
+
+#### 13.4: Intra-file Recursive Scanning (ADR 0028)
+
+The `-r`/`--recursivescan` flag now matches upstream semantics:
+
+- **`-r`/`--recursivescan`**: Intra-file recursive scan (PE resources +
+  overlay). Extracts PE resources and overlay, scans each as a sub-device.
+- **`-R`/`--recursive-dir`**: Directory-level recursion (replaces old `-r`
+  directory behavior). `--recursive` retained as alias for backward
+  compatibility.
+- **`--resources`**: Scan only PE resources.
+- **`--overlays`**: Scan only PE overlay.
+- **FFI flags**: `DIEC_SCAN_FLAG_RECURSIVE` (0x80),
+  `DIEC_SCAN_FLAG_RESOURCES` (0x100), `DIEC_SCAN_FLAG_OVERLAYS` (0x200).
+
+#### 13.5: Archive Member Extraction (ADR 0029/0030)
+
+The `--archives` flag enables archive member extraction and recursive
+scanning:
+
+- **Supported formats**: ZIP, 7Z, RAR (CAB and ISO9660 deferred)
+- **Safety bounds** (ADR 0030, stricter than upstream):
+  - Single-member limit: 128 MiB
+  - Total decompressed limit: 512 MiB
+  - Compression ratio limit: 100:1
+  - Member count: 20 (default), 100000 (aggressive)
+- **RAR library**: `rars` 0.6.0 (MIT/Apache-2.0, pure Rust)
+- **FFI flag**: `DIEC_SCAN_FLAG_ARCHIVES` (0x400)
+
+#### 13.6-13.8: Platform, Corpus, Documentation
+
+- macOS CI baseline covered by existing 3-platform matrix
+- New corpus: `nested-zip-with-pe.zip` for archive extraction testing
+- COMPATIBILITY.md updated with Phase 13 changes and known differences
+- 3 new ADRs: 0028, 0029, 0030
+
+### GUI Synchronization (die-gui)
+
+- 6 new toolbar checkboxes: aggressive, recursive, resources, overlay,
+  archives, hide_unknown
+- New "Struct" tab with three sub-modes: Struct (method picker + tree
+  view), Entropy (value + visual bar), Info (size + MD5 + SHA-256)
+- 4 new Tauri commands: `evaluate_struct`, `list_struct_methods`,
+  `get_entropy_info`, `get_scan_info`
+- i18n updated for all 5 languages (en, zh-CN, ru, de, fr)
+
+### Metrics
+
+- **Tests**: 686 pass, 0 failures (up from 614 in v0.7.0, +72 new tests)
+- **Rules**: 1186/1186 loaded (100%)
+- **New dependencies**: zip (MIT), sevenz-rust (Apache-2.0),
+  rars (MIT/Apache-2.0), serde (MIT/Apache-2.0)
+- **New ADRs**: 0028, 0029, 0030
+- **Known differences**: CAB/ISO9660 not yet implemented; archive safety
+  bounds stricter than upstream (intentional, ADR 0030)
+
+---
+
 ## diec-rust v0.7.0
 
 Phase 11 + Phase 12 GUI deep alignment release — 43 items achieving

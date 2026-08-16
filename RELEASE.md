@@ -99,10 +99,10 @@ for diec-rust. Every item must be verified before publishing a release.
 - [x] Changelog / release notes drafted (`RELEASE_NOTES.md`)
 
 ## Version and Tag
-- [x] Version bumped in `Cargo.toml` (workspace.package.version = 0.7.0)
-- [ ] Git tag created: `v0.7.0`
-- [ ] Tag is annotated (`git cat-file -t v0.7.0` => `tag`)
-- [ ] Tag message includes release summary ("v0.7.0 - Phase 11+12 GUI deep alignment, 43 items, full feature parity")
+- [x] Version bumped in `Cargo.toml` (workspace.package.version = 0.8.0)
+- [ ] Git tag created: `v0.8.0`
+- [ ] Tag is annotated (`git cat-file -t v0.8.0` => `tag`)
+- [ ] Tag message includes release summary ("v0.8.0 - Phase 13 CLI parity: --struct mode, nested scanning, archive extraction, GUI sync")
 
 ## Post-Release
 - [x] Release notes published (`RELEASE_NOTES.md` committed)
@@ -113,6 +113,34 @@ for diec-rust. Every item must be verified before publishing a release.
 ---
 
 ## Release Sign-off
+
+### v0.8.0 — 2026-08-15
+
+- **Tag**: `v0.8.0` (annotated, pending CI green)
+- **Tests**: 686 pass, 0 failures (up from 614 in v0.7.0, +72 new tests)
+- **Phase 13 CLI parity** (8 sub-tasks):
+  - 13.1 `--struct` general methods: Hash#MD5/SHA1/SHA256, Info, Entropy, Check format
+  - 13.2 `--struct` format-specific methods: PE (6), ELF (2), Mach-O (2), DEX (1)
+  - 13.3 `--struct` output formatting: text/JSON/XML/CSV/TSV + mode priority
+  - 13.4 Intra-file recursive scanning (ADR 0028): `-r` semantic alignment
+    - `-r`/`--recursivescan`: PE resources + overlay recursive scan
+    - `-R`/`--recursive-dir`: directory recursion (replaces old `-r`)
+    - `--resources`/`--overlays`: selective intra-file scan
+    - FFI flags: RECURSIVE(0x80), RESOURCES(0x100), OVERLAYS(0x200)
+  - 13.5 Archive member extraction (ADR 0029/0030): ZIP/7Z/RAR
+    - Safety bounds: 128MiB single, 512MiB total, 100:1 ratio, 20/100k members
+    - FFI flag: ARCHIVES(0x400)
+  - 13.6 macOS platform baseline: CI 3-platform matrix (ubuntu/windows/macos-14)
+  - 13.7 Corpus: nested-zip-with-pe.zip + 3 new CLI integration tests
+  - 13.8 Documentation: COMPATIBILITY.md + ADR 0028/0029/0030
+- **GUI sync** (die-gui):
+  - 6 new toolbar checkboxes (aggressive/recursive/resources/overlay/archives/hide_unknown)
+  - New "Struct" tab with Struct/Entropy/Info sub-modes
+  - 4 new Tauri commands: evaluate_struct, list_struct_methods, get_entropy_info, get_scan_info
+  - i18n: 5 languages updated (en/zh-CN/ru/de/fr)
+- **New dependencies**: zip (MIT), sevenz-rust (Apache-2.0), rars (MIT/Apache-2.0), serde (MIT/Apache-2.0)
+- **New ADRs**: 0028 (-r semantic alignment), 0029 (rars RAR library), 0030 (archive safety bounds)
+- **Known differences**: CAB/ISO9660 not yet implemented; archive safety bounds stricter than upstream
 
 ### v0.7.0 — 2026-08-09
 
