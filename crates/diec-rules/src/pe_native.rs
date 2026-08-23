@@ -557,6 +557,8 @@ pub struct PeBatchInfo {
     pub number_of_resources: usize,
     /// .NET CLR runtime version string (e.g., "v4.0.30319"), empty if not .NET.
     pub net_version: String,
+    /// Resource entries: (name_or_id, type_id, offset, size).
+    pub resource_entries: Vec<(String, u32, u32, u32)>,
 }
 
 /// Parse all PE information in a single pass to avoid repeated PeFile construction.
@@ -625,6 +627,7 @@ fn parse_batch_pe64(file: pelite::pe64::PeFile<'_>) -> PeBatchInfo {
 
     let (manifest, file_version, product_version, number_of_resources) =
         parse_resource_info_pe64(&file);
+    let resource_entries = parse_resource_entries_pe64(&file);
 
     PeBatchInfo {
         libraries,
@@ -637,6 +640,7 @@ fn parse_batch_pe64(file: pelite::pe64::PeFile<'_>) -> PeBatchInfo {
         product_version,
         number_of_resources,
         net_version: String::new(),
+        resource_entries,
     }
 }
 
@@ -685,6 +689,7 @@ fn parse_batch_pe32(file: pelite::pe32::PeFile<'_>) -> PeBatchInfo {
 
     let (manifest, file_version, product_version, number_of_resources) =
         parse_resource_info_pe32(&file);
+    let resource_entries = parse_resource_entries_pe32(&file);
 
     PeBatchInfo {
         libraries,
@@ -697,6 +702,7 @@ fn parse_batch_pe32(file: pelite::pe32::PeFile<'_>) -> PeBatchInfo {
         product_version,
         number_of_resources,
         net_version: String::new(),
+        resource_entries,
     }
 }
 
@@ -758,6 +764,66 @@ fn parse_resource_info_pe32(file: &pelite::pe32::PeFile<'_>) -> (String, String,
         0
     };
     (manifest, file_version, product_version, number_of_resources)
+}
+
+/// Extract resource entries (name_or_id, type_id, offset, size) from a PE64 file.
+fn parse_resource_entries_pe64(file: &pelite::pe64::PeFile<'_>) -> Vec<(String, u32, u32, u32)> {
+    let Ok(res) = file.resources() else {
+        return Vec::new();
+    };
+    let Ok(root) = res.root() else {
+        return Vec::new();
+    };
+    let mut entries = Vec::new();
+    for type_entry in root.entries() {
+        let type_id = match type_entry.name() {
+            Ok(pelite::resources::Name::Id(id)) => id,
+            _ => 0,
+        };
+        if let Ok(pelite::resources::Entry::Directory(type_dir)) = type_entry.entry() {
+            for res_entry in type_dir.entries() {
+                let name = match res_entry.name() {
+                    Ok(pelite::resources::Name::Id(id)) => format!("#{}", id),
+                    Ok(pelite::resources::Name::Wide(ws)) => String::from_utf16_lossy(ws),
+                    _ => String::new(),
+                };
+                if let Ok(pelite::resources::Entry::DataEntry(data)) = res_entry.entry() {
+                    entries.push((name, type_id, data.image().OffsetToData, data.image().Size));
+                }
+            }
+        }
+    }
+    entries
+}
+
+/// Extract resource entries (name_or_id, type_id, offset, size) from a PE32 file.
+fn parse_resource_entries_pe32(file: &pelite::pe32::PeFile<'_>) -> Vec<(String, u32, u32, u32)> {
+    let Ok(res) = file.resources() else {
+        return Vec::new();
+    };
+    let Ok(root) = res.root() else {
+        return Vec::new();
+    };
+    let mut entries = Vec::new();
+    for type_entry in root.entries() {
+        let type_id = match type_entry.name() {
+            Ok(pelite::resources::Name::Id(id)) => id,
+            _ => 0,
+        };
+        if let Ok(pelite::resources::Entry::Directory(type_dir)) = type_entry.entry() {
+            for res_entry in type_dir.entries() {
+                let name = match res_entry.name() {
+                    Ok(pelite::resources::Name::Id(id)) => format!("#{}", id),
+                    Ok(pelite::resources::Name::Wide(ws)) => String::from_utf16_lossy(ws),
+                    _ => String::new(),
+                };
+                if let Ok(pelite::resources::Entry::DataEntry(data)) = res_entry.entry() {
+                    entries.push((name, type_id, data.image().OffsetToData, data.image().Size));
+                }
+            }
+        }
+    }
+    entries
 }
 
 /// Get the PE import library names.

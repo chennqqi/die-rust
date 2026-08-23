@@ -148,6 +148,9 @@ fn golden_detections(case: &GoldenCase) -> Vec<(String, String, String)> {
             "PNG" => Some(("format", "PNG")),
             "JPEG" => Some(("format", "JPEG")),
             "Amiga Hunk" => Some(("format", "Amiga loadable file")),
+            "LE" => Some(("type", "le")),
+            "LX" => Some(("type", "lx")),
+            "NE" => Some(("type", "ne")),
             // PE/ELF/Mach-O: diec-rust does not produce format detections
             // for these (probe layer handles identification). Skip.
             // NPM: diec-rust lacks NPM rule support (needs archive extraction).

@@ -77,6 +77,23 @@ fn format_pe_batch_json(info: &crate::pe_native::PeBatchInfo) -> String {
     s.push_str(&info.number_of_resources.to_string());
     s.push_str(",\"netVersion\":");
     push_json_string(&mut s, &info.net_version);
+    // resource entries: array of [name, type_id, offset, size]
+    s.push_str(",\"resourceEntries\":[");
+    for (i, entry) in info.resource_entries.iter().enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        s.push('[');
+        push_json_string(&mut s, &entry.0);
+        s.push(',');
+        s.push_str(&entry.1.to_string());
+        s.push(',');
+        s.push_str(&entry.2.to_string());
+        s.push(',');
+        s.push_str(&entry.3.to_string());
+        s.push(']');
+    }
+    s.push(']');
     s.push('}');
     s
 }
@@ -2432,6 +2449,40 @@ impl HostApiBridge {
                         if (!_peIsPE()) return 0;
                         return _B.read_uint32_le(_peOptHdrOff() + 8);
                     };
+                    PE.getFileVersionMS = function() {
+                        // File version MS from version resource (upstream parses
+                        // VS_VERSIONINFO). Approximate from optional header.
+                        if (!_peIsPE()) return "";
+                        return _peGetBatch().fileVersion || "";
+                    };
+                    PE.getImageFileHeader = function(field) {
+                        // Return COFF header field by name.
+                        // IMAGE_FILE_HEADER at e_lfanew + 24, 20 bytes:
+                        //   0: Machine (uint16)
+                        //   2: NumberOfSections (uint16)
+                        //   4: TimeDateStamp (uint32)
+                        //   8: PointerToSymbolTable (uint32)
+                        //  12: NumberOfSymbols (uint32)
+                        //  16: SizeOfOptionalHeader (uint16)
+                        //  18: Characteristics (uint16)
+                        if (!_peIsPE()) return 0;
+                        var base = _peLfanew() + 24;
+                        switch (field) {
+                            case "Machine": return _B.read_uint16_le(base + 0);
+                            case "NumberOfSections": return _B.read_uint16_le(base + 2);
+                            case "TimeDateStamp": return _B.read_uint32_le(base + 4);
+                            case "PointerToSymbolTable": return _B.read_uint32_le(base + 8);
+                            case "NumberOfSymbols": return _B.read_uint32_le(base + 12);
+                            case "SizeOfOptionalHeader": return _B.read_uint16_le(base + 16);
+                            case "Characteristics": return _B.read_uint16_le(base + 18);
+                            default: return 0;
+                        }
+                    };
+                    PE.calculateSizeOfHeaders = function() {
+                        // SizeOfHeaders from optional header.
+                        if (!_peIsPE()) return 0;
+                        return _B.read_uint32_le(_peOptHdrOff() + 60);
+                    };
                     // PE.nLastSection and PE.section are populated by the
                     // upstream db/PE/_init script (executed during init),
                     // which iterates sections via getSectionName/Size/etc.
@@ -2538,12 +2589,38 @@ impl HostApiBridge {
 
                     // Resource methods: native pelite-backed resource enumeration.
                     PE.getNumberOfResources = function() { return _peGetBatch().numberOfResources; };
-                    PE.getResourceNameByNumber = function(n) { return ""; };
-                    PE.getResourceIdByNumber = function(n) { return 0; };
-                    PE.getResourceOffsetByNumber = function(n) { return 0; };
-                    PE.getResourceSizeByNumber = function(n) { return 0; };
-                    PE.getResourceTypeByNumber = function(n) { return 0; };
-                    PE.getResourceNameOffset = function(s) { return 0; };
+                    PE.getResourceNameByNumber = function(n) {
+                        var entries = _peGetBatch().resourceEntries;
+                        if (n < 0 || n >= entries.length) return "";
+                        return entries[n][0]; // name or ""
+                    };
+                    PE.getResourceIdByNumber = function(n) {
+                        var entries = _peGetBatch().resourceEntries;
+                        if (n < 0 || n >= entries.length) return 0;
+                        return entries[n][1]; // type_id as numeric ID fallback
+                    };
+                    PE.getResourceOffsetByNumber = function(n) {
+                        var entries = _peGetBatch().resourceEntries;
+                        if (n < 0 || n >= entries.length) return 0;
+                        return entries[n][2]; // offset
+                    };
+                    PE.getResourceSizeByNumber = function(n) {
+                        var entries = _peGetBatch().resourceEntries;
+                        if (n < 0 || n >= entries.length) return 0;
+                        return entries[n][3]; // size
+                    };
+                    PE.getResourceTypeByNumber = function(n) {
+                        var entries = _peGetBatch().resourceEntries;
+                        if (n < 0 || n >= entries.length) return 0;
+                        return entries[n][1]; // type_id
+                    };
+                    PE.getResourceNameOffset = function(s) {
+                        var entries = _peGetBatch().resourceEntries;
+                        for (var i = 0; i < entries.length; i++) {
+                            if (entries[i][0] === s) return entries[i][2];
+                        }
+                        return 0;
+                    };
                     // PE.resource is populated by the upstream db/PE/_init
                     // script (executed during init), which iterates resources
                     // via getResourceNameByNumber/Id/Offset/Size/Type. Do NOT
@@ -2609,7 +2686,16 @@ impl HostApiBridge {
                     };
                     PE.getVersionStringInfo = function(s) { return _B.__peVersionString(s); };
                     PE.getFileVersion = function() { return _peGetBatch().fileVersion; };
-                    PE.getCompilerVersion = function() { return ""; };
+                    PE.getCompilerVersion = function() {
+                        // Compiler version is derived from linker version info.
+                        // Upstream parses version resources, but we approximate
+                        // from the major/minor linker version.
+                        if (!_peIsPE()) return "";
+                        var major = _B.read_uint8(_peOptHdrOff() + 2);
+                        var minor = _B.read_uint8(_peOptHdrOff() + 3);
+                        if (major > 0) return major + "." + minor;
+                        return "";
+                    };
 
                     // OS info stubs (require version resource parsing).
                     PE.getOperationSystemName = function() { return ""; };
@@ -2618,9 +2704,33 @@ impl HostApiBridge {
                     // getAddressOfEntryPoint: same as getEntryPoint (RVA).
                     PE.getAddressOfEntryPoint = function() { return PE.getEntryPoint(); };
 
-                    PE.isLibraryPresentExp = function(p) { return null; };
-                    PE.isExportFunctionPresentExp = function(p) { return null; };
-                    PE.isSectionNamePresentExp = function(p) { return null; };
+                    PE.isLibraryPresentExp = function(p) {
+                        if (!_peIsPE()) return false;
+                        var d = _peParseImports();
+                        var pLower = p.toLowerCase();
+                        for (var i = 0; i < d.libraries.length; i++) {
+                            if (d.libraries[i].toLowerCase().indexOf(pLower) >= 0) return true;
+                        }
+                        return false;
+                    };
+                    PE.isExportFunctionPresentExp = function(p) {
+                        if (!_peIsPE()) return false;
+                        var d = _peParseExports();
+                        var pLower = p.toLowerCase();
+                        for (var i = 0; i < d.names.length; i++) {
+                            if (d.names[i].toLowerCase().indexOf(pLower) >= 0) return true;
+                        }
+                        return false;
+                    };
+                    PE.isSectionNamePresentExp = function(p) {
+                        if (!_peIsPE()) return false;
+                        var n = _peNumberOfSections();
+                        var pLower = p.toLowerCase();
+                        for (var i = 0; i < n; i++) {
+                            if (_peSectionName(i).toLowerCase().indexOf(pLower) >= 0) return true;
+                        }
+                        return false;
+                    };
                     PE.isResourceNamePresentExp = function(p) { return null; };
 
                     // Linker version: read from optional header bytes 2-3.
@@ -2876,6 +2986,7 @@ impl HostApiBridge {
                         if (_peBatchCache.productVersion === undefined) _peBatchCache.productVersion = "";
                         if (_peBatchCache.numberOfResources === undefined) _peBatchCache.numberOfResources = 0;
                         if (_peBatchCache.netVersion === undefined) _peBatchCache.netVersion = "";
+                        if (!_peBatchCache.resourceEntries) _peBatchCache.resourceEntries = [];
                         return _peBatchCache;
                     }
                     var _peImportData = null;
@@ -2983,7 +3094,21 @@ impl HostApiBridge {
                     };
 
                     // Section helpers.
-                    PE.getSectionNameCollision = function(n) { return ""; };
+                    PE.getSectionNameCollision = function(s1, s2) {
+                        if (!_peIsPE()) return "";
+                        // Check if two section names collide (case-insensitive).
+                        var n = _peNumberOfSections();
+                        var s1Lower = s1.toLowerCase();
+                        var s2Lower = s2.toLowerCase();
+                        var found1 = false, found2 = false;
+                        for (var i = 0; i < n; i++) {
+                            var name = _peSectionName(i).toLowerCase();
+                            if (name === s1Lower) found1 = true;
+                            if (name === s2Lower) found2 = true;
+                        }
+                        if (found1 && found2) return s1;
+                        return "";
+                    };
                     PE.getResourceSection = function() {
                         return _B.__peResourceSectionOffset();
                     };
@@ -4267,9 +4392,34 @@ impl HostApiBridge {
                     MSDOS.getOverlayOffset = function() { return -1; };
                     MSDOS.getEntryPointOffset = function() { return -1; };
                     MSDOS.getNEOffset = function() { return -1; };
-                    MSDOS.isNE = function() { return false; };
-                    MSDOS.isLE = function() { return false; };
-                    MSDOS.isLX = function() { return false; };
+                    MSDOS.isNE = function() {
+                        // NE signature at e_lfanew: "NE" (0x4E 0x45)
+                        if (Binary.getSize() < 0x40) return false;
+                        var lfanew = Binary.read_uint32_le(0x3C);
+                        if (lfanew + 2 > Binary.getSize()) return false;
+                        return Binary.read_uint8(lfanew) === 0x4E && Binary.read_uint8(lfanew + 1) === 0x45;
+                    };
+                    MSDOS.isLE = function() {
+                        // LE signature at e_lfanew: "LE" (0x4C 0x45)
+                        if (Binary.getSize() < 0x40) return false;
+                        var lfanew = Binary.read_uint32_le(0x3C);
+                        if (lfanew + 2 > Binary.getSize()) return false;
+                        return Binary.read_uint8(lfanew) === 0x4C && Binary.read_uint8(lfanew + 1) === 0x45;
+                    };
+                    MSDOS.isLX = function() {
+                        // LX signature at e_lfanew: "LX" (0x4C 0x58)
+                        if (Binary.getSize() < 0x40) return false;
+                        var lfanew = Binary.read_uint32_le(0x3C);
+                        if (lfanew + 2 > Binary.getSize()) return false;
+                        return Binary.read_uint8(lfanew) === 0x4C && Binary.read_uint8(lfanew + 1) === 0x58;
+                    };
+                    MSDOS.isPE = function() {
+                        // PE signature at e_lfanew: "PE\0\0" (0x50 0x45 0x00 0x00)
+                        if (Binary.getSize() < 0x40) return false;
+                        var lfanew = Binary.read_uint32_le(0x3C);
+                        if (lfanew + 4 > Binary.getSize()) return false;
+                        return Binary.read_uint8(lfanew) === 0x50 && Binary.read_uint8(lfanew + 1) === 0x45;
+                    };
                     MSDOS.getBaseOffset = function() { return 0; };
                     MSDOS.getOperationSystemName = function() { return ""; };
                     MSDOS.getOperationSystemVersion = function() { return ""; };
@@ -4364,7 +4514,14 @@ impl HostApiBridge {
                         return s.trim();
                     };
 
-                    // PDF-specific: parse version from "%PDF-X.Y" header.
+                    // ISO9660 file format info: upstream returns these from
+                    // the file format database. We return basic strings.
+                    ISO9660.getFileFormatName = function() { return "ISO9660"; };
+                    ISO9660.getFileFormatVersion = function() {
+                        // No standard version field in ISO9660 PVD.
+                        return "";
+                    };
+                    ISO9660.getFileFormatOptions = function() { return ""; };
                     PDF.getFileFormatVersion = function() {
                         // PDF header: "%PDF-X.Y" at offset 0, version at offset 5.
                         if (Binary.getSize() < 8) return "";

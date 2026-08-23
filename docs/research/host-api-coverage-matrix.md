@@ -73,7 +73,7 @@ Coverage: 0/2 implemented (0%), 0 stub, 2 missing
 | `Binary.cleanString` | implemented |
 | `Binary.calculateCRC32` | implemented |
 | `Binary.crc16` | implemented |
-| `Binary.crc32` | **missing** |
+| `Binary.crc32` | implemented |
 | `Binary.calculateMD5` | implemented |
 | `Binary.adler32` | **missing** |
 | `Binary.calculateEntropy` | implemented |
@@ -150,7 +150,7 @@ Coverage: 0/2 implemented (0%), 0 stub, 2 missing
 | `Binary.getHeaderString` | implemented |
 | `Binary.isSignatureInSectionPresent` | **missing** |
 
-Coverage: 60/128 implemented (47%), 0 stub, 68 missing
+Coverage: 61/128 implemented (48%), 0 stub, 67 missing
 
 ## ELF (25 methods)
 
@@ -178,11 +178,11 @@ Coverage: 60/128 implemented (47%), 0 stub, 68 missing
 | `ELF.getElfHeader_shnum` | implemented |
 | `ELF.getElfHeader_shstrndx` | implemented |
 | `ELF.isStringInTablePresent` | implemented |
-| `ELF.isLibraryPresent` | **stub** |
+| `ELF.isLibraryPresent` | implemented |
 | `ELF.getRunPath` | **missing** |
 | `ELF.getGeneralOptions` | implemented |
 
-Coverage: 20/25 implemented (80%), 1 stub, 4 missing
+Coverage: 21/25 implemented (84%), 0 stub, 4 missing
 
 ## Global (2 methods)
 
@@ -198,15 +198,15 @@ Coverage: 0/2 implemented (0%), 0 stub, 2 missing
 | Method | Status |
 |--------|--------|
 | `ISO9660.isValid` | **missing** |
-| `ISO9660.getFileFormatName` | **missing** |
-| `ISO9660.getFileFormatVersion` | **missing** |
-| `ISO9660.getFileFormatOptions` | **missing** |
+| `ISO9660.getFileFormatName` | implemented |
+| `ISO9660.getFileFormatVersion` | **stub** |
+| `ISO9660.getFileFormatOptions` | **stub** |
 | `ISO9660.getSystemIdentifier` | **missing** |
 | `ISO9660.getVolumeIdentifier` | **missing** |
 | `ISO9660.getVolumeSetIdentifier` | **missing** |
 | `ISO9660.getPublisherIdentifier` | **missing** |
-| `ISO9660.getDataPreparerIdentifier` | **stub** |
-| `ISO9660.getApplicationIdentifier` | **stub** |
+| `ISO9660.getDataPreparerIdentifier` | implemented |
+| `ISO9660.getApplicationIdentifier` | implemented |
 | `ISO9660.getCopyrightFileIdentifier` | **missing** |
 | `ISO9660.getAbstractFileIdentifier` | **missing** |
 | `ISO9660.getBibliographicFileIdentifier` | **missing** |
@@ -217,16 +217,16 @@ Coverage: 0/2 implemented (0%), 0 stub, 2 missing
 | `ISO9660.isArchiveRecordPresent` | **missing** |
 | `ISO9660.isArchiveRecordPresentExp` | **missing** |
 
-Coverage: 0/19 implemented (0%), 2 stub, 17 missing
+Coverage: 3/19 implemented (16%), 2 stub, 14 missing
 
 ## MSDOS (13 methods)
 
 | Method | Status |
 |--------|--------|
-| `MSDOS.isLE` | **stub** |
-| `MSDOS.isLX` | **stub** |
-| `MSDOS.isNE` | **stub** |
-| `MSDOS.isPE` | **missing** |
+| `MSDOS.isLE` | implemented |
+| `MSDOS.isLX` | implemented |
+| `MSDOS.isNE` | implemented |
+| `MSDOS.isPE` | implemented |
 | `MSDOS.getDosStubOffset` | **missing** |
 | `MSDOS.getDosStubSize` | **missing** |
 | `MSDOS.isDosStubPresent` | **missing** |
@@ -237,7 +237,7 @@ Coverage: 0/19 implemented (0%), 2 stub, 17 missing
 | `MSDOS.getRichID` | implemented |
 | `MSDOS.getRichCount` | implemented |
 
-Coverage: 5/13 implemented (38%), 3 stub, 5 missing
+Coverage: 9/13 implemented (69%), 0 stub, 4 missing
 
 ## PE (76 methods)
 
@@ -258,10 +258,10 @@ Coverage: 5/13 implemented (38%), 3 stub, 5 missing
 | `PE.getSectionFileOffset` | implemented |
 | `PE.getSectionCharacteristics` | implemented |
 | `PE.isSectionNamePresent` | implemented |
-| `PE.isSectionNamePresentExp` | **stub** |
+| `PE.isSectionNamePresentExp` | implemented |
 | `PE.getSectionNumber` | implemented |
 | `PE.getSectionNumberExp` | implemented |
-| `PE.getSectionNameCollision` | **stub** |
+| `PE.getSectionNameCollision` | implemented |
 | `PE.getImportSection` | implemented |
 | `PE.getExportSection` | implemented |
 | `PE.getResourceSection` | implemented |
@@ -273,24 +273,24 @@ Coverage: 5/13 implemented (38%), 3 stub, 5 missing
 | `PE.getNumberOfImportThunks` | implemented |
 | `PE.getImportFunctionName` | implemented |
 | `PE.isImportPresent` | **missing** |
-| `PE.isLibraryPresent` | **stub** |
-| `PE.isLibraryFunctionPresent` | **stub** |
+| `PE.isLibraryPresent` | implemented |
+| `PE.isLibraryFunctionPresent` | implemented |
 | `PE.getImportHash32` | **missing** |
 | `PE.getImportHash64` | **missing** |
 | `PE.isImportPositionHashPresent` | **stub** |
 | `PE.isExportPresent` | **missing** |
 | `PE.getNumberOfExportFunctions` | implemented |
 | `PE.getExportFunctionName` | implemented |
-| `PE.isExportFunctionPresent` | **stub** |
-| `PE.isExportFunctionPresentExp` | **stub** |
+| `PE.isExportFunctionPresent` | implemented |
+| `PE.isExportFunctionPresentExp` | implemented |
 | `PE.isResourcesPresent` | **missing** |
 | `PE.getNumberOfResources` | implemented |
-| `PE.getResourceIdByNumber` | **stub** |
-| `PE.getResourceNameByNumber` | **stub** |
-| `PE.getResourceOffsetByNumber` | **stub** |
-| `PE.getResourceSizeByNumber` | **stub** |
-| `PE.getResourceTypeByNumber` | **stub** |
-| `PE.getResourceNameOffset` | **stub** |
+| `PE.getResourceIdByNumber` | implemented |
+| `PE.getResourceNameByNumber` | implemented |
+| `PE.getResourceOffsetByNumber` | implemented |
+| `PE.getResourceSizeByNumber` | implemented |
+| `PE.getResourceTypeByNumber` | implemented |
+| `PE.getResourceNameOffset` | implemented |
 | `PE.isResourceNamePresent` | implemented |
 | `PE.isResourceGroupNamePresent` | implemented |
 | `PE.isResourceGroupIdPresent` | implemented |
@@ -304,15 +304,15 @@ Coverage: 5/13 implemented (38%), 3 stub, 5 missing
 | `PE.isNetMethodPresent` | **stub** |
 | `PE.isNetFieldPresent` | **stub** |
 | `PE.getFileVersion` | implemented |
-| `PE.getFileVersionMS` | **missing** |
+| `PE.getFileVersionMS` | implemented |
 | `PE.getPEFileVersion` | implemented |
 | `PE.getVersionStringInfo` | implemented |
 | `PE.getMajorLinkerVersion` | implemented |
 | `PE.getMinorLinkerVersion` | implemented |
-| `PE.getCompilerVersion` | **stub** |
-| `PE.getImageFileHeader` | **missing** |
+| `PE.getCompilerVersion` | implemented |
+| `PE.getImageFileHeader` | implemented |
 | `PE.getImageOptionalHeader` | implemented |
-| `PE.calculateSizeOfHeaders` | **missing** |
+| `PE.calculateSizeOfHeaders` | implemented |
 | `PE.getSizeOfCode` | implemented |
 | `PE.getSizeOfUninitializedData` | implemented |
 | `PE.isSignedFile` | implemented |
@@ -320,29 +320,29 @@ Coverage: 5/13 implemented (38%), 3 stub, 5 missing
 | `PE.getManifest` | implemented |
 | `PE.getGeneralOptions` | implemented |
 
-Coverage: 42/76 implemented (55%), 23 stub, 11 missing
+Coverage: 58/76 implemented (76%), 10 stub, 8 missing
 
 ## Util (5 methods)
 
 | Method | Status |
 |--------|--------|
-| `Util.shlu64` | **missing** |
-| `Util.shru64` | **missing** |
+| `Util.shlu64` | implemented |
+| `Util.shru64` | implemented |
 | `Util.shl64` | **missing** |
 | `Util.shr64` | **missing** |
 | `Util.secondsToTimeStr` | **missing** |
 
-Coverage: 0/5 implemented (0%), 0 stub, 5 missing
+Coverage: 2/5 implemented (40%), 0 stub, 3 missing
 
 ## Summary
 
 | Metric | Count |
 |--------|-------|
 | Total methods (from help docs) | 270 |
-| Implemented | 127 |
-| Stub | 29 |
-| Missing | 114 |
-| Coverage | 47.0% |
+| Implemented | 154 |
+| Stub | 12 |
+| Missing | 104 |
+| Coverage | 57.0% |
 
 ## P0 Gaps (stub + missing)
 
@@ -369,7 +369,6 @@ Coverage: 0/5 implemented (0%), 0 stub, 5 missing
 - `Binary.find_unicodeString` — missing
 - `Binary.upperCase` — missing
 - `Binary.lowerCase` — missing
-- `Binary.crc32` — missing
 - `Binary.adler32` — missing
 - `Binary.isUTF8Text` — missing
 - `Binary.isUnicodeText` — missing
@@ -427,7 +426,6 @@ Coverage: 0/5 implemented (0%), 0 stub, 5 missing
 - `ELF.getElfHeader_version` — missing
 - `ELF.getElfHeader_flags` — missing
 - `ELF.getElfHeader_ehsize` — missing
-- `ELF.isLibraryPresent` — stub
 - `ELF.getRunPath` — missing
 
 ### Global
@@ -438,15 +436,12 @@ Coverage: 0/5 implemented (0%), 0 stub, 5 missing
 ### ISO9660
 
 - `ISO9660.isValid` — missing
-- `ISO9660.getFileFormatName` — missing
-- `ISO9660.getFileFormatVersion` — missing
-- `ISO9660.getFileFormatOptions` — missing
+- `ISO9660.getFileFormatVersion` — stub
+- `ISO9660.getFileFormatOptions` — stub
 - `ISO9660.getSystemIdentifier` — missing
 - `ISO9660.getVolumeIdentifier` — missing
 - `ISO9660.getVolumeSetIdentifier` — missing
 - `ISO9660.getPublisherIdentifier` — missing
-- `ISO9660.getDataPreparerIdentifier` — stub
-- `ISO9660.getApplicationIdentifier` — stub
 - `ISO9660.getCopyrightFileIdentifier` — missing
 - `ISO9660.getAbstractFileIdentifier` — missing
 - `ISO9660.getBibliographicFileIdentifier` — missing
@@ -459,10 +454,6 @@ Coverage: 0/5 implemented (0%), 0 stub, 5 missing
 
 ### MSDOS
 
-- `MSDOS.isLE` — stub
-- `MSDOS.isLX` — stub
-- `MSDOS.isNE` — stub
-- `MSDOS.isPE` — missing
 - `MSDOS.getDosStubOffset` — missing
 - `MSDOS.getDosStubSize` — missing
 - `MSDOS.isDosStubPresent` — missing
@@ -473,24 +464,12 @@ Coverage: 0/5 implemented (0%), 0 stub, 5 missing
 - `PE.isPE32` — missing
 - `PE.isPEPlus` — missing
 - `PE.isDriver` — missing
-- `PE.isSectionNamePresentExp` — stub
-- `PE.getSectionNameCollision` — stub
 - `PE.isImportPresent` — missing
-- `PE.isLibraryPresent` — stub
-- `PE.isLibraryFunctionPresent` — stub
 - `PE.getImportHash32` — missing
 - `PE.getImportHash64` — missing
 - `PE.isImportPositionHashPresent` — stub
 - `PE.isExportPresent` — missing
-- `PE.isExportFunctionPresent` — stub
-- `PE.isExportFunctionPresentExp` — stub
 - `PE.isResourcesPresent` — missing
-- `PE.getResourceIdByNumber` — stub
-- `PE.getResourceNameByNumber` — stub
-- `PE.getResourceOffsetByNumber` — stub
-- `PE.getResourceSizeByNumber` — stub
-- `PE.getResourceTypeByNumber` — stub
-- `PE.getResourceNameOffset` — stub
 - `PE.isNetObjectPresent` — stub
 - `PE.isNetUStringPresent` — stub
 - `PE.findSignatureInBlob_NET` — stub
@@ -500,15 +479,9 @@ Coverage: 0/5 implemented (0%), 0 stub, 5 missing
 - `PE.isNetTypePresent` — stub
 - `PE.isNetMethodPresent` — stub
 - `PE.isNetFieldPresent` — stub
-- `PE.getFileVersionMS` — missing
-- `PE.getCompilerVersion` — stub
-- `PE.getImageFileHeader` — missing
-- `PE.calculateSizeOfHeaders` — missing
 
 ### Util
 
-- `Util.shlu64` — missing
-- `Util.shru64` — missing
 - `Util.shl64` — missing
 - `Util.shr64` — missing
 - `Util.secondsToTimeStr` — missing

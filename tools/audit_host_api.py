@@ -124,6 +124,15 @@ def parse_bridge_impl(bridge_path: Path) -> dict[str, set[str]]:
     for method in set_matches:
         result["Binary"].add(method)  # Most are on Binary/binary
 
+    # Pattern 3: Inline JS object methods (e.g., var Util = { method: function() {...} })
+    # Detect methods defined inside ctx.eval() JS blocks.
+    inline_pattern = r'(\w+)\s*:\s*function\s*\('
+    inline_matches = re.findall(inline_pattern, text)
+    for method in inline_matches:
+        # These are usually on Util or other global objects.
+        # We can't easily determine the class, so add to a general set.
+        result["_inline"].add(method)
+
     # Pattern 3: methods registered via batch JSON or Rust host API.
     if "pe_batch" in text or "__peBatch" in text:
         result["PE"].update(["isNet", "isNET", "getManifest", "isSignedFile",
@@ -176,18 +185,47 @@ def classify_implementation(bridge_path: Path, cls: str, method: str) -> str:
 
     for check_cls in classes_to_check:
         for variant in variants:
-            # Check for direct JS assignment.
-            pattern = rf'{check_cls}\.{variant}\s*=\s*function\s*\([^)]*\)\s*\{{[^}}]*\}}'
-            match = re.search(pattern, text, re.DOTALL)
+            # Check for direct JS assignment with proper brace matching.
+            # The old regex [^}}]* couldn't match nested braces.
+            assign_pattern = rf'{check_cls}\.{variant}\s*=\s*function\s*\([^)]*\)\s*\{{'
+            match = re.search(assign_pattern, text)
             if match:
-                body = match.group(0)
-                # Check if body only returns constants.
-                if re.search(r'return\s+(false|true|0|-1|""|\'\'|null|undefined)\s*;', body):
-                    returns = re.findall(r'return\s+[^;]+;', body)
-                    if returns and all(
-                        re.match(r'return\s+(false|true|0|-1|""|\'\'|null|undefined)\s*;', r)
+                # Find the full function body by counting braces.
+                brace_start = match.end() - 1  # Position of opening {
+                depth = 0
+                end = brace_start
+                for i in range(brace_start, len(text)):
+                    if text[i] == '{':
+                        depth += 1
+                    elif text[i] == '}':
+                        depth -= 1
+                        if depth == 0:
+                            end = i
+                            break
+                body = text[brace_start:end + 1]
+                # Check if body only returns constants (stub detection).
+                # A stub has ALL return statements returning a constant AND
+                # no real computation (no loops, conditionals, host API calls).
+                returns = re.findall(r'return\s+([^;]+);', body)
+                if returns:
+                    constant_pattern = r'^(false|true|0|-1|""|\'\'|null|undefined)\s*$'
+                    all_constants = all(
+                        re.match(constant_pattern, r.strip())
                         for r in returns
-                    ):
+                    )
+                    # Even if all returns are constants, check for real logic:
+                    # loops, conditionals, or function calls that indicate
+                    # the function does real work (e.g., searching a list
+                    # and returning true/false based on match).
+                    has_real_logic = bool(
+                        re.search(r'\b(for|while)\s*\(', body)
+                        or re.search(r'\bif\s*\(.*\)\s*\{', body)
+                        or re.search(r'\b_[a-zA-Z]', body)  # internal function calls
+                        or re.search(r'\bBinary\.\w+\s*\(', body)
+                        or re.search(r'\bPE\.\w+\s*\(', body)
+                        or re.search(r'\bELF\.\w+\s*\(', body)
+                    )
+                    if all_constants and not has_real_logic:
                         return "stub"
                 return "implemented"
 
@@ -199,6 +237,11 @@ def classify_implementation(bridge_path: Path, cls: str, method: str) -> str:
             # Check for Rust-side registration via .set("methodName", ...)
             set_pattern = rf'\.set\("{variant}"\s*,'
             if re.search(set_pattern, text):
+                return "implemented"
+
+            # Check for inline JS object methods (e.g., var Util = { method: function() {...} }).
+            inline_pattern = rf'{variant}\s*:\s*function\s*\('
+            if re.search(inline_pattern, text):
                 return "implemented"
 
     # Check for methods provided via batch JSON or Rust host API.
@@ -218,9 +261,31 @@ def classify_implementation(bridge_path: Path, cls: str, method: str) -> str:
         "getElfHeader_machine", "getElfHeader_entry",
         "getNumberOfPrograms", "getProgramFileOffset", "getProgramFileSize",
         "isStringInTablePresent", "is64",
+        # Phase 15.6 additions
+        "getSectionNumber", "getSectionNumberExp", "getSizeOfCode",
+        "getSizeOfUninitializedData", "read_UUID", "read_UUID_bytes",
+        "findWord", "findDword",
     }
     if method in batch_methods:
         return "implemented"
+
+    # Check for methods implemented in host.rs (Rust native).
+    host_rs_path = bridge_path.parent.parent.parent.parent / "crates" / "diec-engine" / "src" / "host.rs"
+    if host_rs_path.exists():
+        host_text = host_rs_path.read_text(encoding="utf-8", errors="replace")
+        for variant in variants:
+            # Check for Rust fn declarations (snake_case).
+            rust_snake = re.sub(r'([A-Z])', r'_\1', variant).lower().lstrip('_')
+            if re.search(rf'fn {rust_snake}\b', host_text):
+                return "implemented"
+            if re.search(rf'fn {variant.lower()}\b', host_text):
+                return "implemented"
+
+    # Check for inline JS object methods (Util.shlu64 etc.).
+    for variant in variants:
+        inline_pattern = rf'{variant}\s*:\s*function\s*\('
+        if re.search(inline_pattern, text):
+            return "implemented"
 
     # Check for methods provided via __proto__ inheritance from Binary.
     # These are methods that exist on Binary and are inherited by child classes.
