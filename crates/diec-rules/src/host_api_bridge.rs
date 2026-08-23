@@ -1286,6 +1286,67 @@ impl HostApiBridge {
                     detail: format!("calculateCRC32 set: {e}"),
                 })?;
 
+            // read_UUID(offset, isBigEndian) -> "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+            let h = host.clone();
+            let read_uuid_fn = rquickjs::Function::new(ctx.clone(), move |offset: i32, is_big_endian: bool| {
+                let off = offset as u64;
+                // UUID is 16 bytes: 4 + 2 + 2 + 2 + 6
+                let mut buf = [0u8; 16];
+                for (i, slot) in buf.iter_mut().enumerate() {
+                    match h.read_u8(off + i as u64) {
+                        Ok(b) => *slot = b,
+                        Err(_) => return String::new(),
+                    }
+                }
+                if is_big_endian {
+                    format!(
+                        "{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+                        u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]),
+                        u16::from_be_bytes([buf[4], buf[5]]),
+                        u16::from_be_bytes([buf[6], buf[7]]),
+                        buf[8], buf[9],
+                        buf[10], buf[11], buf[12], buf[13], buf[14], buf[15]
+                    )
+                } else {
+                    format!(
+                        "{:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+                        u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]),
+                        u16::from_le_bytes([buf[4], buf[5]]),
+                        u16::from_le_bytes([buf[6], buf[7]]),
+                        buf[8], buf[9],
+                        buf[10], buf[11], buf[12], buf[13], buf[14], buf[15]
+                    )
+                }
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("read_UUID: {e}"),
+            })?;
+            binary.set("read_UUID", read_uuid_fn).map_err(|e| RuleError::Backend {
+                detail: format!("read_UUID set: {e}"),
+            })?;
+
+            // read_UUID_bytes(offset) -> hex string of 16 bytes
+            let h = host.clone();
+            let read_uuid_bytes_fn = rquickjs::Function::new(ctx.clone(), move |offset: i32| {
+                let off = offset as u64;
+                let mut result = String::with_capacity(32);
+                for i in 0..16 {
+                    match h.read_u8(off + i as u64) {
+                        Ok(b) => result.push_str(&format!("{:02X}", b)),
+                        Err(_) => return String::new(),
+                    }
+                }
+                result
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("read_UUID_bytes: {e}"),
+            })?;
+            binary
+                .set("read_UUID_bytes", read_uuid_bytes_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("read_UUID_bytes set: {e}"),
+                })?;
+
             // --- File name/path ---
 
             let h = host.clone();
@@ -1790,6 +1851,74 @@ impl HostApiBridge {
                 detail: format!("findByte set: {e}"),
             })?;
 
+            // findWord(offset, size, value) -> offset or -1 (search uint16 LE)
+            let h = host.clone();
+            let find_word_fn =
+                rquickjs::Function::new(ctx.clone(), move |offset: i32, size: i32, value: i32| {
+                    let file_size = h.file_size() as usize;
+                    let start = offset as usize;
+                    if start + 2 > file_size {
+                        return -1i32;
+                    }
+                    let end = if size > 0 {
+                        (start.saturating_add(size as usize)).min(file_size)
+                    } else {
+                        file_size
+                    };
+                    let target = value as u16;
+                    let mut i = start;
+                    while i + 2 <= end {
+                        let lo = h.read_u8(i as u64).unwrap_or(0) as u16;
+                        let hi = h.read_u8((i + 1) as u64).unwrap_or(0) as u16;
+                        if (lo | (hi << 8)) == target {
+                            return i as i32;
+                        }
+                        i += 1;
+                    }
+                    -1
+                })
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("findWord: {e}"),
+                })?;
+            binary.set("findWord", find_word_fn).map_err(|e| RuleError::Backend {
+                detail: format!("findWord set: {e}"),
+            })?;
+
+            // findDword(offset, size, value) -> offset or -1 (search uint32 LE)
+            let h = host.clone();
+            let find_dword_fn =
+                rquickjs::Function::new(ctx.clone(), move |offset: i32, size: i32, value: i32| {
+                    let file_size = h.file_size() as usize;
+                    let start = offset as usize;
+                    if start + 4 > file_size {
+                        return -1i32;
+                    }
+                    let end = if size > 0 {
+                        (start.saturating_add(size as usize)).min(file_size)
+                    } else {
+                        file_size
+                    };
+                    let target = value as u32;
+                    let mut i = start;
+                    while i + 4 <= end {
+                        let b0 = h.read_u8(i as u64).unwrap_or(0) as u32;
+                        let b1 = h.read_u8((i + 1) as u64).unwrap_or(0) as u32;
+                        let b2 = h.read_u8((i + 2) as u64).unwrap_or(0) as u32;
+                        let b3 = h.read_u8((i + 3) as u64).unwrap_or(0) as u32;
+                        if (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) == target {
+                            return i as i32;
+                        }
+                        i += 1;
+                    }
+                    -1
+                })
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("findDword: {e}"),
+                })?;
+            binary.set("findDword", find_dword_fn).map_err(|e| RuleError::Backend {
+                detail: format!("findDword set: {e}"),
+            })?;
+
             // bytesCountToString(n) -> human-readable size string
             let bcs_fn = rquickjs::Function::new(ctx.clone(), |n: f64| {
                 if n < 1024.0 {
@@ -2280,6 +2409,28 @@ impl HostApiBridge {
                     PE.isSectionNamePresent = function(name) {
                         if (!_peIsPE()) return false;
                         return _peSectionNumber(name) >= 0;
+                    };
+                    PE.getSectionNumber = function(name) {
+                        if (!_peIsPE()) return -1;
+                        return _peSectionNumber(name);
+                    };
+                    PE.getSectionNumberExp = function(name) {
+                        if (!_peIsPE()) return -1;
+                        // Exp variant: case-insensitive match.
+                        var n = _peNumberOfSections();
+                        var lower = name.toLowerCase();
+                        for (var i = 0; i < n; i++) {
+                            if (_peSectionName(i).toLowerCase() === lower) return i;
+                        }
+                        return -1;
+                    };
+                    PE.getSizeOfCode = function() {
+                        if (!_peIsPE()) return 0;
+                        return _B.read_uint32_le(_peOptHdrOff() + 4);
+                    };
+                    PE.getSizeOfUninitializedData = function() {
+                        if (!_peIsPE()) return 0;
+                        return _B.read_uint32_le(_peOptHdrOff() + 8);
                     };
                     // PE.nLastSection and PE.section are populated by the
                     // upstream db/PE/_init script (executed during init),
@@ -4187,9 +4338,31 @@ impl HostApiBridge {
                     // ZIP-specific stubs.
                     ZIP.isArchiveRecordPresent = function(name) { return false; };
 
-                    // ISO9660-specific stubs.
-                    ISO9660.getDataPreparerIdentifier = function() { return ""; };
-                    ISO9660.getApplicationIdentifier = function() { return ""; };
+                    // ISO9660-specific: parse Primary Volume Descriptor fields.
+                    // PVD is at offset 0x8000 (sector 16). Fields are ASCII,
+                    // space-padded to fixed width.
+                    ISO9660.getDataPreparerIdentifier = function() {
+                        var pvd = 0x8000;
+                        if (Binary.getSize() < pvd + 574 + 128) return "";
+                        var s = "";
+                        for (var i = 0; i < 128; i++) {
+                            var c = Binary.read_uint8(pvd + 446 + i);
+                            if (c === 0) break;
+                            s += String.fromCharCode(c);
+                        }
+                        return s.trim();
+                    };
+                    ISO9660.getApplicationIdentifier = function() {
+                        var pvd = 0x8000;
+                        if (Binary.getSize() < pvd + 574 + 128) return "";
+                        var s = "";
+                        for (var i = 0; i < 128; i++) {
+                            var c = Binary.read_uint8(pvd + 574 + i);
+                            if (c === 0) break;
+                            s += String.fromCharCode(c);
+                        }
+                        return s.trim();
+                    };
 
                     // PDF-specific: parse version from "%PDF-X.Y" header.
                     PDF.getFileFormatVersion = function() {

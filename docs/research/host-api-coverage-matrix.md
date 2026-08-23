@@ -27,8 +27,8 @@ Coverage: 0/2 implemented (0%), 0 stub, 2 missing
 | `Binary.findSignature` | implemented |
 | `Binary.findString` | implemented |
 | `Binary.findByte` | implemented |
-| `Binary.findWord` | **missing** |
-| `Binary.findDword` | **missing** |
+| `Binary.findWord` | implemented |
+| `Binary.findDword` | implemented |
 | `Binary.isSignaturePresent` | implemented |
 | `Binary.readByte` | implemented |
 | `Binary.readSByte` | implemented |
@@ -57,8 +57,8 @@ Coverage: 0/2 implemented (0%), 0 stub, 2 missing
 | `Binary.read_bcd_uint16` | **missing** |
 | `Binary.read_bcd_uint32` | **missing** |
 | `Binary.read_bcd_uint64` | **missing** |
-| `Binary.read_UUID_bytes` | **missing** |
-| `Binary.read_UUID` | **missing** |
+| `Binary.read_UUID_bytes` | implemented |
+| `Binary.read_UUID` | implemented |
 | `Binary.getString` | implemented |
 | `Binary.read_ansiString` | implemented |
 | `Binary.read_unicodeString` | implemented |
@@ -150,7 +150,7 @@ Coverage: 0/2 implemented (0%), 0 stub, 2 missing
 | `Binary.getHeaderString` | implemented |
 | `Binary.isSignatureInSectionPresent` | **missing** |
 
-Coverage: 56/128 implemented (44%), 0 stub, 72 missing
+Coverage: 60/128 implemented (47%), 0 stub, 68 missing
 
 ## ELF (25 methods)
 
@@ -259,8 +259,8 @@ Coverage: 5/13 implemented (38%), 3 stub, 5 missing
 | `PE.getSectionCharacteristics` | implemented |
 | `PE.isSectionNamePresent` | implemented |
 | `PE.isSectionNamePresentExp` | **stub** |
-| `PE.getSectionNumber` | **missing** |
-| `PE.getSectionNumberExp` | **missing** |
+| `PE.getSectionNumber` | implemented |
+| `PE.getSectionNumberExp` | implemented |
 | `PE.getSectionNameCollision` | **stub** |
 | `PE.getImportSection` | implemented |
 | `PE.getExportSection` | implemented |
@@ -313,14 +313,14 @@ Coverage: 5/13 implemented (38%), 3 stub, 5 missing
 | `PE.getImageFileHeader` | **missing** |
 | `PE.getImageOptionalHeader` | implemented |
 | `PE.calculateSizeOfHeaders` | **missing** |
-| `PE.getSizeOfCode` | **missing** |
-| `PE.getSizeOfUninitializedData` | **missing** |
+| `PE.getSizeOfCode` | implemented |
+| `PE.getSizeOfUninitializedData` | implemented |
 | `PE.isSignedFile` | implemented |
 | `PE.isTLSPresent` | implemented |
 | `PE.getManifest` | implemented |
 | `PE.getGeneralOptions` | implemented |
 
-Coverage: 38/76 implemented (50%), 23 stub, 15 missing
+Coverage: 42/76 implemented (55%), 23 stub, 11 missing
 
 ## Util (5 methods)
 
@@ -339,10 +339,10 @@ Coverage: 0/5 implemented (0%), 0 stub, 5 missing
 | Metric | Count |
 |--------|-------|
 | Total methods (from help docs) | 270 |
-| Implemented | 119 |
+| Implemented | 127 |
 | Stub | 29 |
-| Missing | 122 |
-| Coverage | 44.1% |
+| Missing | 114 |
+| Coverage | 47.0% |
 
 ## P0 Gaps (stub + missing)
 
@@ -354,8 +354,6 @@ Coverage: 0/5 implemented (0%), 0 stub, 5 missing
 ### Binary
 
 - `Binary.compareEP` — missing
-- `Binary.findWord` — missing
-- `Binary.findDword` — missing
 - `Binary.read_int24` — missing
 - `Binary.read_float` — missing
 - `Binary.read_double` — missing
@@ -366,8 +364,6 @@ Coverage: 0/5 implemented (0%), 0 stub, 5 missing
 - `Binary.read_bcd_uint16` — missing
 - `Binary.read_bcd_uint32` — missing
 - `Binary.read_bcd_uint64` — missing
-- `Binary.read_UUID_bytes` — missing
-- `Binary.read_UUID` — missing
 - `Binary.read_utf8String` — missing
 - `Binary.find_ansiString` — missing
 - `Binary.find_unicodeString` — missing
@@ -478,8 +474,6 @@ Coverage: 0/5 implemented (0%), 0 stub, 5 missing
 - `PE.isPEPlus` — missing
 - `PE.isDriver` — missing
 - `PE.isSectionNamePresentExp` — stub
-- `PE.getSectionNumber` — missing
-- `PE.getSectionNumberExp` — missing
 - `PE.getSectionNameCollision` — stub
 - `PE.isImportPresent` — missing
 - `PE.isLibraryPresent` — stub
@@ -510,8 +504,6 @@ Coverage: 0/5 implemented (0%), 0 stub, 5 missing
 - `PE.getCompilerVersion` — stub
 - `PE.getImageFileHeader` — missing
 - `PE.calculateSizeOfHeaders` — missing
-- `PE.getSizeOfCode` — missing
-- `PE.getSizeOfUninitializedData` — missing
 
 ### Util
 
