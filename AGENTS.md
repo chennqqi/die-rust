@@ -16,8 +16,13 @@
 
 ## 对齐方法论经验教训
 
-以下 6 条必须在此后所有对齐工作中遵守。完整分析与根因缺陷见
-[`docs/research/phase14-methodology-retrospective.md`](docs/research/phase14-methodology-retrospective.md)。
+以下 13 条必须在此后所有对齐工作中遵守。Phase 14 的 6 条经验教训见
+[`docs/research/phase14-methodology-retrospective.md`](docs/research/phase14-methodology-retrospective.md)；
+Phase 16 的 7 条根因和改进建议见
+[`doc/alignment-retrospective.md`](doc/alignment-retrospective.md)
+（**开始任何 host API 或签名相关对齐工作前必须先阅读此文件**）。
+
+### Phase 14 经验教训（6 条）
 
 1. **差分测试必须用独立 oracle，不能自证**：期望值必须来自上游 DIE-engine
    的实际输出（或其快照），不能由开发者手工编写。手工期望值会把"bug 导致
@@ -35,6 +40,35 @@
    与 CLI 行为一致。
 6. **设计文档必须与实现对齐**：`docs/design/*.md` 中未实现的设计项必须
    标注"未实现"或"已偏离"，不能给"已覆盖"的错觉。
+
+### Phase 16 根因教训（7 条）
+
+7. **覆盖率 ≠ 语义正确性**：方法存在且可调用不等于返回值语义正确。
+   每个 host API 方法必须验证参数签名、返回值类型、返回值语义和边界行为
+   与上游 C++ 源码一致，不能只验证"方法名存在"。典型反例：
+   `getAddressOfEntryPoint` 返回 RVA 而非虚拟地址、`cleanString` 是 no-op、
+   `getResourceNameOffset` 找不到时返回 0 而非 -1。
+8. **签名语法不能从外观推断**：DIE 签名有 7 种特殊标记（`$`/`#`/`%`/`!`/
+   `_`/`+`/`*`），每种语义必须从上游 `getSignatureRecords` 源码确认。
+   `$` 是相对偏移跳转（不是通配符），`$$$$$$$$` 读取 4 字节有符号整数并
+   跳转到目标 RVA 继续匹配。签名解析器应有独立测试套件覆盖每种标记。
+9. **上游隐式行为只能通过源码考古发现**：Unknown 占位、`cleanString`
+   过滤规则、`getAddressOfEntryPoint` 的 ImageBase+RVA 计算、`_runtime_helpers`
+   中的 `String.prototype.append` 等行为不在 help 文档中。实现任何 host API
+   方法前必须阅读对应的 C++ 源码实现。
+10. **合成样本无法替代真实差分**：合成样本（`minimal.exe` 等）不触发
+    边界条件（跨段跳转、控制字符嵌入、多层嵌套资源、ImageBase+EP=0）。
+    每轮修复后必须用真实语料库运行差分测试。
+11. **过度检测、漏检、版本差异需要三种发现策略**：过度检测需要负向差分
+    （上游不检、diec-rust 检），漏检需要正向差分（上游检、diec-rust 不检），
+    版本差异需要值差分（比较版本字符串）。差分框架必须同时支持三种模式。
+12. **上游规则本身有 bug**：`archive_Resources.6.sg` 的循环条件
+    `!bDetected` 在 `bDetected=true` 时立即退出，是规则 bug。上游的
+    `getAddressOfEntryPoint` 返回非 0 值掩盖了此 bug。diec-rust 正确实现
+    后反而暴露。已知上游 bug 必须记录，避免被误认为 diec-rust 缺陷。
+13. **对齐是 O(n) 问题，验证是 O(n×m×k) 问题**：155 个方法 × 1186 个规则 ×
+    数百个样本 = 数万次交互。每轮差分只发现当前样本集触发的错误。持续差分
+    + 源码考古 + 语义对照矩阵是唯一收敛策略，不追求"100% 一致"。
 
 ## 兼容基线
 
