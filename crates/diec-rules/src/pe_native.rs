@@ -521,6 +521,177 @@ pub fn get_net_version(data: &[u8]) -> String {
     }
 }
 
+/// Extract .NET user strings (UTF-16LE) and ANSI strings from metadata heaps.
+///
+/// Returns (unicode_strings, ansi_strings). Empty vectors if not .NET or
+/// metadata cannot be parsed.
+pub fn get_net_strings(data: &[u8]) -> (Vec<String>, Vec<String>) {
+    // Get CLR header RVA from data directory entry 14.
+    let clr_rva = if let Some(file) = pe64_from_bytes(data) {
+        match file.data_directory().get(14) {
+            Some(d) if d.Size != 0 => d.VirtualAddress as u64,
+            _ => return (Vec::new(), Vec::new()),
+        }
+    } else if let Some(file) = pe32_from_bytes(data) {
+        match file.data_directory().get(14) {
+            Some(d) if d.Size != 0 => d.VirtualAddress as u64,
+            _ => return (Vec::new(), Vec::new()),
+        }
+    } else {
+        return (Vec::new(), Vec::new());
+    };
+
+    let clr_offset = match rva_to_file_offset(data, clr_rva) {
+        o if o >= 0 => o as usize,
+        _ => return (Vec::new(), Vec::new()),
+    };
+
+    // COR20_HEADER: MetaData at offset 8 (RVA) + 12 (Size)
+    let md_rva = read_u32_le(data, clr_offset + 8) as u64;
+    let md_size = read_u32_le(data, clr_offset + 12) as usize;
+    if md_rva == 0 || md_size == 0 {
+        return (Vec::new(), Vec::new());
+    }
+    let md_offset = match rva_to_file_offset(data, md_rva) {
+        o if o >= 0 => o as usize,
+        _ => return (Vec::new(), Vec::new()),
+    };
+    let md_end = (md_offset + md_size).min(data.len());
+
+    // Metadata root:
+    //   0: Signature (4, "BSJB")
+    //   4: MajorVersion (2)
+    //   6: MinorVersion (2)
+    //   8: Reserved (4)
+    //  12: VersionLength (4)
+    //  16: Version string (padded to 4-byte boundary)
+    //  16+ver_padded: Flags (2)
+    //  18+ver_padded: Streams (2)
+    //  20+ver_padded: Stream headers
+    if data.len() < md_offset + 20 {
+        return (Vec::new(), Vec::new());
+    }
+    let sig = read_u32_le(data, md_offset);
+    if sig != 0x424A5342 {
+        return (Vec::new(), Vec::new());
+    }
+    let ver_len = read_u32_le(data, md_offset + 12) as usize;
+    // Version string is padded to 4-byte boundary.
+    let ver_padded = (ver_len + 3) & !3;
+    let streams_off = md_offset + 16 + ver_padded + 4; // +4 for Flags(2)+Streams(2)
+    if streams_off + 4 > md_end {
+        return (Vec::new(), Vec::new());
+    }
+    let n_streams = read_u16_le(data, streams_off - 2) as usize;
+
+    // Parse stream headers: each is Offset(4) + Size(4) + Name(null-terminated, padded to 4)
+    let mut us_offset = 0usize;
+    let mut us_size = 0usize;
+    let mut strings_offset = 0usize;
+    let mut strings_size = 0usize;
+    let mut pos = streams_off;
+    for _ in 0..n_streams {
+        if pos + 8 > md_end {
+            break;
+        }
+        let s_off = read_u32_le(data, pos) as usize;
+        let s_size = read_u32_le(data, pos + 4) as usize;
+        pos += 8;
+        // Read null-terminated name, padded to 4-byte boundary.
+        let name_start = pos;
+        while pos < md_end && data[pos] != 0 {
+            pos += 1;
+        }
+        let name = String::from_utf8_lossy(&data[name_start..pos]);
+        // Skip null terminator + padding to 4-byte boundary.
+        pos += 1; // null terminator
+        pos = (pos + 3) & !3; // pad to 4
+        match name.as_ref() {
+            "#US" => {
+                us_offset = md_offset + s_off;
+                us_size = s_size;
+            }
+            "#Strings" => {
+                strings_offset = md_offset + s_off;
+                strings_size = s_size;
+            }
+            _ => {}
+        }
+    }
+
+    let mut unicode_strings = Vec::new();
+    let mut ansi_strings = Vec::new();
+
+    // Parse #US heap: starts at offset 0 with a null byte.
+    // Each entry: CompressedLength (1 or 2 bytes) + UTF-16LE string bytes.
+    // Simple: length byte, if 0x80 bit set then 2-byte length (big endian).
+    if us_size > 1 && us_offset + us_size <= data.len() {
+        let us_end = us_offset + us_size;
+        let mut i = us_offset + 1; // skip initial null byte
+        while i < us_end {
+            let len_byte = data[i];
+            let (str_len, hdr_size) = if len_byte & 0x80 != 0 {
+                // 2-byte compressed length
+                if i + 2 > us_end {
+                    break;
+                }
+                let len = ((len_byte & 0x7F) as usize) << 8 | data[i + 1] as usize;
+                (len, 2)
+            } else {
+                (len_byte as usize, 1)
+            };
+            i += hdr_size;
+            if str_len == 0 || i + str_len > us_end {
+                i += str_len;
+                continue;
+            }
+            // UTF-16LE string (str_len bytes, includes trailing byte sometimes)
+            let str_bytes = &data[i..i + str_len];
+            let utf16_len = str_len / 2;
+            let mut u16s = Vec::with_capacity(utf16_len);
+            for j in 0..utf16_len {
+                if j * 2 + 1 < str_len {
+                    u16s.push(u16::from_le_bytes([str_bytes[j * 2], str_bytes[j * 2 + 1]]));
+                }
+            }
+            let s = String::from_utf16_lossy(&u16s);
+            if !s.is_empty() && s.chars().all(|c| !c.is_control() || c == ' ') {
+                unicode_strings.push(s);
+            }
+            i += str_len;
+        }
+    }
+
+    // Parse #Strings heap: null-terminated UTF-8 strings, starting at offset 1.
+    if strings_size > 1 && strings_offset + strings_size <= data.len() {
+        let s_end = strings_offset + strings_size;
+        let mut i = strings_offset + 1; // skip initial null byte
+        while i < s_end {
+            let start = i;
+            while i < s_end && data[i] != 0 {
+                i += 1;
+            }
+            if i > start {
+                let s = String::from_utf8_lossy(&data[start..i]).to_string();
+                if !s.is_empty() && s.chars().all(|c| c.is_ascii_graphic() || c == ' ') {
+                    ansi_strings.push(s);
+                }
+            }
+            i += 1; // skip null
+        }
+    }
+
+    (unicode_strings, ansi_strings)
+}
+
+/// Read a little-endian u16 from data at the given offset.
+fn read_u16_le(data: &[u8], offset: usize) -> u16 {
+    if data.len() < offset + 2 {
+        return 0;
+    }
+    u16::from_le_bytes([data[offset], data[offset + 1]])
+}
+
 /// Read a little-endian u32 from data at the given offset.
 /// Returns 0 if out of bounds.
 fn read_u32_le(data: &[u8], offset: usize) -> u32 {
@@ -559,24 +730,33 @@ pub struct PeBatchInfo {
     pub net_version: String,
     /// Resource entries: (name_or_id, type_id, offset, size).
     pub resource_entries: Vec<(String, u32, u32, u32)>,
+    /// .NET user strings (UTF-16) from #US heap, empty if not .NET.
+    pub net_unicode_strings: Vec<String>,
+    /// .NET ANSI strings from #Strings heap, empty if not .NET.
+    pub net_ansi_strings: Vec<String>,
 }
 
 /// Parse all PE information in a single pass to avoid repeated PeFile construction.
 ///
 /// Returns None if not a valid PE.
 pub fn parse_batch(data: &[u8]) -> Option<PeBatchInfo> {
-    // Parse .NET version once (used for both PE32 and PE64 paths).
+    // Parse .NET version and strings once (used for both PE32 and PE64 paths).
     let net_version = get_net_version(data);
+    let (net_unicode_strings, net_ansi_strings) = get_net_strings(data);
     // Try PE64 first.
     if let Some(file) = pe64_from_bytes(data) {
         let mut info = parse_batch_pe64(file);
         info.net_version = net_version;
+        info.net_unicode_strings = net_unicode_strings;
+        info.net_ansi_strings = net_ansi_strings;
         return Some(info);
     }
     // Try PE32.
     if let Some(file) = pe32_from_bytes(data) {
         let mut info = parse_batch_pe32(file);
         info.net_version = net_version;
+        info.net_unicode_strings = net_unicode_strings;
+        info.net_ansi_strings = net_ansi_strings;
         return Some(info);
     }
     None
@@ -641,6 +821,8 @@ fn parse_batch_pe64(file: pelite::pe64::PeFile<'_>) -> PeBatchInfo {
         number_of_resources,
         net_version: String::new(),
         resource_entries,
+        net_unicode_strings: Vec::new(),
+        net_ansi_strings: Vec::new(),
     }
 }
 
@@ -703,6 +885,8 @@ fn parse_batch_pe32(file: pelite::pe32::PeFile<'_>) -> PeBatchInfo {
         number_of_resources,
         net_version: String::new(),
         resource_entries,
+        net_unicode_strings: Vec::new(),
+        net_ansi_strings: Vec::new(),
     }
 }
 

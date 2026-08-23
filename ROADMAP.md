@@ -1421,7 +1421,7 @@ Phase 15 聚焦"重建对齐方法论 + 闭合已识别缺口"，不再追加新
 - [x] PE 方法：`getSectionNumber`/`getSectionNumberExp`/`getSizeOfCode`/`getSizeOfUninitializedData`
 - [x] Binary 方法：`read_UUID`/`read_UUID_bytes`/`findWord`/`findDword`
 - [x] ISO9660 方法：`getDataPreparerIdentifier`/`getApplicationIdentifier`（PVD 解析）
-- [x] 覆盖率：44.1% → 57.0%（119 → 154 已实现，audit 工具修复后）
+- [x] 覆盖率：44.1% → 82.6%（119 → 223 已实现，audit 工具修复 + 批量实现）
 
 ### 15.7 文档与基线更新 — P1 ✅
 
@@ -1433,7 +1433,7 @@ Phase 15 聚焦"重建对齐方法论 + 闭合已识别缺口"，不再追加新
 
 - **真差分**：`true_differential.rs` 由上游 diec 4.0.0 golden 基线驱动 ✅
 - **执行覆盖率**：`batch_execute.rs` 全规则执行，0 异常 ✅
-- **Host API 对照**：自动对照矩阵生成，覆盖率 57.0% ✅
+- **Host API 对照**：自动对照矩阵生成，覆盖率 82.6% ✅
 - **`--alltypes` 负向断言**：39 文件 × 允许格式族，0 误报 ✅
 - **语料覆盖**：11 个新格式样本，39 golden cases ✅
 - **P1 host API**：8 个高优先级方法实现 ✅

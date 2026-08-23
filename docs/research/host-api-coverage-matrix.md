@@ -12,10 +12,10 @@ implementation. Methods are classified as:
 
 | Method | Status |
 |--------|--------|
-| `Archive.isArchiveRecordPresent` | **missing** |
-| `Archive.isArchiveRecordPresentExp` | **missing** |
+| `Archive.isArchiveRecordPresent` | **stub** |
+| `Archive.isArchiveRecordPresentExp` | **stub** |
 
-Coverage: 0/2 implemented (0%), 0 stub, 2 missing
+Coverage: 0/2 implemented (0%), 2 stub, 0 missing
 
 ## Binary (128 methods)
 
@@ -23,7 +23,7 @@ Coverage: 0/2 implemented (0%), 0 stub, 2 missing
 |--------|--------|
 | `Binary.getSize` | implemented |
 | `Binary.compare` | implemented |
-| `Binary.compareEP` | **missing** |
+| `Binary.compareEP` | implemented |
 | `Binary.findSignature` | implemented |
 | `Binary.findString` | implemented |
 | `Binary.findByte` | implemented |
@@ -43,114 +43,114 @@ Coverage: 0/2 implemented (0%), 0 stub, 2 missing
 | `Binary.read_uint16` | implemented |
 | `Binary.read_int16` | implemented |
 | `Binary.read_uint24` | implemented |
-| `Binary.read_int24` | **missing** |
+| `Binary.read_int24` | implemented |
 | `Binary.read_uint32` | implemented |
 | `Binary.read_int32` | implemented |
 | `Binary.read_uint64` | implemented |
 | `Binary.read_int64` | implemented |
-| `Binary.read_float` | **missing** |
-| `Binary.read_double` | **missing** |
-| `Binary.read_float16` | **missing** |
-| `Binary.read_float32` | **missing** |
-| `Binary.read_float64` | **missing** |
-| `Binary.read_bcd_uint8` | **missing** |
-| `Binary.read_bcd_uint16` | **missing** |
-| `Binary.read_bcd_uint32` | **missing** |
-| `Binary.read_bcd_uint64` | **missing** |
+| `Binary.read_float` | implemented |
+| `Binary.read_double` | implemented |
+| `Binary.read_float16` | implemented |
+| `Binary.read_float32` | implemented |
+| `Binary.read_float64` | implemented |
+| `Binary.read_bcd_uint8` | implemented |
+| `Binary.read_bcd_uint16` | implemented |
+| `Binary.read_bcd_uint32` | implemented |
+| `Binary.read_bcd_uint64` | implemented |
 | `Binary.read_UUID_bytes` | implemented |
 | `Binary.read_UUID` | implemented |
 | `Binary.getString` | implemented |
 | `Binary.read_ansiString` | implemented |
 | `Binary.read_unicodeString` | implemented |
-| `Binary.read_utf8String` | **missing** |
+| `Binary.read_utf8String` | implemented |
 | `Binary.read_ucsdString` | implemented |
 | `Binary.read_codePageString` | implemented |
-| `Binary.find_ansiString` | **missing** |
-| `Binary.find_unicodeString` | **missing** |
+| `Binary.find_ansiString` | implemented |
+| `Binary.find_unicodeString` | implemented |
 | `Binary.find_utf8String` | implemented |
-| `Binary.upperCase` | **missing** |
-| `Binary.lowerCase` | **missing** |
+| `Binary.upperCase` | implemented |
+| `Binary.lowerCase` | implemented |
 | `Binary.cleanString` | implemented |
 | `Binary.calculateCRC32` | implemented |
 | `Binary.crc16` | implemented |
 | `Binary.crc32` | implemented |
 | `Binary.calculateMD5` | implemented |
-| `Binary.adler32` | **missing** |
+| `Binary.adler32` | implemented |
 | `Binary.calculateEntropy` | implemented |
 | `Binary.isPlainText` | implemented |
-| `Binary.isUTF8Text` | **missing** |
-| `Binary.isUnicodeText` | **missing** |
+| `Binary.isUTF8Text` | implemented |
+| `Binary.isUnicodeText` | implemented |
 | `Binary.isText` | implemented |
-| `Binary.isJpeg` | **missing** |
-| `Binary.getJpegComment` | **missing** |
-| `Binary.getJpegDqtMD5` | **missing** |
-| `Binary.isJpegChunkPresent` | **missing** |
-| `Binary.isJpegExifPresent` | **missing** |
-| `Binary.getJpegExifCameraName` | **missing** |
-| `Binary.detectZLIB` | **missing** |
-| `Binary.detectGZIP` | **missing** |
-| `Binary.detectZIP` | **missing** |
-| `Binary.getCompressedDataSize` | **missing** |
-| `Binary.getFileDirectory` | **missing** |
+| `Binary.isJpeg` | implemented |
+| `Binary.getJpegComment` | **stub** |
+| `Binary.getJpegDqtMD5` | **stub** |
+| `Binary.isJpegChunkPresent` | **stub** |
+| `Binary.isJpegExifPresent` | implemented |
+| `Binary.getJpegExifCameraName` | **stub** |
+| `Binary.detectZLIB` | implemented |
+| `Binary.detectGZIP` | implemented |
+| `Binary.detectZIP` | implemented |
+| `Binary.getCompressedDataSize` | **stub** |
+| `Binary.getFileDirectory` | implemented |
 | `Binary.getFileBaseName` | implemented |
-| `Binary.getFileCompleteSuffix` | **missing** |
+| `Binary.getFileCompleteSuffix` | implemented |
 | `Binary.getFileSuffix` | implemented |
-| `Binary.RVAToOffset` | **missing** |
-| `Binary.VAToOffset` | **missing** |
-| `Binary.OffsetToVA` | **missing** |
-| `Binary.OffsetToRVA` | **missing** |
-| `Binary.getImageBase` | **missing** |
+| `Binary.RVAToOffset` | implemented |
+| `Binary.VAToOffset` | implemented |
+| `Binary.OffsetToVA` | implemented |
+| `Binary.OffsetToRVA` | implemented |
+| `Binary.getImageBase` | implemented |
 | `Binary.getEntryPointOffset` | implemented |
-| `Binary.getAddressOfEntryPoint` | **missing** |
+| `Binary.getAddressOfEntryPoint` | implemented |
 | `Binary.getOverlayOffset` | implemented |
 | `Binary.getOverlaySize` | implemented |
-| `Binary.isOverlayPresent` | **missing** |
-| `Binary.compareOverlay` | **missing** |
-| `Binary.swapBytes` | **missing** |
+| `Binary.isOverlayPresent` | implemented |
+| `Binary.compareOverlay` | **stub** |
+| `Binary.swapBytes` | implemented |
 | `Binary.bytesCountToString` | implemented |
-| `Binary.getSignature` | **missing** |
+| `Binary.getSignature` | implemented |
 | `Binary.is16` | implemented |
 | `Binary.is32` | implemented |
 | `Binary.is64` | implemented |
-| `Binary.isReleaseBuild` | **missing** |
-| `Binary.isDebugBuild` | **missing** |
-| `Binary.isSigned` | **missing** |
+| `Binary.isReleaseBuild` | **stub** |
+| `Binary.isDebugBuild` | **stub** |
+| `Binary.isSigned` | **stub** |
 | `Binary.isOverlay` | implemented |
 | `Binary.isResource` | implemented |
 | `Binary.isDebugData` | implemented |
-| `Binary.isFilePart` | **missing** |
-| `Binary.isChecksumCorrect` | **missing** |
-| `Binary.isEntryPointCorrect` | **missing** |
-| `Binary.isSectionAlignmentCorrect` | **missing** |
-| `Binary.isFileAlignmentCorrect` | **missing** |
-| `Binary.isHeaderCorrect` | **missing** |
-| `Binary.isRelocsTableCorrect` | **missing** |
-| `Binary.isImportTableCorrect` | **missing** |
-| `Binary.isExportTableCorrect` | **missing** |
-| `Binary.isResourcesTableCorrect` | **missing** |
-| `Binary.isSectionsTableCorrect` | **missing** |
+| `Binary.isFilePart` | **stub** |
+| `Binary.isChecksumCorrect` | **stub** |
+| `Binary.isEntryPointCorrect` | **stub** |
+| `Binary.isSectionAlignmentCorrect` | **stub** |
+| `Binary.isFileAlignmentCorrect` | **stub** |
+| `Binary.isHeaderCorrect` | **stub** |
+| `Binary.isRelocsTableCorrect` | **stub** |
+| `Binary.isImportTableCorrect` | **stub** |
+| `Binary.isExportTableCorrect` | **stub** |
+| `Binary.isResourcesTableCorrect` | **stub** |
+| `Binary.isSectionsTableCorrect` | **stub** |
 | `Binary.isDeepScan` | implemented |
 | `Binary.isHeuristicScan` | implemented |
 | `Binary.isRecursiveScan` | implemented |
 | `Binary.isAggressiveScan` | implemented |
 | `Binary.isVerbose` | implemented |
-| `Binary.isProfiling` | **missing** |
-| `Binary.startTiming` | **missing** |
-| `Binary.endTiming` | **missing** |
-| `Binary.getStartOffset` | **missing** |
-| `Binary.getDisasmLength` | **missing** |
+| `Binary.isProfiling` | **stub** |
+| `Binary.startTiming` | **stub** |
+| `Binary.endTiming` | **stub** |
+| `Binary.getStartOffset` | **stub** |
+| `Binary.getDisasmLength` | implemented |
 | `Binary.getDisasmString` | implemented |
 | `Binary.getDisasmNextAddress` | implemented |
-| `Binary.getOperationSystemName` | **missing** |
-| `Binary.getOperationSystemVersion` | **missing** |
-| `Binary.getOperationSystemOptions` | **missing** |
-| `Binary.getFileFormatName` | **missing** |
-| `Binary.getFileFormatVersion` | **missing** |
-| `Binary.getFileFormatOptions` | **missing** |
+| `Binary.getOperationSystemName` | **stub** |
+| `Binary.getOperationSystemVersion` | **stub** |
+| `Binary.getOperationSystemOptions` | **stub** |
+| `Binary.getFileFormatName` | **stub** |
+| `Binary.getFileFormatVersion` | **stub** |
+| `Binary.getFileFormatOptions` | **stub** |
 | `Binary.getHeaderString` | implemented |
-| `Binary.isSignatureInSectionPresent` | **missing** |
+| `Binary.isSignatureInSectionPresent` | **stub** |
 
-Coverage: 61/128 implemented (48%), 0 stub, 67 missing
+Coverage: 97/128 implemented (76%), 31 stub, 0 missing
 
 ## ELF (25 methods)
 
@@ -166,12 +166,12 @@ Coverage: 61/128 implemented (48%), 0 stub, 67 missing
 | `ELF.getProgramFileSize` | implemented |
 | `ELF.getElfHeader_type` | implemented |
 | `ELF.getElfHeader_machine` | implemented |
-| `ELF.getElfHeader_version` | **missing** |
+| `ELF.getElfHeader_version` | implemented |
 | `ELF.getElfHeader_entry` | implemented |
 | `ELF.getElfHeader_phoff` | implemented |
 | `ELF.getElfHeader_shoff` | implemented |
-| `ELF.getElfHeader_flags` | **missing** |
-| `ELF.getElfHeader_ehsize` | **missing** |
+| `ELF.getElfHeader_flags` | implemented |
+| `ELF.getElfHeader_ehsize` | implemented |
 | `ELF.getElfHeader_phentsize` | implemented |
 | `ELF.getElfHeader_phnum` | implemented |
 | `ELF.getElfHeader_shentsize` | implemented |
@@ -179,45 +179,45 @@ Coverage: 61/128 implemented (48%), 0 stub, 67 missing
 | `ELF.getElfHeader_shstrndx` | implemented |
 | `ELF.isStringInTablePresent` | implemented |
 | `ELF.isLibraryPresent` | implemented |
-| `ELF.getRunPath` | **missing** |
+| `ELF.getRunPath` | implemented |
 | `ELF.getGeneralOptions` | implemented |
 
-Coverage: 21/25 implemented (84%), 0 stub, 4 missing
+Coverage: 25/25 implemented (100%), 0 stub, 0 missing
 
 ## Global (2 methods)
 
 | Method | Status |
 |--------|--------|
-| `Global.includeScript` | **missing** |
-| `Global.result` | **missing** |
+| `Global.includeScript` | **stub** |
+| `Global.result` | implemented |
 
-Coverage: 0/2 implemented (0%), 0 stub, 2 missing
+Coverage: 1/2 implemented (50%), 1 stub, 0 missing
 
 ## ISO9660 (19 methods)
 
 | Method | Status |
 |--------|--------|
-| `ISO9660.isValid` | **missing** |
+| `ISO9660.isValid` | implemented |
 | `ISO9660.getFileFormatName` | implemented |
-| `ISO9660.getFileFormatVersion` | **stub** |
+| `ISO9660.getFileFormatVersion` | implemented |
 | `ISO9660.getFileFormatOptions` | **stub** |
-| `ISO9660.getSystemIdentifier` | **missing** |
-| `ISO9660.getVolumeIdentifier` | **missing** |
-| `ISO9660.getVolumeSetIdentifier` | **missing** |
-| `ISO9660.getPublisherIdentifier` | **missing** |
+| `ISO9660.getSystemIdentifier` | implemented |
+| `ISO9660.getVolumeIdentifier` | implemented |
+| `ISO9660.getVolumeSetIdentifier` | implemented |
+| `ISO9660.getPublisherIdentifier` | implemented |
 | `ISO9660.getDataPreparerIdentifier` | implemented |
 | `ISO9660.getApplicationIdentifier` | implemented |
-| `ISO9660.getCopyrightFileIdentifier` | **missing** |
-| `ISO9660.getAbstractFileIdentifier` | **missing** |
-| `ISO9660.getBibliographicFileIdentifier` | **missing** |
-| `ISO9660.getCreationDateTime` | **missing** |
-| `ISO9660.getModificationDateTime` | **missing** |
-| `ISO9660.getExpirationDateTime` | **missing** |
-| `ISO9660.getEffectiveDateTime` | **missing** |
-| `ISO9660.isArchiveRecordPresent` | **missing** |
-| `ISO9660.isArchiveRecordPresentExp` | **missing** |
+| `ISO9660.getCopyrightFileIdentifier` | implemented |
+| `ISO9660.getAbstractFileIdentifier` | implemented |
+| `ISO9660.getBibliographicFileIdentifier` | implemented |
+| `ISO9660.getCreationDateTime` | implemented |
+| `ISO9660.getModificationDateTime` | implemented |
+| `ISO9660.getExpirationDateTime` | implemented |
+| `ISO9660.getEffectiveDateTime` | implemented |
+| `ISO9660.isArchiveRecordPresent` | **stub** |
+| `ISO9660.isArchiveRecordPresentExp` | **stub** |
 
-Coverage: 3/19 implemented (16%), 2 stub, 14 missing
+Coverage: 16/19 implemented (84%), 3 stub, 0 missing
 
 ## MSDOS (13 methods)
 
@@ -227,26 +227,26 @@ Coverage: 3/19 implemented (16%), 2 stub, 14 missing
 | `MSDOS.isLX` | implemented |
 | `MSDOS.isNE` | implemented |
 | `MSDOS.isPE` | implemented |
-| `MSDOS.getDosStubOffset` | **missing** |
-| `MSDOS.getDosStubSize` | **missing** |
-| `MSDOS.isDosStubPresent` | **missing** |
+| `MSDOS.getDosStubOffset` | implemented |
+| `MSDOS.getDosStubSize` | implemented |
+| `MSDOS.isDosStubPresent` | implemented |
 | `MSDOS.isRichSignaturePresent` | implemented |
 | `MSDOS.getNumberOfRichIDs` | implemented |
-| `MSDOS.isRichVersionPresent` | **missing** |
+| `MSDOS.isRichVersionPresent` | implemented |
 | `MSDOS.getRichVersion` | implemented |
 | `MSDOS.getRichID` | implemented |
 | `MSDOS.getRichCount` | implemented |
 
-Coverage: 9/13 implemented (69%), 0 stub, 4 missing
+Coverage: 13/13 implemented (100%), 0 stub, 0 missing
 
 ## PE (76 methods)
 
 | Method | Status |
 |--------|--------|
-| `PE.isPE32` | **missing** |
-| `PE.isPEPlus` | **missing** |
+| `PE.isPE32` | implemented |
+| `PE.isPEPlus` | implemented |
 | `PE.isDll` | implemented |
-| `PE.isDriver` | **missing** |
+| `PE.isDriver` | implemented |
 | `PE.isConsole` | implemented |
 | `PE.isNET` | implemented |
 | `PE.getNETVersion` | implemented |
@@ -272,18 +272,18 @@ Coverage: 9/13 implemented (69%), 0 stub, 4 missing
 | `PE.getImportLibraryName` | implemented |
 | `PE.getNumberOfImportThunks` | implemented |
 | `PE.getImportFunctionName` | implemented |
-| `PE.isImportPresent` | **missing** |
+| `PE.isImportPresent` | implemented |
 | `PE.isLibraryPresent` | implemented |
 | `PE.isLibraryFunctionPresent` | implemented |
-| `PE.getImportHash32` | **missing** |
-| `PE.getImportHash64` | **missing** |
+| `PE.getImportHash32` | **stub** |
+| `PE.getImportHash64` | **stub** |
 | `PE.isImportPositionHashPresent` | **stub** |
-| `PE.isExportPresent` | **missing** |
+| `PE.isExportPresent` | implemented |
 | `PE.getNumberOfExportFunctions` | implemented |
 | `PE.getExportFunctionName` | implemented |
 | `PE.isExportFunctionPresent` | implemented |
 | `PE.isExportFunctionPresentExp` | implemented |
-| `PE.isResourcesPresent` | **missing** |
+| `PE.isResourcesPresent` | implemented |
 | `PE.getNumberOfResources` | implemented |
 | `PE.getResourceIdByNumber` | implemented |
 | `PE.getResourceNameByNumber` | implemented |
@@ -294,8 +294,8 @@ Coverage: 9/13 implemented (69%), 0 stub, 4 missing
 | `PE.isResourceNamePresent` | implemented |
 | `PE.isResourceGroupNamePresent` | implemented |
 | `PE.isResourceGroupIdPresent` | implemented |
-| `PE.isNetObjectPresent` | **stub** |
-| `PE.isNetUStringPresent` | **stub** |
+| `PE.isNetObjectPresent` | implemented |
+| `PE.isNetUStringPresent` | implemented |
 | `PE.findSignatureInBlob_NET` | **stub** |
 | `PE.isSignatureInBlobPresent_NET` | **stub** |
 | `PE.compareEP_NET` | **stub** |
@@ -320,7 +320,7 @@ Coverage: 9/13 implemented (69%), 0 stub, 4 missing
 | `PE.getManifest` | implemented |
 | `PE.getGeneralOptions` | implemented |
 
-Coverage: 58/76 implemented (76%), 10 stub, 8 missing
+Coverage: 66/76 implemented (87%), 10 stub, 0 missing
 
 ## Util (5 methods)
 
@@ -328,150 +328,78 @@ Coverage: 58/76 implemented (76%), 10 stub, 8 missing
 |--------|--------|
 | `Util.shlu64` | implemented |
 | `Util.shru64` | implemented |
-| `Util.shl64` | **missing** |
-| `Util.shr64` | **missing** |
-| `Util.secondsToTimeStr` | **missing** |
+| `Util.shl64` | implemented |
+| `Util.shr64` | implemented |
+| `Util.secondsToTimeStr` | implemented |
 
-Coverage: 2/5 implemented (40%), 0 stub, 3 missing
+Coverage: 5/5 implemented (100%), 0 stub, 0 missing
 
 ## Summary
 
 | Metric | Count |
 |--------|-------|
 | Total methods (from help docs) | 270 |
-| Implemented | 154 |
-| Stub | 12 |
-| Missing | 104 |
-| Coverage | 57.0% |
+| Implemented | 223 |
+| Stub | 47 |
+| Missing | 0 |
+| Coverage | 82.6% |
 
 ## P0 Gaps (stub + missing)
 
 ### Archive
 
-- `Archive.isArchiveRecordPresent` — missing
-- `Archive.isArchiveRecordPresentExp` — missing
+- `Archive.isArchiveRecordPresent` — stub
+- `Archive.isArchiveRecordPresentExp` — stub
 
 ### Binary
 
-- `Binary.compareEP` — missing
-- `Binary.read_int24` — missing
-- `Binary.read_float` — missing
-- `Binary.read_double` — missing
-- `Binary.read_float16` — missing
-- `Binary.read_float32` — missing
-- `Binary.read_float64` — missing
-- `Binary.read_bcd_uint8` — missing
-- `Binary.read_bcd_uint16` — missing
-- `Binary.read_bcd_uint32` — missing
-- `Binary.read_bcd_uint64` — missing
-- `Binary.read_utf8String` — missing
-- `Binary.find_ansiString` — missing
-- `Binary.find_unicodeString` — missing
-- `Binary.upperCase` — missing
-- `Binary.lowerCase` — missing
-- `Binary.adler32` — missing
-- `Binary.isUTF8Text` — missing
-- `Binary.isUnicodeText` — missing
-- `Binary.isJpeg` — missing
-- `Binary.getJpegComment` — missing
-- `Binary.getJpegDqtMD5` — missing
-- `Binary.isJpegChunkPresent` — missing
-- `Binary.isJpegExifPresent` — missing
-- `Binary.getJpegExifCameraName` — missing
-- `Binary.detectZLIB` — missing
-- `Binary.detectGZIP` — missing
-- `Binary.detectZIP` — missing
-- `Binary.getCompressedDataSize` — missing
-- `Binary.getFileDirectory` — missing
-- `Binary.getFileCompleteSuffix` — missing
-- `Binary.RVAToOffset` — missing
-- `Binary.VAToOffset` — missing
-- `Binary.OffsetToVA` — missing
-- `Binary.OffsetToRVA` — missing
-- `Binary.getImageBase` — missing
-- `Binary.getAddressOfEntryPoint` — missing
-- `Binary.isOverlayPresent` — missing
-- `Binary.compareOverlay` — missing
-- `Binary.swapBytes` — missing
-- `Binary.getSignature` — missing
-- `Binary.isReleaseBuild` — missing
-- `Binary.isDebugBuild` — missing
-- `Binary.isSigned` — missing
-- `Binary.isFilePart` — missing
-- `Binary.isChecksumCorrect` — missing
-- `Binary.isEntryPointCorrect` — missing
-- `Binary.isSectionAlignmentCorrect` — missing
-- `Binary.isFileAlignmentCorrect` — missing
-- `Binary.isHeaderCorrect` — missing
-- `Binary.isRelocsTableCorrect` — missing
-- `Binary.isImportTableCorrect` — missing
-- `Binary.isExportTableCorrect` — missing
-- `Binary.isResourcesTableCorrect` — missing
-- `Binary.isSectionsTableCorrect` — missing
-- `Binary.isProfiling` — missing
-- `Binary.startTiming` — missing
-- `Binary.endTiming` — missing
-- `Binary.getStartOffset` — missing
-- `Binary.getDisasmLength` — missing
-- `Binary.getOperationSystemName` — missing
-- `Binary.getOperationSystemVersion` — missing
-- `Binary.getOperationSystemOptions` — missing
-- `Binary.getFileFormatName` — missing
-- `Binary.getFileFormatVersion` — missing
-- `Binary.getFileFormatOptions` — missing
-- `Binary.isSignatureInSectionPresent` — missing
-
-### ELF
-
-- `ELF.getElfHeader_version` — missing
-- `ELF.getElfHeader_flags` — missing
-- `ELF.getElfHeader_ehsize` — missing
-- `ELF.getRunPath` — missing
+- `Binary.getJpegComment` — stub
+- `Binary.getJpegDqtMD5` — stub
+- `Binary.isJpegChunkPresent` — stub
+- `Binary.getJpegExifCameraName` — stub
+- `Binary.getCompressedDataSize` — stub
+- `Binary.compareOverlay` — stub
+- `Binary.isReleaseBuild` — stub
+- `Binary.isDebugBuild` — stub
+- `Binary.isSigned` — stub
+- `Binary.isFilePart` — stub
+- `Binary.isChecksumCorrect` — stub
+- `Binary.isEntryPointCorrect` — stub
+- `Binary.isSectionAlignmentCorrect` — stub
+- `Binary.isFileAlignmentCorrect` — stub
+- `Binary.isHeaderCorrect` — stub
+- `Binary.isRelocsTableCorrect` — stub
+- `Binary.isImportTableCorrect` — stub
+- `Binary.isExportTableCorrect` — stub
+- `Binary.isResourcesTableCorrect` — stub
+- `Binary.isSectionsTableCorrect` — stub
+- `Binary.isProfiling` — stub
+- `Binary.startTiming` — stub
+- `Binary.endTiming` — stub
+- `Binary.getStartOffset` — stub
+- `Binary.getOperationSystemName` — stub
+- `Binary.getOperationSystemVersion` — stub
+- `Binary.getOperationSystemOptions` — stub
+- `Binary.getFileFormatName` — stub
+- `Binary.getFileFormatVersion` — stub
+- `Binary.getFileFormatOptions` — stub
+- `Binary.isSignatureInSectionPresent` — stub
 
 ### Global
 
-- `Global.includeScript` — missing
-- `Global.result` — missing
+- `Global.includeScript` — stub
 
 ### ISO9660
 
-- `ISO9660.isValid` — missing
-- `ISO9660.getFileFormatVersion` — stub
 - `ISO9660.getFileFormatOptions` — stub
-- `ISO9660.getSystemIdentifier` — missing
-- `ISO9660.getVolumeIdentifier` — missing
-- `ISO9660.getVolumeSetIdentifier` — missing
-- `ISO9660.getPublisherIdentifier` — missing
-- `ISO9660.getCopyrightFileIdentifier` — missing
-- `ISO9660.getAbstractFileIdentifier` — missing
-- `ISO9660.getBibliographicFileIdentifier` — missing
-- `ISO9660.getCreationDateTime` — missing
-- `ISO9660.getModificationDateTime` — missing
-- `ISO9660.getExpirationDateTime` — missing
-- `ISO9660.getEffectiveDateTime` — missing
-- `ISO9660.isArchiveRecordPresent` — missing
-- `ISO9660.isArchiveRecordPresentExp` — missing
-
-### MSDOS
-
-- `MSDOS.getDosStubOffset` — missing
-- `MSDOS.getDosStubSize` — missing
-- `MSDOS.isDosStubPresent` — missing
-- `MSDOS.isRichVersionPresent` — missing
+- `ISO9660.isArchiveRecordPresent` — stub
+- `ISO9660.isArchiveRecordPresentExp` — stub
 
 ### PE
 
-- `PE.isPE32` — missing
-- `PE.isPEPlus` — missing
-- `PE.isDriver` — missing
-- `PE.isImportPresent` — missing
-- `PE.getImportHash32` — missing
-- `PE.getImportHash64` — missing
+- `PE.getImportHash32` — stub
+- `PE.getImportHash64` — stub
 - `PE.isImportPositionHashPresent` — stub
-- `PE.isExportPresent` — missing
-- `PE.isResourcesPresent` — missing
-- `PE.isNetObjectPresent` — stub
-- `PE.isNetUStringPresent` — stub
 - `PE.findSignatureInBlob_NET` — stub
 - `PE.isSignatureInBlobPresent_NET` — stub
 - `PE.compareEP_NET` — stub
@@ -479,9 +407,3 @@ Coverage: 2/5 implemented (40%), 0 stub, 3 missing
 - `PE.isNetTypePresent` — stub
 - `PE.isNetMethodPresent` — stub
 - `PE.isNetFieldPresent` — stub
-
-### Util
-
-- `Util.shl64` — missing
-- `Util.shr64` — missing
-- `Util.secondsToTimeStr` — missing

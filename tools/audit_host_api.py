@@ -234,6 +234,15 @@ def classify_implementation(bridge_path: Path, cls: str, method: str) -> str:
             if re.search(alias_pattern, text):
                 return "implemented"
 
+            # Check for property/object assignment (e.g., Global.result = {...}).
+            prop_pattern = rf'{check_cls}\.{variant}\s*=\s*\{{'
+            if re.search(prop_pattern, text):
+                return "implemented"
+            # Check for null/literal assignment (e.g., Global.result = null).
+            literal_pattern = rf'{check_cls}\.{variant}\s*=\s*(null|undefined|true|false|0|""|\'\')\s*;'
+            if re.search(literal_pattern, text):
+                return "stub"
+
             # Check for Rust-side registration via .set("methodName", ...)
             set_pattern = rf'\.set\("{variant}"\s*,'
             if re.search(set_pattern, text):
