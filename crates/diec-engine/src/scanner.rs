@@ -514,9 +514,19 @@ pub fn scan_bytes(
         }
 
         // Evaluate each rule in an isolated scope.
+        // Skip _FixDetects rules — they are post-processing rules that need
+        // access to all accumulated results and are executed after all other
+        // rules have run.
+        let mut fix_detects_rules: Vec<&diec_rules::runtime::LoadedRule> = Vec::new();
         for rule in rules {
             if cancel.is_cancelled() {
                 return Err(ScanError::Cancelled);
+            }
+
+            // Defer _FixDetects rules for post-processing.
+            if rule.path.contains("_FixDetects") {
+                fix_detects_rules.push(rule);
+                continue;
             }
 
             let start = std::time::Instant::now();
@@ -541,6 +551,59 @@ pub fn scan_bytes(
                 file: rule.path.clone(),
                 elapsed_ms: start.elapsed().as_millis() as u64,
             });
+        }
+
+        // Post-processing: run _FixDetects rules with all accumulated results.
+        // These rules modify the global result set (e.g. remove false positives,
+        // suppress MSVC when other compilers are detected).
+        if !fix_detects_rules.is_empty() {
+            // Convert detections back to DetectionResult format for injection.
+            let results_for_injection: Vec<diec_rules::runtime::DetectionResult> = detections
+                .iter()
+                .filter(|d| &d.file_type == file_type)
+                .map(|d| diec_rules::runtime::DetectionResult {
+                    type_name: d.type_name.clone(),
+                    name: d.name.clone(),
+                    version: d.version.clone().unwrap_or_default(),
+                    options: d.options.clone().unwrap_or_default(),
+                    lang: String::new(),
+                    lang_version: String::new(),
+                    id: d.id.clone(),
+                    parent_id: d.parent_id.clone(),
+                    file_part: d.file_part.clone(),
+                    offset: d.offset,
+                    size: d.size,
+                    is_heuristic: d.is_heuristic,
+                    is_a_heuristic: d.is_a_heuristic,
+                    original_name: d.original_name.clone(),
+                })
+                .collect();
+
+            if runtime.inject_results(&results_for_injection).is_ok() {
+                for fix_rule in &fix_detects_rules {
+                    if let Err(e) = runtime.evaluate_rule_source_keep_results(
+                        &fix_rule.path,
+                        &fix_rule.source,
+                        cancel,
+                    ) {
+                        let msg = format!("{}: {}", fix_rule.path, e);
+                        diagnostics.push(msg);
+                    }
+                }
+                // Read back modified results and replace detections for this file type.
+                let modified = runtime.read_results();
+                if let Ok(modified_results) = modified {
+                    // Remove detections from this file type and add modified ones.
+                    detections.retain(|d| &d.file_type != file_type);
+                    for result in modified_results {
+                        detections.push(detection_from_result(
+                            file_type,
+                            &fix_detects_rules[0].path,
+                            result,
+                        ));
+                    }
+                }
+            }
         }
 
         runtime.shutdown();

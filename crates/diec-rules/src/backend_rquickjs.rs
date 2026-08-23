@@ -350,7 +350,7 @@ impl RquickjsRuntime {
     }
 
     /// Read the `__diec_results` array from the JavaScript context.
-    fn read_results(&self) -> Result<Vec<DetectionResult>, RuleError> {
+    pub fn read_results(&self) -> Result<Vec<DetectionResult>, RuleError> {
         self.context.with(|ctx: Ctx<'_>| {
             let globals = ctx.globals();
             let results_val: rquickjs::Value =
@@ -608,6 +608,28 @@ impl RquickjsRuntime {
         rule_source: &str,
         cancel: &CancellationToken,
     ) -> Result<Vec<DetectionResult>, RuleError> {
+        self.evaluate_rule_source_impl(rule_path, rule_source, cancel, true)
+    }
+
+    /// Evaluate a rule source without clearing `__diec_results` first.
+    /// Used for post-processing rules like `_FixDetects` that need access
+    /// to accumulated results from prior rule evaluations.
+    pub fn evaluate_rule_source_keep_results(
+        &mut self,
+        rule_path: &str,
+        rule_source: &str,
+        cancel: &CancellationToken,
+    ) -> Result<Vec<DetectionResult>, RuleError> {
+        self.evaluate_rule_source_impl(rule_path, rule_source, cancel, false)
+    }
+
+    fn evaluate_rule_source_impl(
+        &mut self,
+        rule_path: &str,
+        rule_source: &str,
+        cancel: &CancellationToken,
+        clear: bool,
+    ) -> Result<Vec<DetectionResult>, RuleError> {
         if !self.initialized {
             return Err(RuleError::Backend {
                 detail: "evaluate_rule_source called before init".into(),
@@ -622,7 +644,9 @@ impl RquickjsRuntime {
         }
 
         // Clear previous results from the JS __diec_results array.
-        self.clear_results()?;
+        if clear {
+            self.clear_results()?;
+        }
 
         // Preprocess: convert `const` to `var` to match Qt Script behavior.
         // See eval_script() for details.
@@ -672,6 +696,56 @@ impl RquickjsRuntime {
                 }
             }
         }
+    }
+
+    /// Inject detection results into `__diec_results` for post-processing
+    /// rules like `_FixDetects` that need access to all accumulated results.
+    pub fn inject_results(&mut self, results: &[DetectionResult]) -> Result<(), RuleError> {
+        self.clear_results()?;
+        self.context.with(|ctx: Ctx<'_>| -> Result<(), RuleError> {
+            let globals = ctx.globals();
+            let arr: rquickjs::Array =
+                globals
+                    .get("__diec_results")
+                    .map_err(|e| RuleError::Backend {
+                        detail: format!("inject_results: failed to get __diec_results: {e}"),
+                    })?;
+            for r in results {
+                let obj = rquickjs::Object::new(ctx.clone()).map_err(|e| RuleError::Backend {
+                    detail: format!("inject_results: new object: {e}"),
+                })?;
+                obj.set("type", r.type_name.clone())
+                    .map_err(|e| RuleError::Backend {
+                        detail: format!("inject_results: set type: {e}"),
+                    })?;
+                obj.set("name", r.name.clone())
+                    .map_err(|e| RuleError::Backend {
+                        detail: format!("inject_results: set name: {e}"),
+                    })?;
+                obj.set("version", r.version.clone())
+                    .map_err(|e| RuleError::Backend {
+                        detail: format!("inject_results: set version: {e}"),
+                    })?;
+                obj.set("options", r.options.clone())
+                    .map_err(|e| RuleError::Backend {
+                        detail: format!("inject_results: set options: {e}"),
+                    })?;
+                obj.set("lang", r.lang.clone())
+                    .map_err(|e| RuleError::Backend {
+                        detail: format!("inject_results: set lang: {e}"),
+                    })?;
+                obj.set("langVersion", r.lang_version.clone())
+                    .map_err(|e| RuleError::Backend {
+                        detail: format!("inject_results: set langVersion: {e}"),
+                    })?;
+                let len = arr.len();
+                arr.set(len, obj).map_err(|e| RuleError::Backend {
+                    detail: format!("inject_results: set: {e}"),
+                })?;
+            }
+            Ok(())
+        })?;
+        Ok(())
     }
 
     /// Re-initialize the runtime for a new file scan, reusing the already
