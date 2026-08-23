@@ -3225,9 +3225,11 @@ impl HostApiBridge {
                         return _B.__compare(sig, off);
                     };
 
-                    // isSignaturePresent: search for signature in range.
+                    // isSignaturePresent: search for signature in [offset, offset+size).
+                    // Upstream: find_signature(nOffset, nSize, sSignature) != -1
                     PE.isSignaturePresent = function(offset, size, sig) {
-                        return _B.__compare(sig, offset);
+                        if (size <= 0) return false;
+                        return _B.__findSignatureRange(offset, offset + size, sig) >= 0;
                     };
                     PE.isSignatureInSectionPresent = function(section, sig) {
                         if (!_peIsPE()) return false;

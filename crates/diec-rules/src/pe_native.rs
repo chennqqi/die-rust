@@ -1124,25 +1124,33 @@ fn parse_resource_entries_pe64(file: &pelite::pe64::PeFile<'_>) -> Vec<(String, 
             _ => 0,
         };
         if let Ok(pelite::resources::Entry::Directory(type_dir)) = type_entry.entry() {
-            collect_resource_entries_pe64(file, &type_dir, type_id, &mut entries);
+            collect_resource_entries_pe64(file, &type_dir, type_id, &None, &mut entries);
         }
     }
     entries
 }
 
 /// Recursively collect resource data entries from a PE64 resource directory.
+/// `inherited_name` carries the name from the second level (name directory)
+/// down to the third level (language directory), so that data entries at the
+/// language level are tagged with the correct resource name rather than the
+/// language id.
 fn collect_resource_entries_pe64(
     file: &pelite::pe64::PeFile<'_>,
     dir: &pelite::resources::Directory<'_>,
     type_id: u32,
+    inherited_name: &Option<String>,
     entries: &mut Vec<(String, u32, u32, u32)>,
 ) {
     for res_entry in dir.entries() {
-        let name = match res_entry.name() {
+        let entry_name = match res_entry.name() {
             Ok(pelite::resources::Name::Id(id)) => format!("#{}", id),
             Ok(pelite::resources::Name::Wide(ws)) => String::from_utf16_lossy(ws),
             _ => String::new(),
         };
+        // Use inherited name from parent level if available (language level),
+        // otherwise use this entry's own name (name level).
+        let name = inherited_name.clone().unwrap_or_else(|| entry_name.clone());
         match res_entry.entry() {
             Ok(pelite::resources::Entry::DataEntry(data)) => {
                 let rva = data.image().OffsetToData;
@@ -1150,7 +1158,13 @@ fn collect_resource_entries_pe64(
                 entries.push((name, type_id, file_off, data.image().Size));
             }
             Ok(pelite::resources::Entry::Directory(sub_dir)) => {
-                collect_resource_entries_pe64(file, &sub_dir, type_id, entries);
+                // Pass this level's name down to children.
+                let pass_name = if inherited_name.is_some() {
+                    inherited_name.clone()
+                } else {
+                    Some(entry_name.clone())
+                };
+                collect_resource_entries_pe64(file, &sub_dir, type_id, &pass_name, entries);
             }
             _ => {}
         }
@@ -1174,25 +1188,33 @@ fn parse_resource_entries_pe32(file: &pelite::pe32::PeFile<'_>) -> Vec<(String, 
             _ => 0,
         };
         if let Ok(pelite::resources::Entry::Directory(type_dir)) = type_entry.entry() {
-            collect_resource_entries_pe32(file, &type_dir, type_id, &mut entries);
+            collect_resource_entries_pe32(file, &type_dir, type_id, &None, &mut entries);
         }
     }
     entries
 }
 
 /// Recursively collect resource data entries from a PE32 resource directory.
+/// `inherited_name` carries the name from the second level (name directory)
+/// down to the third level (language directory), so that data entries at the
+/// language level are tagged with the correct resource name rather than the
+/// language id.
 fn collect_resource_entries_pe32(
     file: &pelite::pe32::PeFile<'_>,
     dir: &pelite::resources::Directory<'_>,
     type_id: u32,
+    inherited_name: &Option<String>,
     entries: &mut Vec<(String, u32, u32, u32)>,
 ) {
     for res_entry in dir.entries() {
-        let name = match res_entry.name() {
+        let entry_name = match res_entry.name() {
             Ok(pelite::resources::Name::Id(id)) => format!("#{}", id),
             Ok(pelite::resources::Name::Wide(ws)) => String::from_utf16_lossy(ws),
             _ => String::new(),
         };
+        // Use inherited name from parent level if available (language level),
+        // otherwise use this entry's own name (name level).
+        let name = inherited_name.clone().unwrap_or_else(|| entry_name.clone());
         match res_entry.entry() {
             Ok(pelite::resources::Entry::DataEntry(data)) => {
                 let rva = data.image().OffsetToData;
@@ -1200,7 +1222,13 @@ fn collect_resource_entries_pe32(
                 entries.push((name, type_id, file_off, data.image().Size));
             }
             Ok(pelite::resources::Entry::Directory(sub_dir)) => {
-                collect_resource_entries_pe32(file, &sub_dir, type_id, entries);
+                // Pass this level's name down to children.
+                let pass_name = if inherited_name.is_some() {
+                    inherited_name.clone()
+                } else {
+                    Some(entry_name.clone())
+                };
+                collect_resource_entries_pe32(file, &sub_dir, type_id, &pass_name, entries);
             }
             _ => {}
         }
