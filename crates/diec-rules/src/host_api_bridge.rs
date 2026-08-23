@@ -26,6 +26,9 @@ pub enum SigElement {
     /// matching at the target offset. Used for x86 call/jmp instructions.
     /// The target offset is resolved via RVA→file-offset conversion.
     RelOffset(usize),
+    /// ANSI character: matches any printable ASCII byte (0x20-0x7E).
+    /// `%%` in signature.
+    Ansi,
 }
 
 /// Parse a DIE signature string into a sequence of signature elements.
@@ -293,6 +296,35 @@ pub fn parse_signature(signature: &str) -> Result<Vec<SigElement>, String> {
             continue;
         }
 
+        if c == '%' {
+            // %% = ANSI character (printable ASCII 0x20-0x7E)
+            // %& = ANSI alphanumeric (0-9, A-Z, a-z)
+            // !% = not ANSI
+            // _% = not ANSI and not null
+            if i + 1 < chars.len() && chars[i + 1] == '%' {
+                elements.push(SigElement::Ansi);
+                i += 2;
+                continue;
+            } else if i + 1 < chars.len() && chars[i + 1] == '&' {
+                // ANSI alphanumeric — treat as Ansi for now (approximation)
+                elements.push(SigElement::Ansi);
+                i += 2;
+                continue;
+            } else if i + 1 < chars.len() && chars[i + 1] == '!' {
+                // !% = not ANSI — treat as Any (approximation)
+                elements.push(SigElement::Any);
+                i += 2;
+                continue;
+            } else if i + 1 < chars.len() && chars[i + 1] == '_' {
+                // _% = not ANSI and not null — treat as Any (approximation)
+                elements.push(SigElement::Any);
+                i += 2;
+                continue;
+            } else {
+                return Err("invalid % sequence in signature".into());
+            }
+        }
+
         if c == '.' || c == '?' {
             // Wildcard nibble: need two for a full byte.
             let mut nibbles = 0u8;
@@ -391,6 +423,13 @@ pub fn match_signature(data: &[u8], offset: usize, elements: &[SigElement]) -> b
                     }
                 }
                 SigElement::Any => {}
+                SigElement::Ansi => {
+                    // ANSI: printable ASCII 0x20-0x7E
+                    let b = data[offset + i];
+                    if !(0x20..=0x7E).contains(&b) {
+                        return false;
+                    }
+                }
                 SigElement::RelOffset(_) => {} // handled by has_reloffset check above
             }
         }
@@ -415,6 +454,16 @@ pub fn match_signature(data: &[u8], offset: usize, elements: &[SigElement]) -> b
                 pos += 1;
             }
             SigElement::Any => {
+                pos += 1;
+            }
+            SigElement::Ansi => {
+                if pos >= data.len() {
+                    return false;
+                }
+                let b = data[pos];
+                if !(0x20..=0x7E).contains(&b) {
+                    return false;
+                }
                 pos += 1;
             }
             SigElement::RelOffset(n) => {
@@ -447,6 +496,16 @@ pub fn match_signature_pe(
             }
             SigElement::Any => {
                 if pos >= data.len() {
+                    return false;
+                }
+                pos += 1;
+            }
+            SigElement::Ansi => {
+                if pos >= data.len() {
+                    return false;
+                }
+                let b = data[pos];
+                if !(0x20..=0x7E).contains(&b) {
                     return false;
                 }
                 pos += 1;
