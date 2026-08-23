@@ -192,6 +192,7 @@ impl DatabaseBuilder {
         };
 
         // Phase 3: assemble LoadedRule structs in order.
+        // TODO: sort rules using upstream's sort_signature_prio logic.
         let mut rules: Vec<LoadedRule> = Vec::with_capacity(file_count);
         for (i, rf) in rule_files.iter().enumerate() {
             let source = match &contents[i] {

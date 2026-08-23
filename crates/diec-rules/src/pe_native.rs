@@ -606,12 +606,16 @@ pub fn get_net_strings(data: &[u8]) -> (Vec<String>, Vec<String>) {
         // Skip null terminator + padding to 4-byte boundary.
         pos += 1; // null terminator
         pos = (pos + 3) & !3; // pad to 4
+        // Obfuscated .NET assemblies may inject duplicate stream headers
+        // (e.g. a tiny second "#Strings" with size=4). Only accept the first
+        // occurrence of each well-known stream to avoid overwriting the real
+        // heap with a decoy.
         match name.as_ref() {
-            "#US" => {
+            "#US" if us_size == 0 => {
                 us_offset = md_offset + s_off;
                 us_size = s_size;
             }
-            "#Strings" => {
+            "#Strings" if strings_size == 0 => {
                 strings_offset = md_offset + s_off;
                 strings_size = s_size;
             }
