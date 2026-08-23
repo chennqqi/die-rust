@@ -1,7 +1,7 @@
 {
   "diec_version": "die 4.0.0",
   "database_commit": "c2c17dfa5",
-  "recorded_at": "2026-08-23T07:38:46Z",
+  "recorded_at": "2026-08-23T08:05:37Z",
   "cases": {
     "minimal.exe": {
       "exit_code": 0,
@@ -747,6 +747,263 @@
         ]
       },
       "last_error": "Invalid signature: 0061736d010000000",
+      "stderr": ""
+    },
+    "minimal.com": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "COM",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "8",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal-ne.exe": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "NE",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "132",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal-le.exe": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "LE",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "168",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal-lx.exe": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "LX",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "168",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal-npm.tgz": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "NPM",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "192",
+            "values": [
+              {
+                "info": "",
+                "name": "JavaScript",
+                "string": "Language: JavaScript",
+                "type": "language",
+                "version": ""
+              },
+              {
+                "info": "",
+                "name": "minimal-pkg",
+                "string": "Package: minimal-pkg(1.0.0)",
+                "type": "package",
+                "version": "1.0.0"
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal.pyc": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Python Bytecode",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "109",
+            "values": [
+              {
+                "info": "",
+                "name": "Python Bytecode",
+                "string": "Format: Python Bytecode(3.12b1)",
+                "type": "format",
+                "version": "3.12b1"
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal-dos4g.exe": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "LE",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "167",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal-dos16m.exe": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "LE",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "168",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal-amiga": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Amiga Hunk",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "36",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal-atari.prg": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Binary",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "32",
+            "values": [
+              {
+                "info": "",
+                "name": "Atari ST TOS executable",
+                "string": "Format: Atari ST TOS executable",
+                "type": "format",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
       "stderr": ""
     }
   }

@@ -57,6 +57,18 @@ def main():
         "plain.txt", "manifest.json",
         "minimal.rar", "payload.txt.gz",
         "empty.bin",
+        # Phase 15.5: format coverage gap closure
+        "minimal.com",
+        "minimal-dos.exe",
+        "minimal-ne.exe",
+        "minimal-le.exe",
+        "minimal-lx.exe",
+        "minimal-npm.tgz",
+        "minimal.pyc",
+        "minimal-dos4g.exe",
+        "minimal-dos16m.exe",
+        "minimal-amiga",
+        "minimal-atari.prg",
     ]
 
     # Also record with db_extra if the binary supports it.
