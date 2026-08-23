@@ -453,16 +453,50 @@ impl HostApi for BufferHost {
         Ok(entropy)
     }
 
-    fn md5(&self, _offset: u64, _size: u64) -> Result<String, HostApiError> {
-        Err(HostApiError::NotImplemented {
-            method: "md5".into(),
-        })
+    fn md5(&self, offset: u64, size: u64) -> Result<String, HostApiError> {
+        let data = self.data();
+        let start = offset as usize;
+        let end = start.saturating_add(size as usize);
+        if start > data.len() {
+            return Err(HostApiError::OutOfBounds {
+                offset,
+                file_size: data.len() as u64,
+            });
+        }
+        if end > data.len() {
+            return Err(HostApiError::Truncated {
+                offset,
+                length: size,
+                available: data.len().saturating_sub(start) as u64,
+            });
+        }
+        use md5::{Digest, Md5};
+        let mut hasher = Md5::new();
+        hasher.update(&data[start..end]);
+        let digest = hasher.finalize();
+        Ok(format!("{:x}", digest))
     }
 
-    fn crc32(&self, _offset: u64, _size: u64) -> Result<u32, HostApiError> {
-        Err(HostApiError::NotImplemented {
-            method: "crc32".into(),
-        })
+    fn crc32(&self, offset: u64, size: u64) -> Result<u32, HostApiError> {
+        let data = self.data();
+        let start = offset as usize;
+        let end = start.saturating_add(size as usize);
+        if start > data.len() {
+            return Err(HostApiError::OutOfBounds {
+                offset,
+                file_size: data.len() as u64,
+            });
+        }
+        if end > data.len() {
+            return Err(HostApiError::Truncated {
+                offset,
+                length: size,
+                available: data.len().saturating_sub(start) as u64,
+            });
+        }
+        let mut hasher = crc32fast::Hasher::new();
+        hasher.update(&data[start..end]);
+        Ok(hasher.finalize())
     }
 
     fn pe_batch(&self) -> Option<diec_rules::pe_native::PeBatchInfo> {
@@ -543,5 +577,58 @@ impl HostApi for BufferHost {
 
     fn pe_is_signed(&self) -> bool {
         diec_rules::pe_native::is_signed(self.data())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify md5() computes the correct hash for a known input.
+    #[test]
+    fn md5_computes_known_hash() {
+        let data = b"hello world".to_vec();
+        let host = BufferHost::new(data, "test.bin".to_string());
+        let hash = host.md5(0, 11).unwrap();
+        // Known MD5 of "hello world"
+        assert_eq!(hash, "5eb63bbbe01eeed093cb22bb8f5acdc3");
+    }
+
+    /// Verify crc32() computes the correct checksum for a known input.
+    #[test]
+    fn crc32_computes_known_checksum() {
+        // CRC32 of "hello world" (IEEE 802.3 polynomial)
+        let data = b"hello world".to_vec();
+        let host = BufferHost::new(data, "test.bin".to_string());
+        let crc = host.crc32(0, 11).unwrap();
+        assert_eq!(crc, 0x0d4a1185);
+    }
+
+    /// Verify md5() returns OutOfBounds for offset beyond file.
+    #[test]
+    fn md5_out_of_bounds_returns_error() {
+        let data = b"short".to_vec();
+        let host = BufferHost::new(data, "test.bin".to_string());
+        let err = host.md5(100, 10).unwrap_err();
+        assert!(matches!(err, HostApiError::OutOfBounds { .. }));
+    }
+
+    /// Verify crc32() returns Truncated when range extends beyond file.
+    #[test]
+    fn crc32_truncated_returns_error() {
+        let data = b"short".to_vec();
+        let host = BufferHost::new(data, "test.bin".to_string());
+        let err = host.crc32(2, 100).unwrap_err();
+        assert!(matches!(err, HostApiError::Truncated { .. }));
+    }
+
+    /// Verify md5() of empty range returns the empty-string MD5.
+    #[test]
+    fn md5_empty_range_returns_empty_hash() {
+        let data = b"some data".to_vec();
+        let host = BufferHost::new(data, "test.bin".to_string());
+        let hash = host.md5(0, 0).unwrap();
+        // MD5 of empty input
+        assert_eq!(hash, "d41d8cd98f00b204e9800998ecf8427e");
     }
 }

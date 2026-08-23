@@ -22,6 +22,7 @@ serde = { version = "1", features = ["derive"] }
 zip = { version = ">=2.6,<10", default-features = false, features = ["deflate"] }
 sevenz-rust = "0.6"
 rars = "0.6"
+crc32fast = "1.5.1"
 
 [dev-dependencies]
 criterion = { workspace = true }

@@ -2880,9 +2880,10 @@ impl HostApiBridge {
                     // registered as native Rust functions (using Capstone)
                     // earlier in register(). Do not override them here.
 
-                    // Entropy/hash stubs.
-                    PE.calculateEntropy = function(off, size) { return 0; };
-                    PE.calculateMD5 = function(off, size) { return ""; };
+                    // Entropy/hash: delegate to Binary (registered as native Rust functions).
+                    PE.calculateEntropy = function(off, size) { return _B.calculateEntropy(off, size); };
+                    PE.calculateMD5 = function(off, size) { return _B.calculateMD5(off, size); };
+                    PE.calculateCRC32 = function(off, size) { return _B.calculateCRC32(off, size); };
 
                     // Read helpers.
                     PE.readWord = function(off) { return _B.read_uint16(off); };
