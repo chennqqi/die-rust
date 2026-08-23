@@ -65,7 +65,9 @@ Phase 16 的 7 条根因和改进建议见
 12. **上游规则本身有 bug**：`archive_Resources.6.sg` 的循环条件
     `!bDetected` 在 `bDetected=true` 时立即退出，是规则 bug。上游的
     `getAddressOfEntryPoint` 返回非 0 值掩盖了此 bug。diec-rust 正确实现
-    后反而暴露。已知上游 bug 必须记录，避免被误认为 diec-rust 缺陷。
+    后反而暴露。**所有已发现的上游 bug 必须记录到**
+    [`doc/upstream-bugs.md`](doc/upstream-bugs.md)，**避免被误认为
+    diec-rust 缺陷**。发现新的上游 bug 时追加到此文件，不得静默修复。
 13. **对齐是 O(n) 问题，验证是 O(n×m×k) 问题**：155 个方法 × 1186 个规则 ×
     数百个样本 = 数万次交互。每轮差分只发现当前样本集触发的错误。持续差分
     + 源码考古 + 语义对照矩阵是唯一收敛策略，不追求"100% 一致"。

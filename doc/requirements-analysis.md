@@ -530,3 +530,17 @@ packer/protector 检测一致率从 98.4% 提升至 **100%**（500 个 PE 恶意
 7. 对齐是 O(n) 问题但验证是 O(n×m×k) 问题
 
 详见 `doc/alignment-retrospective.md`。
+
+### 上游 Bug 记录（2026-08-23）
+
+用户要求将上游 DIE-engine 的已知 bug 记录下来。已创建
+`doc/upstream-bugs.md`，记录 5 个上游 bug：
+
+1. `PE.isNET()` 未定义（5 个规则抛异常，上游静默忽略）
+2. `archive_Resources.6.sg` 循环条件逻辑错误（被返回值语义掩盖）
+3. `format_bin.Nintendo-certified-file.1.sg` `const` 重声明
+4. 上游引擎静默忽略规则异常
+5. 空签名 "Invalid signature" 错误
+
+AGENTS.md 第 12 条已更新，要求所有上游 bug 记录到
+`doc/upstream-bugs.md`，发现新 bug 时追加。

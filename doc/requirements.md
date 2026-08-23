@@ -1156,3 +1156,9 @@
 
 用户要求深刻总结为什么对齐了很多次在实际数据测试中还有这么多差异，
 将总结结论保存到 markdown 中。已保存至 `doc/alignment-retrospective.md`。
+
+## 用户需求（2026-08-23）：记录上游 Bug
+
+用户要求将上游 DIE-engine 的已知 bug 记录下来。已创建
+`doc/upstream-bugs.md`，并在 AGENTS.md 第 12 条中引用，
+要求后续发现的上游 bug 追加到此文件。
