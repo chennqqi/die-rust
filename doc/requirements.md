@@ -1151,3 +1151,8 @@
 - packer/protector 漏检：5× VMProtect（问题 7）、1× UPX（问题 8/9）、1× Enigma（问题 7）、1× Bat To Exe Converter（新发现）、1× PyInstaller（新发现）、2× ASProtect（新发现）
 - 非 packer 差异：.NET Framework 版本格式（缺框架版本号）、ELF Rust compiler 漏检（24 例）、Unknown 占位（上游输出 diec-rust 不输出）、MSVC "by EP" 版本推断、Records/Authenticode/TASM32 过度检测
 - 需求：修复问题 7-9 + 新发现漏检；修复 .NET Framework 版本和 ELF Rust compiler 检测；调查过度检测项；将差分扫描集成到 CI 本地模拟
+
+## 用户需求（2026-08-23）：对齐方法论深刻反思
+
+用户要求深刻总结为什么对齐了很多次在实际数据测试中还有这么多差异，
+将总结结论保存到 markdown 中。已保存至 `doc/alignment-retrospective.md`。
