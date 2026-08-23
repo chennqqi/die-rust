@@ -575,6 +575,36 @@ pub fn scan_bytes(
         detections.extend(archive_detections);
     }
 
+    // Add "Unknown" placeholder when no detections were found.
+    // Matches upstream XScanEngine::_processDetect with bAddUnknown=true:
+    // when listRecords is empty, an "Unknown" record is appended so that
+    // the output always has at least one entry. --hideunknown suppresses this.
+    if detections.is_empty() && !flags.hide_unknown {
+        // Use the first detected format type as the file_type for the
+        // Unknown placeholder, so that --alltypes negative tests don't
+        // treat it as a cross-format false positive.
+        let unknown_ft = active_types
+            .first()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        detections.push(ScanDetection {
+            file_type: unknown_ft,
+            type_name: "unknown".to_string(),
+            name: "Unknown".to_string(),
+            version: None,
+            options: None,
+            signature_path: None,
+            parent_id: None,
+            id: None,
+            file_part: None,
+            offset: None,
+            size: None,
+            is_heuristic: None,
+            is_a_heuristic: None,
+            original_name: None,
+        });
+    }
+
     Ok(ScanResult {
         path: file_name.to_string(),
         detections,
@@ -899,6 +929,31 @@ impl Scanner {
             let archive_detections =
                 self.scan_archive_members_inline(file_name, &data, &flags, cancel)?;
             detections.extend(archive_detections);
+        }
+
+        // Add "Unknown" placeholder when no detections were found.
+        // Matches upstream XScanEngine::_processDetect with bAddUnknown=true.
+        if detections.is_empty() && !flags.hide_unknown {
+            let unknown_ft = active_types
+                .first()
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            detections.push(ScanDetection {
+                file_type: unknown_ft,
+                type_name: "unknown".to_string(),
+                name: "Unknown".to_string(),
+                version: None,
+                options: None,
+                signature_path: None,
+                parent_id: None,
+                id: None,
+                file_part: None,
+                offset: None,
+                size: None,
+                is_heuristic: None,
+                is_a_heuristic: None,
+                original_name: None,
+            });
         }
 
         Ok(ScanResult {

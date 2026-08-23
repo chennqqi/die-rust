@@ -22,11 +22,11 @@ use std::path::PathBuf;
 /// The order doesn't matter — the test sorts both lists before comparing.
 const CORPUS_EXPECTATIONS: &[(&str, &[(&str, &str)])] = &[
     // Executable formats
-    // PE files: db_extra rules detect PE resources as archive:Resources.
-    // Heuristic analysis rules run but isHeuristicScan() returns false,
-    // so no heuristic detections without --heuristicscan flag.
-    ("minimal.exe", &[("archive", "Resources")]),
-    ("minimal-pe64.exe", &[("archive", "Resources")]),
+    // PE files: minimal PE with EP=0 and no sections.
+    // Upstream detects only "Unknown" (getAddressOfEntryPoint returns
+    // ImageBase+0, not 0, so archive_Resources.6.sg does not trigger).
+    ("minimal.exe", &[]),
+    ("minimal-pe64.exe", &[]),
     // with-tables.exe has import/export tables but no DOS stub or Rich
     // signature, so linker rules don't match. It's used to verify that
     // PE table parsing doesn't crash or produce spurious detections.
@@ -196,10 +196,13 @@ fn corpus_differential_detections() {
         }
 
         // Check no unexpected detections (only for files with no expected detections).
-        if expected.is_empty() && !result.detections.is_empty() {
+        // The "Unknown" placeholder (added when no detections are found) is
+        // not counted as an unexpected detection — it matches upstream behavior.
+        if expected.is_empty() && result.detections.iter().any(|d| d.name != "Unknown") {
             let actual: Vec<String> = result
                 .detections
                 .iter()
+                .filter(|d| d.name != "Unknown")
                 .map(|d| format!("{}:{}", d.type_name, d.name))
                 .collect();
             mismatches.push(format!(

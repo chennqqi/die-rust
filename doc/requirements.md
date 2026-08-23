@@ -1129,3 +1129,25 @@
   6. Go 绑定 Scanner.ScanBytes 使用 one-shot API 而非 reusable scanner
 - 本质：1:1 兼容上游目标未达成，差分测试覆盖存在重大盲区（未含 db_extra 规则、未用真实 ELF/PE 二进制、--alltypes 测试只验去重不验误报）
 - 需求：修复 3 个阻断项使项目可用于生产环境；提供上游兼容 JSON 输出；补充真实语料差分测试；明确 glibc 要求文档
+
+## 2026-08-23: v0.9.0 真实数据差分验证发现 host API 语义错误
+- v0.9.0（host API 覆盖率 100%、真差分框架）发布后，在真实 packer/protector 样本上执行 D2 差分测试
+- 发现 3 个 host API 实现语义错误，导致 VMProtect（2 样本漏检）和 UPX（1 样本漏检）：
+  1. `PE.getSectionNameCollision(s1, s2)` 语义错误 — 检查字面值 s1/s2 是否为完整节名，而非查找以 s1/s2 结尾且共享前缀的两个节名并返回共同前缀
+  2. `PE.getImportFunctionName(libraryIndex, functionIndex)` 参数签名错误 — 只接受 1 个参数返回全局扁平列表第 n 个函数，应按库索引+函数索引查询
+  3. `PE.getNumberOfImportThunks(libraryIndex)` 参数被忽略 — 不接受参数返回全部函数总数，应返回指定库的函数数
+- D2 差分指标：packer 类检测一致率 87.5%（21/24），protector 类检测一致率 83.3%（20/24），protector 类检测不一致率 8.3% 超过 < 5% 门槛（指 diec-rust 与上游对 packer/protector 类检测的二元决策一致性）
+- 根因：Phase 15 host API 覆盖率 100% 仅证明方法"存在且可调用"，未验证"参数语义与上游一致"；PeBatchInfo 数据结构将导入函数存储为扁平数组，丢失了函数与库的归属关系
+- 需求：修正 3 个 host API 语义；扩展 PeBatchInfo 按库分组导入函数；补充真实 packer/protector 语料差分测试；将"参数语义对齐"纳入 host API 审计标准
+
+## 2026-08-23: 真实语料大规模差分扫描基线
+- 使用 `/data/virus/` 语料库（PE/ELF × 良性/恶意，~40 万文件）进行差分扫描
+- 工具：`tools/diff_scan_corpus.py`（对比 diec-rust v0.9.0 vs 上游 diec 4.0.0）
+- 基线结果：
+  - pe_malicious 500 样本：检测一致率 80.8%，packer 一致率 98.4%（8 漏检）
+  - pe_benign 100 样本：检测一致率 64.0%，packer 一致率 98.0%（2 漏检）
+  - elf_malicious 100 样本：检测一致率 24.0%，packer 一致率 100%
+  - elf_benign 100 样本：检测一致率 48.0%，packer 一致率 100%
+- packer/protector 漏检：5× VMProtect（问题 7）、1× UPX（问题 8/9）、1× Enigma（问题 7）、1× Bat To Exe Converter（新发现）、1× PyInstaller（新发现）、2× ASProtect（新发现）
+- 非 packer 差异：.NET Framework 版本格式（缺框架版本号）、ELF Rust compiler 漏检（24 例）、Unknown 占位（上游输出 diec-rust 不输出）、MSVC "by EP" 版本推断、Records/Authenticode/TASM32 过度检测
+- 需求：修复问题 7-9 + 新发现漏检；修复 .NET Framework 版本和 ELF Rust compiler 检测；调查过度检测项；将差分扫描集成到 CI 本地模拟

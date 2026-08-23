@@ -66,6 +66,7 @@ fn alltypes_detection_types(
     result
         .detections
         .iter()
+        .filter(|d| d.name != "Unknown")
         .map(|d| d.file_type.clone())
         .collect()
 }

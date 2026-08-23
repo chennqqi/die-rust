@@ -335,3 +335,184 @@ diec CLI 缺口远小于 GUI。缺口分两类：
 - P1 兼容性增强：上游兼容 JSON 输出（--output json-die）、Go 绑定 reusable scanner
 - P1 文档：glibc 要求 + build-std 指南、COMPATIBILITY.md 纠正
 - ADR 需求：--alltypes 语义对齐上游（可能破坏性）、json-die 兼容输出
+
+## 2026-08-23: v0.9.0 真实数据差分验证 — host API 语义错误分析
+
+### 问题确认（代码位置已核实）
+
+1. **`getSectionNameCollision(s1, s2)`** — `host_api_bridge.rs:3654`
+   - 当前实现：遍历节名，检查字面值 `s1.toLowerCase()` / `s2.toLowerCase()` 是否等于完整节名，两者都找到则返回 `s1`
+   - 上游规则用法（VMProtect.2.sg:29）：`var sCollision = PE.getSectionNameCollision("0", "1"); if (PE.isSectionNamePresent(sCollision + "1"))`
+   - 正确语义：找到两个节名，一个以 `s1`（"0"）结尾、一个以 `s2`（"1"）结尾，且有共同前缀，返回该**共同前缀**。例：`oiNRhy0` + `oiNRhy1` → 返回 `oiNRhy`
+   - 影响规则：VMProtect（2 样本漏检）、BattlEye、ENIGMA、GenericHeuristicAnalysis
+
+2. **`getImportFunctionName(n)`** — `host_api_bridge.rs:3570`
+   - 当前实现：只接受 1 个参数，返回 `_peParseImports().functions[n].name`（全局扁平列表第 n 个函数）
+   - 上游规则用法（packer_UPX.2.sg:15）：`PE.getImportFunctionName(0, 0) == "LoadLibraryA"` — 2 个参数（库索引, 函数索引）
+   - 正确语义：返回第 `libraryIndex` 个库的第 `functionIndex` 个导入函数名
+   - 影响规则：UPX（isPatchedUPX 失败）、NsPack、AlushPacker、cryptor_Huan、cryptor_EXECryptor、compiler_RADBasic、protector_StarForce、protector_Private_EXE_Protector、protector_NTkrnl_Protector、protector_ENIGMA
+
+3. **`getNumberOfImportThunks()`** — `host_api_bridge.rs:3575`
+   - 当前实现：不接受参数，返回 `_peParseImports().functions.length`（全部库函数总数）
+   - 上游规则用法（packer_UPX.2.sg:9）：`PE.getNumberOfImportThunks(0)` — 1 个参数（库索引）
+   - 正确语义：返回第 `libraryIndex` 个库的导入函数数量
+   - 影响规则：与问题 2 相同的规则集
+
+### 数据结构根因
+
+`PeBatchInfo`（`pe_native.rs:710`）将导入存储为两个独立扁平数组：
+- `libraries: Vec<String>` — 去重后的库名列表
+- `functions: Vec<String>` — 所有库的所有函数扁平列表
+
+该结构**丢失了函数与库的归属关系**，无法支持按库索引查询函数。修复需扩展为按库分组结构（如 `imports: Vec<(String, Vec<String>)>` 或 `library_functions: Vec<Vec<String>>`）。
+
+### 方法论根因
+
+Phase 15 host API 覆盖率审计（`tools/audit_host_api.py`）仅验证"方法名存在"，未验证"参数签名与语义与上游一致"。覆盖率 100% 不等于语义正确率 100%。需将"参数签名对照"纳入审计标准。
+
+### D2 差分指标
+
+| 指标 | 结果 | 门槛 | 状态 |
+|------|------|------|------|
+| packer 类检测一致率 | 21/24 (87.5%) | 100% | ❌ |
+| protector 类检测一致率 | 20/24 (83.3%) | 100% | ❌ |
+| packer 类检测不一致率 | 1/24 (4.2%) | < 5% | ✅ |
+| protector 类检测不一致率 | 2/24 (8.3%) | < 5% | ❌ |
+
+> 指标含义：对 24 个已知 packer/protector 样本，比较 diec-rust 与上游 DIE
+> 对 packer/protector 类检测的二元决策（检测到 vs 未检测到）一致性。
+
+### Phase 16 规划方向
+
+- P0 语义修正：3 个 host API 方法（getSectionNameCollision / getImportFunctionName / getNumberOfImportThunks）
+- P0 数据结构扩展：PeBatchInfo 按库分组导入函数
+- P1 差分测试加固：真实 packer/protector 语料（VMProtect/UPX/NsPack/ENIGMA 等）
+- P1 审计标准升级：host API 审计纳入参数签名对照
+- ADR 需求：PeBatchInfo 数据结构变更（内部结构，非公共 API，可能无需 ADR）
+
+## 2026-08-23: 真实语料大规模差分扫描分析
+
+### 扫描方法
+- 工具：`tools/diff_scan_corpus.py`，对比 diec-rust v0.9.0 与上游 diec 4.0.0
+- 语料：`/data/virus/{pe,elf}_{benign,malicious}`（~40 万文件）
+- 归一化：filetype PE32/PE64 → PE，type 取小写，version 原样保留
+- 上游 diec 加载 db + db_extra（-D + -C 选项）
+
+### packer/protector 漏检分析（10 例，全部 diec-rust 漏检）
+
+| 名称 | 样本数 | 根因 |
+|------|--------|------|
+| VMProtect | 5 | 问题 7：getSectionNameCollision 语义错误 |
+| UPX | 1 | 问题 8/9：getImportFunctionName/getNumberOfImportThunks 参数错误 |
+| Enigma | 1 | 问题 7：ENIGMA 规则也用 getSectionNameCollision |
+| Bat To Exe Converter | 1 | 待调查：检查 packer_BatToExeConverter 规则 |
+| PyInstaller | 1 | 待调查：检查 packer_PyInstaller 规则 |
+| ASProtect | 2 | 待调查：检查 protector_ASProtect 规则 |
+
+### 非 packer 差异分析
+
+**diec-rust 漏检（上游多检测）**：
+- .NET Framework 版本（4 例）：diec-rust 只输出 CLR 版本，缺少 .NET Framework 版本号（如 "4.7.2"）
+- ELF Rust compiler（24 例）：ELF Rust 编译器检测完全缺失
+- MSVC "by EP" 版本（19 例）：入口点版本推断逻辑差异
+- OpenGL library（3 例）：OpenGL 库引用检测缺失
+- AutoIt format（1 例）：AutoIt 格式检测缺失
+
+**diec-rust 过度检测（diec-rust 多检测）**：
+- Records debug data（5 例）：diec-rust 多检测 debug data 记录
+- Windows Authenticode（4 例）：diec-rust 多检测签名工具
+- TASM32 compiler（3 例）：diec-rust 多检测 TASM32 编译器
+- XerinFuscator protector（1 例）：diec-rust 误检 protector
+
+**表面差异（不影响检测能力）**：
+- Unknown 占位（32-52 例）：上游输出 "Unknown" 占位检测，diec-rust 不输出
+- 版本格式差异（Borland Delphi/Go/MPRESS 等）：版本范围推断算法不同
+
+### ELF 差异分析
+- packer/protector 一致率 100%（ELF 无 packer/protector 漏检）
+- 检测一致率低（24-48%）主要由 Unknown 占位和 Rust compiler 漏检导致
+- 修复 Rust compiler 漏检 + Unknown 占位后，ELF 一致率应大幅提升
+
+### 修复优先级
+- P0：问题 7-9（VMProtect/UPX/Enigma 漏检）— 已有明确修复方案
+- P1：.NET Framework 版本、ELF Rust compiler、ASProtect — 影响检测能力
+- P2：过度检测项、版本格式差异、Unknown 占位 — 不影响核心检测能力
+
+## Phase 16 host API 语义修复分析（2026-08-23）
+
+### 根因分析
+
+v0.9.0 发布后大规模差分测试发现 8 个 host API 语义问题，根因可分为 3 类：
+
+1. **返回值类型/语义错误**（4 个）：
+   - `getResourceSection()` 返回文件偏移而非节索引
+   - `read_uint32`/`U32`/`readDword` 返回 u32 被 rquickjs 截断为 i32
+   - `isImportPositionHashPresent` 使用 FNV-1a 而非上游的 CRC32C
+   - 资源条目返回 RVA 而非文件偏移
+
+2. **数据解析不完整**（2 个）：
+   - 导入函数只读 OFT，OFT=0 时全部丢失（加壳 PE 常见）
+   - 资源目录只解析 2 层，缺少第 3 层（language 级）
+
+3. **参数签名不匹配**（3 个）：
+   - `getSectionNameCollision` 检查字面值而非共同前缀
+   - `getImportFunctionName` 只接受 1 参数而非 2
+   - `getNumberOfImportThunks` 不接受参数
+
+### 修复效果
+
+packer/protector 检测一致率从 98.4% 提升至 **100%**（500 个 PE 恶意样本），
+所有 10 个 P0 漏检样本（VMProtect/UPX/Enigma/PyInstaller/Bat To Exe Converter）
+全部修复。
+
+### Phase 16.7 非 packer 检测差异修复（2026-08-23 续）
+
+#### 修复的问题
+
+1. **Unknown 占位检测**（39 次差异）：
+   - 上游引擎在无检测时自动添加 "Unknown" 占位
+   - 在 `scan_bytes` 和 `Scanner::scan_bytes` 末尾添加 Unknown 占位逻辑
+
+2. **`$` 相对偏移跳转**（21+ 次差异）：
+   - `$` 在签名中不是通配符，而是相对偏移跳转标记
+   - `$$$$$$$$` (8 个 `$`) = 读取 4 字节有符号整数，计算跳转目标
+   - 在 `compareEP` 中实现 PE-aware 的签名匹配（`_peCompareSigWithJumps`）
+   - 使用 `OffsetToRVA` + `_peRvaToFileOffset` 进行 RVA↔offset 转换
+
+3. **`getResourceNameOffset` 返回值**（3 次过度检测）：
+   - 找不到资源名时返回 0 而非 -1
+   - 规则用 `!== -1` 判断，0 被误认为找到
+   - 修正为返回 -1
+
+#### 修复效果
+
+| 指标 | 修复前 | 修复后 |
+|------|--------|--------|
+| pe_malicious 检测一致率 | 81.8% | **93.6%** |
+| pe_malicious packer 一致率 | 100% | **100%** |
+| pe_benign 检测一致率 | 67.0% | **73.0%** |
+| pe_benign packer 一致率 | 100% | **100%** |
+
+#### 第四轮修复（cleanString + getAddressOfEntryPoint）
+
+1. **`File.cleanString` no-op 修复**：
+   - 上游 `XBinary::cleanString` 只保留字母、数字和标点
+   - diec-rust 的 `cleanString` 是 no-op，导致控制字符残留
+   - .NET Framework 版本 "4.7.2\x01" 被 `append("CLR 4.0.30319")` 后
+     变成 "CLR 4.0.30319" 而非 "4.7.2, CLR 4.0.30319"
+   - 修复：实现 `cleanString` 过滤非字母数字/标点字符
+
+2. **`PE.getAddressOfEntryPoint` 语义修复**：
+   - 上游返回 `ImageBase + AddressOfEntryPoint`（虚拟地址）
+   - diec-rust 返回 `AddressOfEntryPoint`（RVA）
+   - 当 EP RVA=0 时，上游返回 ImageBase（非0），我们返回 0
+   - 导致 `archive_Resources.6.sg` 的 `EP == 0` 条件误触发
+   - 修复：返回 `_peImageBase() + _peEntryPoint()`
+
+#### 修复效果
+
+| 指标 | 修复前 | 修复后 |
+|------|--------|--------|
+| pe_malicious 检测一致率 | 81.8% | **93.8%** |
+| pe_benign 检测一致率 | 67.0% | **93.0%** |
+| packer 一致率 | 100% | **100%** |

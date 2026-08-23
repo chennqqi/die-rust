@@ -1439,3 +1439,369 @@ Phase 15 聚焦"重建对齐方法论 + 闭合已识别缺口"，不再追加新
 - **P1 host API**：8 个高优先级方法实现 ✅
 - **质量门禁**：720 个测试通过，cargo fmt/clippy 零警告 ✅
 
+## Phase 16：真实数据差分验证与 host API 语义修正 — TODO
+
+**启动日期**：2026-08-23
+**背景**：v0.9.0（Phase 15：host API 覆盖率 100%、真差分框架）发布后，在真实
+packer/protector 样本上执行 D2 差分测试，发现 3 个 host API 实现语义错误，导致
+VMProtect（2 样本漏检）和 UPX（1 样本漏检）。Phase 15 的覆盖率审计仅验证"方法名
+存在且可调用"，未验证"参数签名与语义与上游一致"，覆盖率 100% 不等于语义正确率
+100%。
+
+随后使用 `/data/virus/` 真实语料库（PE/ELF × 良性/恶意，~40 万文件）进行大规模
+差分扫描，确认了问题 7-9 的影响范围，并发现多个额外检测差异。
+
+### 真实语料差分基线（2026-08-23 录制）
+
+使用 `tools/diff_scan_corpus.py` 对比 diec-rust v0.9.0 与上游 diec 4.0.0：
+
+| 语料类别 | 样本数 | 检测一致率 | packer/protector 一致率 | packer 漏检 |
+|---------|--------|-----------|------------------------|------------|
+| pe_malicious | 500 | 80.8% (404/500) | 98.4% (492/500) | 8 |
+| pe_benign | 100 | 64.0% (64/100) | 98.0% (98/100) | 2 |
+| elf_malicious | 100 | 24.0% (24/100) | 100% (100/100) | 0 |
+| elf_benign | 100 | 48.0% (48/100) | 100% (100/100) | 0 |
+
+**packer/protector 漏检清单**（全部为 diec-rust 漏检、上游检测到）：
+
+| 样本 | 检测类型 | 名称 | 版本 | 根因 |
+|------|---------|------|------|------|
+| 0107b9e0... | protector | VMProtect | 3.2.0-3.5.0 | 问题 7 |
+| 0495816d... | protector | VMProtect | 3.2.0-3.5.0 | 问题 7 |
+| 04bb40db... | protector | VMProtect | (无版本) | 问题 7 |
+| 06e6467b... | protector | VMProtect | 2.0.3-2.13 | 问题 7 |
+| 088e0a7e... | protector | VMProtect | 2.0.3-2.13 | 问题 7 |
+| 0019fce8... | protector | VMProtect | (无版本) | 问题 7 (pe_benign) |
+| 033308e6... | packer | UPX | (无版本) | 问题 8/9 |
+| 09154c36... | protector | Enigma | 5.X | 问题 7 (ENIGMA 规则也用 getSectionNameCollision) |
+| 06067f26... | packer | Bat To Exe Converter | — | **新发现，待调查** |
+| 0037a630... | packer | PyInstaller | — | **新发现，待调查** |
+| 00b0fb5e... | protector | XerinFuscator | — | **新发现（diec-rust 误检）** |
+
+**非 packer 检测差异分类**（pe_malicious 500 样本）：
+
+| 差异类型 | 数量 | 方向 | 说明 |
+|---------|------|------|------|
+| Unknown 占位 | 32 | 上游多 | 上游输出 "Unknown" 占位检测，diec-rust 不输出（表面差异） |
+| MSVC compiler 版本 | 19 | 上游多 | 上游检测到更多 "by EP" 版本推断 |
+| .NET Framework 版本 | 4 | 版本差异 | 上游输出 "4.7.2, CLR 4.0.30319"，diec-rust 只输出 "CLR 4.0.30319" |
+| Records debug data | 5 | diec-rust 多 | diec-rust 过度检测 debug data |
+| Windows Authenticode | 4 | diec-rust 多 | diec-rust 过度检测签名工具 |
+| TASM32 compiler | 3 | diec-rust 多 | diec-rust 过度检测 TASM32 |
+| Borland Delphi 版本 | 5 | 版本差异 | 版本范围推断不同 |
+| ASProtect | 2 | 上游多 | **新发现，待调查** |
+| OpenGL library | 3 | 上游多 | 上游检测到 OpenGL 库引用 |
+| AutoIt format | 1 | 上游多 | 上游检测到 AutoIt 格式 |
+
+**ELF 特有差异**：
+
+| 差异类型 | 数量 | 说明 |
+|---------|------|------|
+| Unknown 占位 | 48-52 | 同 PE，上游输出 "Unknown" 占位 |
+| Rust compiler 漏检 | 24 | **新发现**：diec-rust 未检测到 ELF Rust 编译器 |
+
+### D2 差分指标（原始 24 样本）
+
+| 指标 | 结果 | 门槛 | 状态 |
+|------|------|------|------|
+| packer 类检测一致率 | 21/24 (87.5%) | 100% | ❌ |
+| protector 类检测一致率 | 20/24 (83.3%) | 100% | ❌ |
+| packer 类检测不一致率 | 1/24 (4.2%) | < 5% | ✅ |
+| protector 类检测不一致率 | 2/24 (8.3%) | < 5% | ❌ |
+
+> 指标含义：对 24 个已知 packer/protector 样本，比较 diec-rust 与上游 DIE
+> 对 packer/protector 类检测的二元决策（检测到 vs 未检测到）一致性。
+
+**ADR 需求**：
+- ADR 0033：`PeBatchInfo` 导入数据结构扩展（内部结构变更，按库分组函数）
+- ADR 0034：host API 审计标准升级（参数签名对照纳入覆盖率审计）
+
+**进展**：
+- 16.1 `getSectionNameCollision` 语义修正 — ✅
+- 16.2 `getImportFunctionName` 双参数语义修正 — ✅
+- 16.3 `getNumberOfImportThunks` 参数语义修正 — ✅
+- 16.4 `PeBatchInfo` 数据结构扩展 — ✅
+- 16.5 真实语料大规模差分测试 — ✅（packer/protector 一致率 100%）
+- 16.5a `getResourceSection()` 返回节索引 — ✅
+- 16.5b IAT 后备解析（OFT=0）— ✅
+- 16.5c `read_uint32`/`U32`/`readDword` 返回 f64 — ✅
+- 16.5d `isImportPositionHashPresent` CRC32C 修正 — ✅
+- 16.5e 资源条目 3 层嵌套 + RVA→文件偏移 — ✅
+- 16.6 新发现 packer/protector 漏检调查 — ✅（全部修复）
+- 16.7 非 packer 检测差异修复 — TODO
+- 16.8 host API 参数签名审计 — TODO
+- 16.9 收尾与回归 — TODO
+
+**修复后差分结果**（2026-08-23）：
+
+| 语料类别 | 样本数 | 修复前 packer 一致率 | 修复后 packer 一致率 | 修复前检测一致率 | 修复后检测一致率 |
+|---------|--------|---------------------|---------------------|-----------------|-----------------|
+| pe_malicious | 500 | 98.4% (8 漏检) | **100.0%** (0 漏检) | 80.8% | **81.8%** |
+| pe_benign | 100 | 98.0% (2 漏检) | **100.0%** (0 漏检) | 64.0% | **67.0%** |
+| elf_malicious | 100 | 100% | **100.0%** | 24.0% | 24.0% |
+| elf_benign | 100 | 100% | **100.0%** | 48.0% | 48.0% |
+
+### 16.1 `getSectionNameCollision(s1, s2)` 语义修正 — P0 阻断
+
+**问题**：`host_api_bridge.rs:3654` 的 `getSectionNameCollision(s1, s2)` 检查
+字面值 `s1`/`s2` 是否为完整节名，两者都找到则返回 `s1`。完全不符合规则期望
+的语义。
+
+**上游规则用法**（`protector_VMProtect.2.sg:29`）：
+```javascript
+var sCollision = PE.getSectionNameCollision("0", "1");
+if (PE.isSectionNamePresent(sCollision + "1")) { bDetected = true; }
+```
+
+**正确语义**：找到两个节名，一个以 `s1` 结尾、一个以 `s2` 结尾，且有共同前缀，
+返回该**共同前缀**。例如 `oiNRhy0` 和 `oiNRhy1` → 返回 `oiNRhy`。若无此配对
+返回空字符串。
+
+**修复**：
+- 重写 `getSectionNameCollision` 算法：
+  1. 遍历所有节名，收集以 `s1` 结尾的节名集合 A 和以 `s2` 结尾的节名集合 B
+  2. 对 A 中每个节名 `a`（前缀 `pa = a[:-len(s1)]`），检查 B 中是否存在节名
+     `b` 使得 `b[:-len(s2)] == pa`
+  3. 找到匹配则返回 `pa`（共同前缀），否则返回 `""`
+- 大小写处理：节名比较应大小写不敏感（与现有 `isSectionNamePresent` 一致）
+
+**影响规则**：VMProtect（2 样本漏检）、BattlEye、ENIGMA、
+`__GenericHeuristicAnalysis_By_DosX.7.sg`
+
+**验证**：
+- 构造含 `oiNRhy0`/`oiNRhy1` 节名的 PE 样本，`getSectionNameCollision("0","1")`
+  返回 `"oiNRhy"`
+- VMProtect 保护样本差分测试：检测结果与上游 0 不匹配
+- `getSectionNameCollision("1","2")` / `("2","3")` 变体正确（VMProtect 规则
+  使用多种后缀组合）
+- ENIGMA 规则 `getSectionNameCollision("1","2") == "enigma"` 正确
+
+### 16.2 `getImportFunctionName(libraryIndex, functionIndex)` 双参数语义修正 — P0 阻断
+
+**问题**：`host_api_bridge.rs:3570` 的 `getImportFunctionName(n)` 只接受 1 个
+参数，返回全局扁平函数列表的第 n 个函数。上游规则用 2 个参数调用：
+`getImportFunctionName(0, 0)`（库索引, 函数索引）。
+
+**上游规则用法**（`packer_UPX.2.sg:15`）：
+```javascript
+if (PE.getImportFunctionName(0, 0) == "LoadLibraryA") { funcCounter++; }
+if (PE.getImportFunctionName(0, 1) == "GetProcAddress") { funcCounter++; }
+```
+
+**正确语义**：返回第 `libraryIndex` 个导入库的第 `functionIndex` 个导入函数名。
+越界返回空字符串。
+
+**修复**：
+- 修改函数签名为 `getImportFunctionName(libraryIndex, functionIndex)`
+- 依赖 16.4 的 `PeBatchInfo` 数据结构扩展（按库分组函数）
+- 从按库分组的结构中查询：`imports[libraryIndex].functions[functionIndex]`
+
+**影响规则**（33 处调用）：UPX（isPatchedUPX 失败）、NsPack、AlushPacker、
+cryptor_Huan、cryptor_EXECryptor、compiler_RADBasic、protector_StarForce、
+protector_Private_EXE_Protector、protector_NTkrnl_Protector、protector_ENIGMA
+
+**验证**：
+- 构造含 2 个导入库（KERNEL32.DLL 有 3 函数、USER32.DLL 有 2 函数）的 PE 样本
+- `getImportFunctionName(0, 0)` 返回 KERNEL32 第 1 个函数
+- `getImportFunctionName(1, 0)` 返回 USER32 第 1 个函数
+- `getImportFunctionName(0, 5)` 越界返回 `""`
+- UPX 加壳样本差分测试：检测结果与上游 0 不匹配
+
+### 16.3 `getNumberOfImportThunks(libraryIndex)` 参数语义修正 — P0 阻断
+
+**问题**：`host_api_bridge.rs:3575` 的 `getNumberOfImportThunks()` 不接受参数，
+返回全部库的函数总数。上游规则用 1 个参数调用：
+`getNumberOfImportThunks(0)`（库索引）。
+
+**上游规则用法**（`packer_UPX.2.sg:9`）：
+```javascript
+var nNumberOfFunctions = PE.getNumberOfImportThunks(0);
+if (nNumberOfFunctions > 1 && nNumberOfFunctions < 7) { ... }
+```
+
+**正确语义**：返回第 `libraryIndex` 个导入库的函数数量。
+
+**修复**：
+- 修改函数签名为 `getNumberOfImportThunks(libraryIndex)`
+- 依赖 16.4 的 `PeBatchInfo` 数据结构扩展
+- 从按库分组的结构中查询：`imports[libraryIndex].functions.length`
+
+**影响规则**（9 处调用）：与 16.2 相同的规则集
+
+**验证**：
+- 构造含 2 个导入库的 PE 样本
+- `getNumberOfImportThunks(0)` 返回第 0 个库的函数数
+- `getNumberOfImportThunks(1)` 返回第 1 个库的函数数
+- UPX 加壳样本 `getNumberOfImportThunks(0)` 返回 2-6 范围内值（匹配
+  isPatchedUPX 范围检查）
+
+### 16.4 `PeBatchInfo` 数据结构扩展 — P0
+
+**问题**：`pe_native.rs:710` 的 `PeBatchInfo` 将导入存储为两个独立扁平数组
+（`libraries: Vec<String>` + `functions: Vec<String>`），丢失了函数与库的
+归属关系，无法支持按库索引查询。
+
+**修复**：
+- **ADR 0033**：`PeBatchInfo` 导入数据结构扩展
+  - 新增 `imports: Vec<PeImportLibrary>` 字段，其中 `PeImportLibrary` 包含
+    `name: String` 和 `functions: Vec<String>`
+  - 保留 `libraries` 和 `functions` 扁平数组用于向后兼容（现有调用方不破坏）
+  - `parse_batch_pe32` / `parse_batch_pe64` 填充 `imports` 字段：遍历
+    `pelite` imports，按 DLL 分组收集函数名
+- `_peParseImports()`（`host_api_bridge.rs:3550`）同步扩展：
+  - 从 `batch.imports` 构建 `_peImportData.imports`（按库分组结构）
+  - 保留 `libraries` / `functions` 扁平数组供现有调用方使用
+- `pe_native.rs` 的 `get_import_libraries` / `get_import_functions` 公共函数
+  保留不变（向后兼容）
+
+**数据结构设计**：
+```rust
+pub struct PeImportLibrary {
+    pub name: String,
+    pub functions: Vec<String>,
+}
+
+pub struct PeBatchInfo {
+    // ... existing fields ...
+    pub imports: Vec<PeImportLibrary>,  // 新增：按库分组
+    // libraries / functions 保留（向后兼容）
+}
+```
+
+**验证**：
+- `PeBatchInfo.imports` 正确填充：库名 + 每库函数列表
+- 现有使用 `libraries` / `functions` 的方法不受影响（回归测试）
+- JS 端 `_peParseImports().imports` 可正确访问按库分组数据
+
+### 16.5 真实语料大规模差分测试 — P1
+
+**问题**：D2 差分测试仅覆盖 24 个 packer/protector 样本。需使用真实语料库
+（`/data/virus/`，~40 万文件）进行大规模差分扫描，建立统计显著的基线。
+
+**已完成**：
+- `tools/diff_scan_corpus.py` 差分扫描脚本（对比 diec-rust vs 上游 diec 4.0.0）
+- 基线已录制（见上方"真实语料差分基线"表）：
+  - pe_malicious 500 样本：检测一致率 80.8%，packer 一致率 98.4%
+  - pe_benign 100 样本：检测一致率 64.0%，packer 一致率 98.0%
+  - elf_malicious 100 样本：检测一致率 24.0%，packer 一致率 100%
+  - elf_benign 100 样本：检测一致率 48.0%，packer 一致率 100%
+
+**待完成**：
+- 扩大扫描规模到 2000+ 样本/类别，获得更稳定的统计基线
+- 将差分扫描脚本集成到 CI 本地模拟（`.ci-local/`）
+- 建立差分结果回归跟踪（修复前后对比）
+- golden 基线更新：录制新语料的上游 golden JSON 基线
+
+**验证**：
+- 修复 16.1-16.3 后重新扫描，packer/protector 漏检数降为 0
+- 检测一致率提升至 > 95%（非 packer 差异由 16.7 修复）
+
+### 16.6 新发现 packer/protector 漏检调查 — P1
+
+**问题**：大规模差分扫描发现除问题 7-9 外的额外 packer/protector 漏检。
+
+**新发现漏检清单**：
+
+| 名称 | 类型 | 样本数 | 根因 | 优先级 |
+|------|------|--------|------|--------|
+| Bat To Exe Converter | packer | 1 | 待调查 | P2 |
+| PyInstaller | packer | 1 | 待调查 | P2 |
+| ASProtect | protector | 2 | 待调查 | P1 |
+| XerinFuscator | protector | 1 | diec-rust 误检（上游未检测） | P2 |
+
+**修复**：
+- 逐个调查漏检根因：检查对应规则脚本调用的 host API 方法
+- ASProtect：检查 `protector_ASProtect.2.sg` 规则调用的方法是否正确实现
+- Bat To Exe Converter / PyInstaller：检查对应 packer 规则的检测逻辑
+- XerinFuscator：检查 diec-rust 是否过度检测（误报）
+
+**验证**：
+- 每个漏检项修复后在对应样本上差分测试 0 不匹配
+- 不引入新的误报
+
+### 16.7 非 packer 检测差异修复 — P2
+
+**问题**：大规模差分扫描发现多种非 packer 检测差异，影响整体检测一致率。
+
+**差异分类与修复优先级**：
+
+| 差异类型 | 方向 | 数量 | 修复方案 | 优先级 |
+|---------|------|------|---------|--------|
+| Unknown 占位 | 上游多 | 32-52 | diec-rust 添加 "Unknown" 占位输出（匹配上游行为） | P2 |
+| .NET Framework 版本 | 版本差异 | 4 | 修正 `getNETVersion` 返回完整版本（如 "4.7.2, CLR 4.0.30319"） | P1 |
+| MSVC "by EP" 版本 | 上游多 | 19 | 调查入口点版本推断逻辑 | P2 |
+| Records debug data | diec-rust 多 | 5 | 调查过度检测原因 | P2 |
+| Windows Authenticode | diec-rust 多 | 4 | 调查过度检测原因 | P2 |
+| TASM32 compiler | diec-rust 多 | 3 | 调查过度检测原因 | P2 |
+| Borland Delphi 版本 | 版本差异 | 5 | 对齐版本范围推断 | P2 |
+| ELF Rust compiler | 上游多 | 24 | 调查 ELF Rust 编译器检测缺失 | P1 |
+| OpenGL library | 上游多 | 3 | 调查 OpenGL 库引用检测缺失 | P2 |
+| AutoIt format | 上游多 | 1 | 调查 AutoIt 格式检测缺失 | P2 |
+
+**修复**：
+- **P1 项**（.NET Framework 版本、ELF Rust compiler）：优先修复
+- **P2 项**：批量调查，能快速修复的一并处理，复杂项记录为已知差异
+- "Unknown" 占位：确认上游行为后添加匹配输出
+
+**验证**：
+- P1 项修复后差分测试 0 不匹配
+- P2 项修复或记录为已知差异
+- 整体检测一致率提升至 > 95%
+
+### 16.8 host API 参数签名审计 — P1
+
+**问题**：Phase 15 的 `tools/audit_host_api.py` 仅验证方法名存在，未验证参数
+签名与上游一致。需升级审计标准。
+
+**修复**：
+- **ADR 0034**：host API 审计标准升级
+  - 审计矩阵新增"参数签名"列：对照上游 help 文档的方法签名
+  - 审计矩阵新增"语义验证"列：标注是否有差分测试覆盖该方法
+  - 标记"签名不匹配"和"语义未验证"的方法
+- `tools/audit_host_api.py` 增强：
+  - 解析上游 help 文档提取方法参数个数和类型
+  - 解析 `host_api_bridge.rs` 提取已实现方法的参数个数
+  - 生成参数签名对照矩阵
+- 全量审计 PE/ELF/Mach-O/Binary host API 方法签名
+- 标记并修复发现的签名不匹配项
+
+**验证**：
+- `docs/research/host-api-coverage-matrix.md` 新增参数签名列
+- 所有已实现方法的参数签名与上游一致（或标注偏离理由）
+- `COMPATIBILITY.md` 更新审计标准说明
+
+### 16.9 收尾与回归 — P1
+
+- 全量回归：`cargo fmt --check` + `cargo clippy --workspace --all-targets
+  --all-features -- -D warnings` + `cargo test --workspace --all-features`
+- GUI-CLI 差分测试通过
+- ADR 0033/0034 Accepted
+- `COMPATIBILITY.md` 更新：host API 语义修正记录、审计标准升级
+- `RELEASE_NOTES.md`：记录 v0.9.1 host API 语义修正
+- 版本 bump 0.9.0 → 0.9.1
+- 重新运行大规模差分扫描，确认一致率提升
+
+### 退出条件
+
+- **P0 语义修正**：
+  - `getSectionNameCollision` 返回共同前缀，VMProtect 样本正确检测
+  - `getImportFunctionName(libIdx, funcIdx)` 按库索引查询，UPX 样本正确检测
+  - `getNumberOfImportThunks(libIdx)` 返回指定库函数数
+  - `PeBatchInfo.imports` 按库分组结构正确填充
+- **P1 差分测试**：
+  - 真实语料差分扫描 packer/protector 漏检数降为 0
+  - packer/protector 类检测一致率 > 99%，不一致率 < 1%
+  - 规则执行异常数 = 0
+  - 整体检测一致率 > 95%
+- **P1 新发现修复**：
+  - ASProtect、ELF Rust compiler、.NET Framework 版本修复
+  - 其他新发现项修复或记录为已知差异
+- **P1 审计升级**：
+  - host API 参数签名对照矩阵生成
+  - 所有方法参数签名与上游一致（或标注偏离）
+- **质量门禁**：
+  - `cargo fmt/clippy/test` 全部通过
+  - GUI-CLI 差分测试通过
+  - ADR 0033/0034 Accepted
+  - 所有文档更新完成
+

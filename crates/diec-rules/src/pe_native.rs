@@ -706,12 +706,23 @@ fn read_u32_le(data: &[u8], offset: usize) -> u32 {
     ])
 }
 
+/// Imported library with its functions, grouped by DLL.
+#[derive(Clone, Debug, Default)]
+pub struct PeImportLibrary {
+    /// DLL name (e.g., "KERNEL32.DLL").
+    pub name: String,
+    /// Function names imported from this library, in import-table order.
+    pub functions: Vec<String>,
+}
+
 /// Batch PE parse result: imports, exports, and metadata in one pass.
 pub struct PeBatchInfo {
-    /// Imported library (DLL) names.
+    /// Imported library (DLL) names (flat list, backward compatible).
     pub libraries: Vec<String>,
-    /// Imported function names.
+    /// Imported function names (flat list, backward compatible).
     pub functions: Vec<String>,
+    /// Imports grouped by library (for per-library queries).
+    pub imports: Vec<PeImportLibrary>,
     /// Exported function names.
     pub exports: Vec<String>,
     /// Whether the PE has a .NET CLR header.
@@ -734,6 +745,39 @@ pub struct PeBatchInfo {
     pub net_unicode_strings: Vec<String>,
     /// .NET ANSI strings from #Strings heap, empty if not .NET.
     pub net_ansi_strings: Vec<String>,
+    /// CRC32C hashes of concatenated import function names per library.
+    /// Used by PE.isImportPositionHashPresent(libraryIndex, hash).
+    pub import_position_hashes: Vec<u32>,
+}
+
+/// Compute CRC32C (Castagnoli) with initial value 0 and final XOR.
+/// This matches XBinary::getStringCustomCRC32 from upstream DIE-engine.
+fn string_custom_crc32(s: &str) -> u32 {
+    let bytes = s.as_bytes();
+    let mut result: u32 = 0;
+    for &byte in bytes {
+        result ^= byte as u32;
+        for _ in 0..8 {
+            if result & 1 != 0 {
+                result = (result >> 1) ^ 0x82f63b78;
+            } else {
+                result >>= 1;
+            }
+        }
+    }
+    !result
+}
+
+/// Compute import position hashes for all libraries.
+/// Each hash is CRC32C of the concatenation of all function names in that library.
+fn compute_import_position_hashes(imports: &[PeImportLibrary]) -> Vec<u32> {
+    imports
+        .iter()
+        .map(|lib| {
+            let concatenated: String = lib.functions.iter().cloned().collect();
+            string_custom_crc32(&concatenated)
+        })
+        .collect()
 }
 
 /// Parse all PE information in a single pass to avoid repeated PeFile construction.
@@ -766,22 +810,31 @@ pub fn parse_batch(data: &[u8]) -> Option<PeBatchInfo> {
 fn parse_batch_pe64(file: pelite::pe64::PeFile<'_>) -> PeBatchInfo {
     let mut libraries = Vec::new();
     let mut functions = Vec::new();
-    if let Ok(imports) = file.imports() {
-        for desc in imports.iter() {
+    let mut imports = Vec::new();
+    if let Ok(imports_data) = file.imports() {
+        for desc in imports_data.iter() {
+            let mut lib_funcs = Vec::new();
+            let mut lib_name = String::new();
             if let Ok(name) = desc.dll_name()
                 && let Ok(s) = name.to_str()
-                && !libraries.contains(&s.to_string())
             {
-                libraries.push(s.to_string());
-            }
-            if let Ok(int) = desc.int() {
-                for imp in int {
-                    if let Ok(pelite::pe64::imports::Import::ByName { name, .. }) = imp
-                        && let Ok(s) = name.to_str()
-                    {
-                        functions.push(s.to_string());
-                    }
+                lib_name = s.to_string();
+                if !libraries.contains(&lib_name) {
+                    libraries.push(lib_name.clone());
                 }
+            }
+            // Try INT (OriginalFirstThunk) first, fall back to IAT (FirstThunk)
+            // when OFT is 0 (common in packed/minified PE files).
+            let parsed_funcs = parse_import_thunks_pe64(&desc);
+            for s in parsed_funcs {
+                functions.push(s.clone());
+                lib_funcs.push(s);
+            }
+            if !lib_name.is_empty() || !lib_funcs.is_empty() {
+                imports.push(PeImportLibrary {
+                    name: lib_name,
+                    functions: lib_funcs,
+                });
             }
         }
     }
@@ -808,10 +861,12 @@ fn parse_batch_pe64(file: pelite::pe64::PeFile<'_>) -> PeBatchInfo {
     let (manifest, file_version, product_version, number_of_resources) =
         parse_resource_info_pe64(&file);
     let resource_entries = parse_resource_entries_pe64(&file);
+    let import_position_hashes = compute_import_position_hashes(&imports);
 
     PeBatchInfo {
         libraries,
         functions,
+        imports,
         exports,
         is_net,
         is_signed,
@@ -823,29 +878,84 @@ fn parse_batch_pe64(file: pelite::pe64::PeFile<'_>) -> PeBatchInfo {
         resource_entries,
         net_unicode_strings: Vec::new(),
         net_ansi_strings: Vec::new(),
+        import_position_hashes,
     }
+}
+
+/// Parse import function names from a PE64 import descriptor.
+/// Tries INT (OriginalFirstThunk) first, falls back to IAT (FirstThunk).
+fn parse_import_thunks_pe64(
+    desc: &pelite::pe64::imports::Desc<'_, pelite::pe64::PeFile<'_>>,
+) -> Vec<String> {
+    // Try INT (OriginalFirstThunk) first.
+    if let Ok(int) = desc.int() {
+        let mut funcs = Vec::new();
+        for imp in int {
+            if let Ok(pelite::pe64::imports::Import::ByName { name, .. }) = imp
+                && let Ok(s) = name.to_str()
+            {
+                funcs.push(s.to_string());
+            }
+        }
+        if !funcs.is_empty() {
+            return funcs;
+        }
+    }
+    // Fall back to IAT (FirstThunk) when OFT is 0 or empty.
+    // Manually resolve each VA to import hint/name.
+    let pe = desc.pe();
+    let Ok(iat) = desc.iat() else {
+        return Vec::new();
+    };
+    let mut funcs = Vec::new();
+    for &va in iat {
+        if va == 0 {
+            break;
+        }
+        const IMAGE_ORDINAL_FLAG64: u64 = 0x8000000000000000;
+        if va & IMAGE_ORDINAL_FLAG64 != 0 {
+            // Import by ordinal, skip (no name).
+            continue;
+        }
+        let rva = va as u32;
+        if let Ok(name) = pe.derva_c_str(rva + 2)
+            && let Ok(s) = name.to_str()
+        {
+            funcs.push(s.to_string());
+        }
+    }
+    funcs
 }
 
 /// Parse batch info from a PE32 file.
 fn parse_batch_pe32(file: pelite::pe32::PeFile<'_>) -> PeBatchInfo {
     let mut libraries = Vec::new();
     let mut functions = Vec::new();
-    if let Ok(imports) = file.imports() {
-        for desc in imports.iter() {
+    let mut imports = Vec::new();
+    if let Ok(imports_data) = file.imports() {
+        for desc in imports_data.iter() {
+            let mut lib_funcs = Vec::new();
+            let mut lib_name = String::new();
             if let Ok(name) = desc.dll_name()
                 && let Ok(s) = name.to_str()
-                && !libraries.contains(&s.to_string())
             {
-                libraries.push(s.to_string());
-            }
-            if let Ok(int) = desc.int() {
-                for imp in int {
-                    if let Ok(pelite::pe32::imports::Import::ByName { name, .. }) = imp
-                        && let Ok(s) = name.to_str()
-                    {
-                        functions.push(s.to_string());
-                    }
+                lib_name = s.to_string();
+                if !libraries.contains(&lib_name) {
+                    libraries.push(lib_name.clone());
                 }
+            }
+            // Try INT (OriginalFirstThunk) first, fall back to IAT (FirstThunk)
+            // when OFT is 0 (common in packed/minified PE files).
+            let parsed_funcs = parse_import_thunks_pe32(&desc);
+            for s in parsed_funcs {
+                functions.push(s.clone());
+                lib_funcs.push(s);
+            }
+            if !lib_name.is_empty() || !lib_funcs.is_empty() {
+                imports.push(PeImportLibrary {
+                    name: lib_name,
+                    functions: lib_funcs,
+                });
             }
         }
     }
@@ -872,10 +982,12 @@ fn parse_batch_pe32(file: pelite::pe32::PeFile<'_>) -> PeBatchInfo {
     let (manifest, file_version, product_version, number_of_resources) =
         parse_resource_info_pe32(&file);
     let resource_entries = parse_resource_entries_pe32(&file);
+    let import_position_hashes = compute_import_position_hashes(&imports);
 
     PeBatchInfo {
         libraries,
         functions,
+        imports,
         exports,
         is_net,
         is_signed,
@@ -887,7 +999,52 @@ fn parse_batch_pe32(file: pelite::pe32::PeFile<'_>) -> PeBatchInfo {
         resource_entries,
         net_unicode_strings: Vec::new(),
         net_ansi_strings: Vec::new(),
+        import_position_hashes,
     }
+}
+
+/// Parse import function names from a PE32 import descriptor.
+/// Tries INT (OriginalFirstThunk) first, falls back to IAT (FirstThunk).
+fn parse_import_thunks_pe32(
+    desc: &pelite::pe32::imports::Desc<'_, pelite::pe32::PeFile<'_>>,
+) -> Vec<String> {
+    // Try INT (OriginalFirstThunk) first.
+    if let Ok(int) = desc.int() {
+        let mut funcs = Vec::new();
+        for imp in int {
+            if let Ok(pelite::pe32::imports::Import::ByName { name, .. }) = imp
+                && let Ok(s) = name.to_str()
+            {
+                funcs.push(s.to_string());
+            }
+        }
+        if !funcs.is_empty() {
+            return funcs;
+        }
+    }
+    // Fall back to IAT (FirstThunk) when OFT is 0 or empty.
+    let pe = desc.pe();
+    let Ok(iat) = desc.iat() else {
+        return Vec::new();
+    };
+    let mut funcs = Vec::new();
+    for &va in iat {
+        if va == 0 {
+            break;
+        }
+        const IMAGE_ORDINAL_FLAG32: u32 = 0x80000000;
+        if va & IMAGE_ORDINAL_FLAG32 != 0 {
+            // Import by ordinal, skip (no name).
+            continue;
+        }
+        let rva = va;
+        if let Ok(name) = pe.derva_c_str(rva + 2)
+            && let Ok(s) = name.to_str()
+        {
+            funcs.push(s.to_string());
+        }
+    }
+    funcs
 }
 
 /// Extract resource info (manifest, version, resource count) from a PE file.
@@ -950,7 +1107,9 @@ fn parse_resource_info_pe32(file: &pelite::pe32::PeFile<'_>) -> (String, String,
     (manifest, file_version, product_version, number_of_resources)
 }
 
-/// Extract resource entries (name_or_id, type_id, offset, size) from a PE64 file.
+/// Extract resource entries (name_or_id, type_id, file_offset, size) from a PE64 file.
+/// Handles 3-level resource directory nesting (type → name → language).
+/// Converts RVAs to file offsets for use by PE.getResourceOffsetByNumber.
 fn parse_resource_entries_pe64(file: &pelite::pe64::PeFile<'_>) -> Vec<(String, u32, u32, u32)> {
     let Ok(res) = file.resources() else {
         return Vec::new();
@@ -965,22 +1124,42 @@ fn parse_resource_entries_pe64(file: &pelite::pe64::PeFile<'_>) -> Vec<(String, 
             _ => 0,
         };
         if let Ok(pelite::resources::Entry::Directory(type_dir)) = type_entry.entry() {
-            for res_entry in type_dir.entries() {
-                let name = match res_entry.name() {
-                    Ok(pelite::resources::Name::Id(id)) => format!("#{}", id),
-                    Ok(pelite::resources::Name::Wide(ws)) => String::from_utf16_lossy(ws),
-                    _ => String::new(),
-                };
-                if let Ok(pelite::resources::Entry::DataEntry(data)) = res_entry.entry() {
-                    entries.push((name, type_id, data.image().OffsetToData, data.image().Size));
-                }
-            }
+            collect_resource_entries_pe64(file, &type_dir, type_id, &mut entries);
         }
     }
     entries
 }
 
-/// Extract resource entries (name_or_id, type_id, offset, size) from a PE32 file.
+/// Recursively collect resource data entries from a PE64 resource directory.
+fn collect_resource_entries_pe64(
+    file: &pelite::pe64::PeFile<'_>,
+    dir: &pelite::resources::Directory<'_>,
+    type_id: u32,
+    entries: &mut Vec<(String, u32, u32, u32)>,
+) {
+    for res_entry in dir.entries() {
+        let name = match res_entry.name() {
+            Ok(pelite::resources::Name::Id(id)) => format!("#{}", id),
+            Ok(pelite::resources::Name::Wide(ws)) => String::from_utf16_lossy(ws),
+            _ => String::new(),
+        };
+        match res_entry.entry() {
+            Ok(pelite::resources::Entry::DataEntry(data)) => {
+                let rva = data.image().OffsetToData;
+                let file_off = file.rva_to_file_offset(rva).unwrap_or(0) as u32;
+                entries.push((name, type_id, file_off, data.image().Size));
+            }
+            Ok(pelite::resources::Entry::Directory(sub_dir)) => {
+                collect_resource_entries_pe64(file, &sub_dir, type_id, entries);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Extract resource entries (name_or_id, type_id, file_offset, size) from a PE32 file.
+/// Handles 3-level resource directory nesting (type → name → language).
+/// Converts RVAs to file offsets for use by PE.getResourceOffsetByNumber.
 fn parse_resource_entries_pe32(file: &pelite::pe32::PeFile<'_>) -> Vec<(String, u32, u32, u32)> {
     let Ok(res) = file.resources() else {
         return Vec::new();
@@ -995,19 +1174,37 @@ fn parse_resource_entries_pe32(file: &pelite::pe32::PeFile<'_>) -> Vec<(String, 
             _ => 0,
         };
         if let Ok(pelite::resources::Entry::Directory(type_dir)) = type_entry.entry() {
-            for res_entry in type_dir.entries() {
-                let name = match res_entry.name() {
-                    Ok(pelite::resources::Name::Id(id)) => format!("#{}", id),
-                    Ok(pelite::resources::Name::Wide(ws)) => String::from_utf16_lossy(ws),
-                    _ => String::new(),
-                };
-                if let Ok(pelite::resources::Entry::DataEntry(data)) = res_entry.entry() {
-                    entries.push((name, type_id, data.image().OffsetToData, data.image().Size));
-                }
-            }
+            collect_resource_entries_pe32(file, &type_dir, type_id, &mut entries);
         }
     }
     entries
+}
+
+/// Recursively collect resource data entries from a PE32 resource directory.
+fn collect_resource_entries_pe32(
+    file: &pelite::pe32::PeFile<'_>,
+    dir: &pelite::resources::Directory<'_>,
+    type_id: u32,
+    entries: &mut Vec<(String, u32, u32, u32)>,
+) {
+    for res_entry in dir.entries() {
+        let name = match res_entry.name() {
+            Ok(pelite::resources::Name::Id(id)) => format!("#{}", id),
+            Ok(pelite::resources::Name::Wide(ws)) => String::from_utf16_lossy(ws),
+            _ => String::new(),
+        };
+        match res_entry.entry() {
+            Ok(pelite::resources::Entry::DataEntry(data)) => {
+                let rva = data.image().OffsetToData;
+                let file_off = file.rva_to_file_offset(rva).unwrap_or(0) as u32;
+                entries.push((name, type_id, file_off, data.image().Size));
+            }
+            Ok(pelite::resources::Entry::Directory(sub_dir)) => {
+                collect_resource_entries_pe32(file, &sub_dir, type_id, entries);
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Get the PE import library names.

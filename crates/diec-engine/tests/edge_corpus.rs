@@ -178,10 +178,12 @@ fn edge_corpus_no_spurious_detections() {
 
         if let Ok(result) = scan_bytes(&database, filename, data, ScanFlags::default(), &cancel) {
             // Check for spurious detections.
-            if !result.detections.is_empty() {
+            // The "Unknown" placeholder is not spurious — it matches upstream.
+            if result.detections.iter().any(|d| d.name != "Unknown") {
                 let detections: Vec<String> = result
                     .detections
                     .iter()
+                    .filter(|d| d.name != "Unknown")
                     .map(|d| format!("{}:{}", d.type_name, d.name))
                     .collect();
                 spurious.push(format!(

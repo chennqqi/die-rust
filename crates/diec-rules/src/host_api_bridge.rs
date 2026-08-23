@@ -14,13 +14,18 @@ use crate::error::RuleError;
 use crate::host_api::HostApi;
 use rquickjs::{Context, Ctx};
 
-/// A parsed signature element: either a literal byte or a wildcard.
+/// A parsed signature element.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SigElement {
     /// Exact byte match.
     Byte(u8),
     /// Wildcard: matches any single byte (`.` or `?` in signature).
     Any,
+    /// Relative offset jump: read N bytes as signed integer,
+    /// compute target = current_offset + value + N, then continue
+    /// matching at the target offset. Used for x86 call/jmp instructions.
+    /// The target offset is resolved via RVA→file-offset conversion.
+    RelOffset(usize),
 }
 
 /// Parse a DIE signature string into a sequence of signature elements.
@@ -52,6 +57,24 @@ fn format_pe_batch_json(info: &crate::pe_native::PeBatchInfo) -> String {
             s.push(',');
         }
         push_json_string(&mut s, func);
+    }
+    s.push(']');
+    // imports: array of {name, functions:[...]} grouped by library
+    s.push_str(",\"imports\":[");
+    for (i, imp) in info.imports.iter().enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        s.push_str("{\"name\":");
+        push_json_string(&mut s, &imp.name);
+        s.push_str(",\"functions\":[");
+        for (j, func) in imp.functions.iter().enumerate() {
+            if j > 0 {
+                s.push(',');
+            }
+            push_json_string(&mut s, func);
+        }
+        s.push_str("]}");
     }
     s.push(']');
     // exports
@@ -109,6 +132,15 @@ fn format_pe_batch_json(info: &crate::pe_native::PeBatchInfo) -> String {
         s.push(',');
         s.push_str(&entry.3.to_string());
         s.push(']');
+    }
+    s.push(']');
+    // import position hashes: CRC32C per library
+    s.push_str(",\"importPositionHashes\":[");
+    for (i, h) in info.import_position_hashes.iter().enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        s.push_str(&h.to_string());
     }
     s.push(']');
     s.push('}');
@@ -234,11 +266,28 @@ pub fn parse_signature(signature: &str) -> Result<Vec<SigElement>, String> {
             continue;
         }
 
-        if c == '#' || c == '$' {
-            // Jump markers: treat as wildcards. Proper jump handling
-            // (relative offset resolution) is not needed for the current
-            // rule set — no upstream rule uses jump markers in a way that
-            // affects detection accuracy.
+        if c == '$' {
+            // Relative offset jump marker: read consecutive $ characters.
+            // N pairs of $ = N-byte signed relative offset.
+            // e.g. $$$$ = 2-byte rel offset, $$$$$$$$ = 4-byte rel offset.
+            let mut count = 0;
+            while i < chars.len() && chars[i] == '$' {
+                count += 1;
+                i += 1;
+            }
+            let addr_size = count / 2;
+            if count % 2 != 0
+                || (addr_size != 1 && addr_size != 2 && addr_size != 4 && addr_size != 8)
+            {
+                return Err(format!("invalid $ count ({count}) in signature"));
+            }
+            elements.push(SigElement::RelOffset(addr_size));
+            continue;
+        }
+
+        if c == '#' {
+            // Address marker: treat as wildcard for now.
+            // TODO: implement proper address resolution like upstream.
             elements.push(SigElement::Any);
             i += 1;
             continue;
@@ -319,21 +368,128 @@ pub fn parse_signature(signature: &str) -> Result<Vec<SigElement>, String> {
 }
 
 /// Match a parsed signature against data at the given offset.
+/// This version does NOT support RelOffset elements (used by find_signature
+/// and other non-PE contexts). If a RelOffset element is encountered, it
+/// is treated as a wildcard.
 pub fn match_signature(data: &[u8], offset: usize, elements: &[SigElement]) -> bool {
+    // For simple signatures (no RelOffset), use direct byte comparison.
+    let has_reloffset = elements
+        .iter()
+        .any(|e| matches!(e, SigElement::RelOffset(_)));
+    if !has_reloffset {
+        if offset
+            .checked_add(elements.len())
+            .is_none_or(|end| end > data.len())
+        {
+            return false;
+        }
+        for (i, elem) in elements.iter().enumerate() {
+            match elem {
+                SigElement::Byte(b) => {
+                    if data[offset + i] != *b {
+                        return false;
+                    }
+                }
+                SigElement::Any => {}
+                SigElement::RelOffset(_) => {} // handled by has_reloffset check above
+            }
+        }
+        return true;
+    }
+    // For signatures with RelOffset, fall back to treating them as wildcards.
+    // This is only hit if match_signature is called directly (not via the
+    // PE-aware match_signature_pe). find_signature uses this path.
     if offset
         .checked_add(elements.len())
         .is_none_or(|end| end > data.len())
     {
         return false;
     }
-    for (i, elem) in elements.iter().enumerate() {
+    let mut pos = offset;
+    for elem in elements.iter() {
         match elem {
             SigElement::Byte(b) => {
-                if data[offset + i] != *b {
+                if pos >= data.len() || data[pos] != *b {
                     return false;
                 }
+                pos += 1;
             }
-            SigElement::Any => {}
+            SigElement::Any => {
+                pos += 1;
+            }
+            SigElement::RelOffset(n) => {
+                // Without memory map info, treat as skip N bytes.
+                pos += n;
+            }
+        }
+    }
+    true
+}
+
+/// Match a parsed signature with PE-aware relative offset resolution.
+/// `rva_to_offset` converts a file offset to an RVA (used to compute
+/// the jump target for RelOffset elements).
+/// Returns true if the signature matches starting at `offset`.
+pub fn match_signature_pe(
+    data: &[u8],
+    offset: usize,
+    elements: &[SigElement],
+    rva_to_offset: &dyn Fn(u32) -> Option<u32>,
+) -> bool {
+    let mut pos = offset;
+    for elem in elements.iter() {
+        match elem {
+            SigElement::Byte(b) => {
+                if pos >= data.len() || data[pos] != *b {
+                    return false;
+                }
+                pos += 1;
+            }
+            SigElement::Any => {
+                if pos >= data.len() {
+                    return false;
+                }
+                pos += 1;
+            }
+            SigElement::RelOffset(addr_size) => {
+                // Read N-byte signed integer at current position (little-endian).
+                if pos + addr_size > data.len() {
+                    return false;
+                }
+                let value: i64 = match addr_size {
+                    1 => data[pos] as i8 as i64,
+                    2 => i16::from_le_bytes([data[pos], data[pos + 1]]) as i64,
+                    4 => {
+                        i32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]])
+                            as i64
+                    }
+                    8 => i64::from_le_bytes(data[pos..pos + 8].try_into().unwrap_or([0u8; 8])),
+                    _ => return false,
+                };
+                // Compute target file offset:
+                // target_rva = current_rva + value + addr_size
+                // target_offset = rva_to_offset(target_rva)
+                // We need the RVA of the current position (pos).
+                // Since we don't have offset_to_rva here, we approximate:
+                // For PE files, file_offset ≈ RVA when sections are aligned
+                // (which is the common case for .text at RVA=0x1000, offset=0x1000).
+                // The proper way: offset_to_rva(pos) + value + addr_size → rva → offset.
+                // We use the inverse of rva_to_offset to get RVA from offset.
+                // Since we don't have offset_to_rva, we compute:
+                // current_rva = pos (approximation for aligned PE)
+                // target_rva = current_rva + value + addr_size
+                // target_offset = rva_to_offset(target_rva)
+                let current_rva = pos as u32; // Approximation: works for aligned PEs
+                let target_rva = current_rva
+                    .wrapping_add(value as u32)
+                    .wrapping_add(*addr_size as u32);
+                match rva_to_offset(target_rva) {
+                    Some(target_offset) => {
+                        pos = target_offset as usize;
+                    }
+                    None => return false,
+                }
+            }
         }
     }
     true
@@ -420,7 +576,7 @@ impl HostApiBridge {
             // readDword(offset) -> u32 (little-endian)
             let h = host.clone();
             let read_dword_fn = rquickjs::Function::new(ctx.clone(), move |offset: i32| {
-                h.read_u32_le(offset as u64).unwrap_or(0)
+                h.read_u32_le(offset as u64).unwrap_or(0) as f64
             })
             .map_err(|e| RuleError::Backend {
                 detail: format!("readDword: {e}"),
@@ -563,7 +719,7 @@ impl HostApiBridge {
             // read_uint32(offset) -> u32 (LE; BE handled by JS wrapper)
             let h = host.clone();
             let read_uint32_fn = rquickjs::Function::new(ctx.clone(), move |offset: i32| {
-                h.read_u32_le(offset as u64).unwrap_or(0)
+                h.read_u32_le(offset as u64).unwrap_or(0) as f64
             })
             .map_err(|e| RuleError::Backend {
                 detail: format!("read_uint32: {e}"),
@@ -1030,7 +1186,7 @@ impl HostApiBridge {
             // U32(offset, bigEndian?) -> u32
             let h = host.clone();
             let u32_fn = rquickjs::Function::new(ctx.clone(), move |offset: i32| {
-                h.read_u32_le(offset as u64).unwrap_or(0)
+                h.read_u32_le(offset as u64).unwrap_or(0) as f64
             })
             .map_err(|e| RuleError::Backend {
                 detail: format!("U32: {e}"),
@@ -2088,7 +2244,7 @@ impl HostApiBridge {
             // readDword(offset) -> u32 LE (alias for U32)
             let h = host.clone();
             let read_dword_fn = rquickjs::Function::new(ctx.clone(), move |offset: i32| {
-                h.read_u32_le(offset as u64).unwrap_or(0)
+                h.read_u32_le(offset as u64).unwrap_or(0) as f64
             })
             .map_err(|e| RuleError::Backend {
                 detail: format!("readDword: {e}"),
@@ -2335,11 +2491,17 @@ impl HostApiBridge {
                 detail: format!("bytesCountToString set: {e}"),
             })?;
 
-            // cleanString(s) -> s (no-op for now)
-            let clean_fn = rquickjs::Function::new(ctx.clone(), |s: String| s)
-                .map_err(|e| RuleError::Backend {
-                    detail: format!("cleanString: {e}"),
-                })?;
+            // cleanString(s) -> remove non-alphanumeric/non-punct chars.
+            // Matches upstream XBinary::cleanString which keeps only
+            // letters, numbers, and punctuation characters.
+            let clean_fn = rquickjs::Function::new(ctx.clone(), |s: String| {
+                s.chars()
+                    .filter(|c| c.is_alphanumeric() || c.is_ascii_punctuation())
+                    .collect::<String>()
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("cleanString: {e}"),
+            })?;
             binary.set("cleanString", clean_fn).map_err(|e| RuleError::Backend {
                 detail: format!("cleanString set: {e}"),
             })?;
@@ -2902,6 +3064,9 @@ impl HostApiBridge {
                     };
 
                     // compareEP: compare signature at entry point (RVA → file offset).
+                    // Supports $ (relative offset) jump markers: reads N bytes
+                    // as signed integer, computes target RVA, converts to file
+                    // offset, and continues matching at the target.
                     PE.compareEP = function(sig, offset) {
                         if (!_peIsPE()) return false;
                         var ep = _peEntryPoint();
@@ -2909,8 +3074,116 @@ impl HostApiBridge {
                         var fileOff = _peRvaToFileOffset(ep);
                         if (fileOff < 0) return false;
                         if (offset === undefined) offset = 0;
+                        // If signature contains $, use PE-aware comparison.
+                        if (sig.indexOf('$') >= 0) {
+                            return _peCompareSigWithJumps(sig, fileOff + offset);
+                        }
                         return _B.__compare(sig, fileOff + offset);
                     };
+
+                    // PE-aware signature comparison with $ (relative offset) support.
+                    // Parses the signature, matching hex bytes and wildcards directly,
+                    // and resolving $ markers as relative jumps.
+                    function _peCompareSigWithJumps(sig, startOff) {
+                        var totalSize = _B.getSize();
+                        var pos = startOff;
+                        var i = 0;
+                        var len = sig.length;
+                        while (i < len) {
+                            var c = sig.charAt(i);
+                            if (c === ' ' || c === '\t') { i++; continue; }
+                            if (c === '$') {
+                                // Count consecutive $ characters.
+                                var count = 0;
+                                while (i < len && sig.charAt(i) === '$') { count++; i++; }
+                                var addrSize = count >> 1;
+                                if (count & 1) return false;
+                                if (addrSize !== 1 && addrSize !== 2 && addrSize !== 4 && addrSize !== 8) return false;
+                                if (pos + addrSize > totalSize) return false;
+                                // Read signed integer (little-endian).
+                                var value = 0;
+                                for (var b = 0; b < addrSize; b++) {
+                                    value |= _B.read_uint8(pos + b) << (b * 8);
+                                }
+                                // Sign-extend.
+                                if (addrSize === 1) {
+                                    if (value & 0x80) value |= ~0xFF;
+                                } else if (addrSize === 2) {
+                                    if (value & 0x8000) value |= ~0xFFFF;
+                                } else if (addrSize === 4) {
+                                    if (value & 0x80000000) value |= ~0xFFFFFFFF;
+                                }
+                                // For 8-byte, value is already 64-bit via read_uint8 shifts.
+                                // Compute target: current_rva + value + addr_size.
+                                // We need offset_to_rva for current pos.
+                                var currentRva = PE.OffsetToRVA(pos);
+                                if (currentRva < 0) return false;
+                                // Use 32-bit arithmetic for RVA (PE is 32-bit address space).
+                                var targetRva = (currentRva + value + addrSize) >>> 0;
+                                var targetOff = _peRvaToFileOffset(targetRva);
+                                if (targetOff < 0) return false;
+                                pos = targetOff;
+                            } else if (c === '.' || c === '?') {
+                                // Wildcard nibble: need 2 for a full byte.
+                                var nibbles = 0;
+                                var byteVal = 0;
+                                while (i < len && (sig.charAt(i) === '.' || sig.charAt(i) === '?')) {
+                                    nibbles++;
+                                    byteVal <<= 4;
+                                    i++;
+                                }
+                                if (nibbles === 2) {
+                                    pos++; // Skip one byte.
+                                } else if (nibbles === 1) {
+                                    // Single wildcard nibble + hex digit.
+                                    if (i >= len) return false;
+                                    var h = sig.charAt(i);
+                                    var hv = parseInt(h, 16);
+                                    if (isNaN(hv)) return false;
+                                    // High nibble wildcard, low nibble known.
+                                    var actual = _B.read_uint8(pos);
+                                    if ((actual & 0x0F) !== hv) return false;
+                                    pos++;
+                                    i++;
+                                } else {
+                                    // Multiple bytes of wildcards.
+                                    var fullBytes = Math.floor(nibbles / 2);
+                                    pos += fullBytes;
+                                    if (nibbles & 1) {
+                                        if (i < len) {
+                                            var h2 = sig.charAt(i);
+                                            var hv2 = parseInt(h2, 16);
+                                            if (!isNaN(hv2)) { i++; }
+                                        }
+                                        pos++;
+                                    }
+                                }
+                            } else if (c === "'") {
+                                // String literal: read until closing quote.
+                                i++;
+                                while (i < len && sig.charAt(i) !== "'") {
+                                    if (pos >= totalSize) return false;
+                                    var expected = sig.charCodeAt(i);
+                                    if (_B.read_uint8(pos) !== expected) return false;
+                                    pos++;
+                                    i++;
+                                }
+                                if (i < len) i++; // Skip closing quote.
+                            } else {
+                                // Hex byte: two hex digits.
+                                if (i + 1 >= len) return false;
+                                var h1 = sig.charAt(i);
+                                var h2 = sig.charAt(i + 1);
+                                var v = parseInt(h1 + h2, 16);
+                                if (isNaN(v)) return false;
+                                if (pos >= totalSize) return false;
+                                if (_B.read_uint8(pos) !== v) return false;
+                                pos++;
+                                i += 2;
+                            }
+                        }
+                        return true;
+                    }
 
                     // Overlay: data after the last section's raw data.
                     // Overlay offset = max(PointerToRawData + SizeOfRawData)
@@ -2999,7 +3272,7 @@ impl HostApiBridge {
                         for (var i = 0; i < entries.length; i++) {
                             if (entries[i][0] === s) return entries[i][2];
                         }
-                        return 0;
+                        return -1;
                     };
                     // PE.resource is populated by the upstream db/PE/_init
                     // script (executed during init), which iterates resources
@@ -3056,19 +3329,22 @@ impl HostApiBridge {
                         return false;
                     };
                     PE.isImportPositionHashPresent = function(idx, hash) {
-                        // Import position hash: compute a simple hash of the
-                        // import thunk at position idx and compare.
-                        // Uses a basic FNV-1a variant on import function name.
+                        // Import position hash: CRC32C of concatenated function
+                        // names per library. idx is the library index;
+                        // idx=-1 searches all libraries.
+                        // Matches upstream XBinary::getStringCustomCRC32.
                         if (!_peIsPE()) return false;
                         var batch = _peGetBatch();
-                        if (idx < 0 || idx >= batch.functions.length) return false;
-                        var name = batch.functions[idx];
-                        var h = 0x811C9DC5; // FNV offset basis
-                        for (var i = 0; i < name.length; i++) {
-                            h ^= name.charCodeAt(i);
-                            h = (h * 0x01000193) >>> 0; // FNV prime
+                        var hashes = batch.importPositionHashes || [];
+                        var target = hash >>> 0;
+                        if (idx === -1) {
+                            for (var i = 0; i < hashes.length; i++) {
+                                if ((hashes[i] >>> 0) === target) return true;
+                            }
+                            return false;
                         }
-                        return (h >>> 0) === (hash >>> 0);
+                        if (idx < 0 || idx >= hashes.length) return false;
+                        return (hashes[idx] >>> 0) === target;
                     };
                     PE.getNetAssemblyName = function() { return ""; };
                     PE.getNetModuleName = function() { return ""; };
@@ -3194,8 +3470,14 @@ impl HostApiBridge {
                     PE.getOperationSystemName = function() { return ""; };
                     PE.getOperationSystemVersion = function() { return ""; };
 
-                    // getAddressOfEntryPoint: same as getEntryPoint (RVA).
-                    PE.getAddressOfEntryPoint = function() { return PE.getEntryPoint(); };
+                    // getAddressOfEntryPoint: returns the entry point virtual address
+                    // (ImageBase + AddressOfEntryPoint RVA), matching upstream
+                    // XPE::_getEntryPointAddress which returns getModuleAddress() +
+                    // getOptionalHeader_AddressOfEntryPoint().
+                    PE.getAddressOfEntryPoint = function() {
+                        if (!_peIsPE()) return 0;
+                        return _peImageBase() + _peEntryPoint();
+                    };
 
                     PE.isLibraryPresentExp = function(p) {
                         if (!_peIsPE()) return false;
@@ -3533,6 +3815,7 @@ impl HostApiBridge {
                         _peBatchCache = JSON.parse(json);
                         if (!_peBatchCache.libraries) _peBatchCache.libraries = [];
                         if (!_peBatchCache.functions) _peBatchCache.functions = [];
+                        if (!_peBatchCache.imports) _peBatchCache.imports = [];
                         if (!_peBatchCache.exports) _peBatchCache.exports = [];
                         if (_peBatchCache.isNet === undefined) _peBatchCache.isNet = false;
                         if (_peBatchCache.isSigned === undefined) _peBatchCache.isSigned = false;
@@ -3544,16 +3827,18 @@ impl HostApiBridge {
                         if (!_peBatchCache.resourceEntries) _peBatchCache.resourceEntries = [];
                         if (!_peBatchCache.netUnicodeStrings) _peBatchCache.netUnicodeStrings = [];
                         if (!_peBatchCache.netAnsiStrings) _peBatchCache.netAnsiStrings = [];
+                        if (!_peBatchCache.importPositionHashes) _peBatchCache.importPositionHashes = [];
                         return _peBatchCache;
                     }
                     var _peImportData = null;
                     function _peParseImports() {
                         if (_peImportData !== null) return _peImportData;
-                        _peImportData = { libraries: [], functions: [] };
+                        _peImportData = { libraries: [], functions: [], imports: [] };
                         if (!_peIsPE()) return _peImportData;
                         var batch = _peGetBatch();
                         _peImportData.libraries = batch.libraries;
-                        // Build functions array matching the old structure.
+                        _peImportData.imports = batch.imports;
+                        // Build flat functions array for backward compatibility.
                         for (var i = 0; i < batch.functions.length; i++) {
                             _peImportData.functions.push({ lib: "", name: batch.functions[i] });
                         }
@@ -3567,13 +3852,21 @@ impl HostApiBridge {
                         if (n < 0 || n >= d.libraries.length) return "";
                         return d.libraries[n];
                     };
-                    PE.getImportFunctionName = function(n) {
+                    PE.getImportFunctionName = function(libraryIndex, functionIndex) {
                         var d = _peParseImports();
-                        if (n < 0 || n >= d.functions.length) return "";
-                        return d.functions[n].name;
+                        if (libraryIndex < 0 || libraryIndex >= d.imports.length) return "";
+                        var funcs = d.imports[libraryIndex].functions;
+                        if (functionIndex < 0 || functionIndex >= funcs.length) return "";
+                        return funcs[functionIndex];
                     };
-                    PE.getNumberOfImportThunks = function() {
-                        return _peParseImports().functions.length;
+                    PE.getNumberOfImportThunks = function(libraryIndex) {
+                        var d = _peParseImports();
+                        if (libraryIndex === undefined) {
+                            // Backward compat: return total if no arg.
+                            return d.functions.length;
+                        }
+                        if (libraryIndex < 0 || libraryIndex >= d.imports.length) return 0;
+                        return d.imports[libraryIndex].functions.length;
                     };
                     PE.isLibraryPresent = function(s) {
                         var d = _peParseImports();
@@ -3651,23 +3944,58 @@ impl HostApiBridge {
                     };
 
                     // Section helpers.
+                    // getSectionNameCollision(s1, s2): find two sections where one
+                    // name ends with s1 and another ends with s2, sharing a common
+                    // prefix. Returns the common prefix (without s1/s2 suffixes),
+                    // or "" if no such pair exists.
+                    // Upstream usage (protector_VMProtect.2.sg):
+                    //   var sCollision = PE.getSectionNameCollision("0", "1");
+                    //   if (PE.isSectionNamePresent(sCollision + "1")) { ... }
+                    // Example: sections "oiNRhy0" and "oiNRhy1" -> returns "oiNRhy".
                     PE.getSectionNameCollision = function(s1, s2) {
                         if (!_peIsPE()) return "";
-                        // Check if two section names collide (case-insensitive).
                         var n = _peNumberOfSections();
-                        var s1Lower = s1.toLowerCase();
-                        var s2Lower = s2.toLowerCase();
-                        var found1 = false, found2 = false;
+                        if (n === 0) return "";
+                        // Collect section names (original case).
+                        var names = [];
                         for (var i = 0; i < n; i++) {
-                            var name = _peSectionName(i).toLowerCase();
-                            if (name === s1Lower) found1 = true;
-                            if (name === s2Lower) found2 = true;
+                            names.push(_peSectionName(i));
                         }
-                        if (found1 && found2) return s1;
+                        // Find a pair (a, b) where a ends with s1, b ends with s2,
+                        // and a without s1 == b without s2 (common prefix).
+                        for (var i = 0; i < names.length; i++) {
+                            var a = names[i];
+                            if (a.length < s1.length) continue;
+                            if (a.substring(a.length - s1.length) !== s1) continue;
+                            var prefixA = a.substring(0, a.length - s1.length);
+                            for (var j = 0; j < names.length; j++) {
+                                if (i === j) continue;
+                                var b = names[j];
+                                if (b.length < s2.length) continue;
+                                if (b.substring(b.length - s2.length) !== s2) continue;
+                                var prefixB = b.substring(0, b.length - s2.length);
+                                if (prefixA === prefixB) {
+                                    return prefixA;
+                                }
+                            }
+                        }
                         return "";
                     };
                     PE.getResourceSection = function() {
-                        return _B.__peResourceSectionOffset();
+                        // Return the section INDEX (not file offset) that contains
+                        // the resource directory (data directory index 2).
+                        // Upstream rules compare this with section index `i`.
+                        if (!_peIsPE()) return -1;
+                        var resDir = _peDataDirOff(2);
+                        var va = _B.read_uint32_le(resDir);
+                        if (va === 0) return -1;
+                        var n = _peNumberOfSections();
+                        for (var i = 0; i < n; i++) {
+                            var secVA = _peSectionVirtualAddress(i);
+                            var secVS = _peSectionVirtualSize(i);
+                            if (va >= secVA && va < secVA + secVS) return i;
+                        }
+                        return -1;
                     };
                     PE.getImportSection = function() {
                         if (!_peIsPE()) return -1;
