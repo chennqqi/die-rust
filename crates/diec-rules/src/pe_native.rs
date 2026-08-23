@@ -838,6 +838,15 @@ fn parse_batch_pe64(file: pelite::pe64::PeFile<'_>) -> PeBatchInfo {
             }
         }
     }
+    // Fallback for non-standard PE files with FirstThunk=0 import descriptors.
+    if imports.is_empty() || needs_manual_import_fallback_pe64(&file) {
+        let manual = manual_parse_imports_pe64(&file);
+        if manual.len() > imports.len() {
+            libraries = manual.iter().map(|i| i.name.clone()).collect();
+            functions = manual.iter().flat_map(|i| i.functions.clone()).collect();
+            imports = manual;
+        }
+    }
 
     let mut exports = Vec::new();
     if let Ok(exp) = file.exports()
@@ -880,6 +889,98 @@ fn parse_batch_pe64(file: pelite::pe64::PeFile<'_>) -> PeBatchInfo {
         net_ansi_strings: Vec::new(),
         import_position_hashes,
     }
+}
+
+/// Check if pelite's import parsing missed descriptors (PE64 version).
+fn needs_manual_import_fallback_pe64(file: &pelite::pe64::PeFile<'_>) -> bool {
+    let Some(imp_dir) = file.data_directory().get(1) else {
+        return false;
+    };
+    let Ok(bytes) = file.slice_bytes(imp_dir.VirtualAddress) else {
+        return false;
+    };
+    let mut i = 0;
+    while i * 20 + 20 <= bytes.len() {
+        let off = i * 20;
+        let oft = u32::from_le_bytes(bytes[off..off + 4].try_into().unwrap_or([0; 4]));
+        let name_rva = u32::from_le_bytes(bytes[off + 12..off + 16].try_into().unwrap_or([0; 4]));
+        let ft = u32::from_le_bytes(bytes[off + 16..off + 20].try_into().unwrap_or([0; 4]));
+        if oft == 0 && name_rva == 0 {
+            return false;
+        }
+        if ft == 0 && oft != 0 {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+/// Manually parse PE64 import descriptors (upstream null check).
+fn manual_parse_imports_pe64(file: &pelite::pe64::PeFile<'_>) -> Vec<PeImportLibrary> {
+    let mut result = Vec::new();
+    let Some(imp_dir) = file.data_directory().get(1) else {
+        return result;
+    };
+    let Ok(bytes) = file.slice_bytes(imp_dir.VirtualAddress) else {
+        return result;
+    };
+    let mut i = 0;
+    while i * 20 + 20 <= bytes.len() {
+        let off = i * 20;
+        let oft = u32::from_le_bytes(bytes[off..off + 4].try_into().unwrap_or([0; 4]));
+        let name_rva = u32::from_le_bytes(bytes[off + 12..off + 16].try_into().unwrap_or([0; 4]));
+        if oft == 0 && name_rva == 0 {
+            break;
+        }
+        let lib_name = if let Ok(name_bytes) = file.slice_bytes(name_rva) {
+            let end = name_bytes
+                .iter()
+                .position(|&b| b == 0)
+                .unwrap_or(name_bytes.len());
+            String::from_utf8_lossy(&name_bytes[..end]).to_string()
+        } else {
+            String::new()
+        };
+        let thunk_rva = if oft != 0 {
+            oft
+        } else {
+            u32::from_le_bytes(bytes[off + 16..off + 20].try_into().unwrap_or([0; 4]))
+        };
+        let mut funcs = Vec::new();
+        if thunk_rva != 0
+            && let Ok(thunk_bytes) = file.slice_bytes(thunk_rva)
+        {
+            let mut j = 0;
+            while j * 8 + 8 <= thunk_bytes.len() {
+                let val =
+                    u64::from_le_bytes(thunk_bytes[j * 8..j * 8 + 8].try_into().unwrap_or([0; 8]));
+                if val == 0 {
+                    break;
+                }
+                if val & 0x8000000000000000 != 0 {
+                    funcs.push(format!("#{}", val & 0xFFFF));
+                } else if let Ok(name_bytes) = file.slice_bytes(val as u32)
+                    && name_bytes.len() > 2
+                {
+                    let end = name_bytes[2..]
+                        .iter()
+                        .position(|&b| b == 0)
+                        .unwrap_or(name_bytes.len() - 2);
+                    funcs.push(String::from_utf8_lossy(&name_bytes[2..2 + end]).to_string());
+                }
+                j += 1;
+            }
+        }
+        if !lib_name.is_empty() || !funcs.is_empty() {
+            result.push(PeImportLibrary {
+                name: lib_name,
+                functions: funcs,
+            });
+        }
+        i += 1;
+    }
+    result
 }
 
 /// Parse import function names from a PE64 import descriptor.
@@ -959,6 +1060,19 @@ fn parse_batch_pe32(file: pelite::pe32::PeFile<'_>) -> PeBatchInfo {
             }
         }
     }
+    // Fallback: pelite's is_null() checks FirstThunk == 0, but some non-standard
+    // PE files have import descriptors with FirstThunk=0 and valid
+    // OriginalFirstThunk/Name. Upstream DIE checks Characteristics==0 && Name==0.
+    // If pelite found fewer imports than the data directory suggests, try manual
+    // parsing to recover the remaining import descriptors.
+    if imports.is_empty() || needs_manual_import_fallback_pe32(&file) {
+        let manual = manual_parse_imports_pe32(&file);
+        if manual.len() > imports.len() {
+            libraries = manual.iter().map(|i| i.name.clone()).collect();
+            functions = manual.iter().flat_map(|i| i.functions.clone()).collect();
+            imports = manual;
+        }
+    }
 
     let mut exports = Vec::new();
     if let Ok(exp) = file.exports()
@@ -1001,6 +1115,110 @@ fn parse_batch_pe32(file: pelite::pe32::PeFile<'_>) -> PeBatchInfo {
         net_ansi_strings: Vec::new(),
         import_position_hashes,
     }
+}
+
+/// Check if pelite's import parsing missed descriptors that have valid
+/// OriginalFirstThunk and Name but FirstThunk=0 (which pelite treats as null).
+fn needs_manual_import_fallback_pe32(file: &pelite::pe32::PeFile<'_>) -> bool {
+    let Some(imp_dir) = file.data_directory().get(1) else {
+        return false;
+    };
+    let Ok(bytes) = file.slice_bytes(imp_dir.VirtualAddress) else {
+        return false;
+    };
+    // Check if there's a descriptor after the first pelite-found null
+    // where OriginalFirstThunk != 0 or Name != 0.
+    let mut i = 0;
+    while i * 20 + 20 <= bytes.len() {
+        let off = i * 20;
+        let oft = u32::from_le_bytes(bytes[off..off + 4].try_into().unwrap_or([0; 4]));
+        let name_rva = u32::from_le_bytes(bytes[off + 12..off + 16].try_into().unwrap_or([0; 4]));
+        let ft = u32::from_le_bytes(bytes[off + 16..off + 20].try_into().unwrap_or([0; 4]));
+        // Upstream null check: Characteristics(=OFT) == 0 && Name == 0
+        if oft == 0 && name_rva == 0 {
+            return false; // proper null terminator
+        }
+        // pelite null check: FirstThunk == 0
+        if ft == 0 && oft != 0 {
+            // pelite would stop here, but upstream continues
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+/// Manually parse PE32 import descriptors using upstream's null check
+/// (Characteristics==0 && Name==0) instead of pelite's (FirstThunk==0).
+fn manual_parse_imports_pe32(file: &pelite::pe32::PeFile<'_>) -> Vec<PeImportLibrary> {
+    let mut result = Vec::new();
+    let Some(imp_dir) = file.data_directory().get(1) else {
+        return result;
+    };
+    let Ok(bytes) = file.slice_bytes(imp_dir.VirtualAddress) else {
+        return result;
+    };
+    let mut i = 0;
+    while i * 20 + 20 <= bytes.len() {
+        let off = i * 20;
+        let oft = u32::from_le_bytes(bytes[off..off + 4].try_into().unwrap_or([0; 4]));
+        let name_rva = u32::from_le_bytes(bytes[off + 12..off + 16].try_into().unwrap_or([0; 4]));
+        // Upstream null check: Characteristics(=OFT) == 0 && Name == 0
+        if oft == 0 && name_rva == 0 {
+            break;
+        }
+        // Read library name
+        let lib_name = if let Ok(name_bytes) = file.slice_bytes(name_rva) {
+            let end = name_bytes
+                .iter()
+                .position(|&b| b == 0)
+                .unwrap_or(name_bytes.len());
+            String::from_utf8_lossy(&name_bytes[..end]).to_string()
+        } else {
+            String::new()
+        };
+        // Parse thunks from INT (OFT) or IAT (FirstThunk)
+        let thunk_rva = if oft != 0 {
+            oft
+        } else {
+            u32::from_le_bytes(bytes[off + 16..off + 20].try_into().unwrap_or([0; 4]))
+        };
+        let mut funcs = Vec::new();
+        if thunk_rva != 0
+            && let Ok(thunk_bytes) = file.slice_bytes(thunk_rva)
+        {
+            let mut j = 0;
+            while j * 4 + 4 <= thunk_bytes.len() {
+                let val =
+                    u32::from_le_bytes(thunk_bytes[j * 4..j * 4 + 4].try_into().unwrap_or([0; 4]));
+                if val == 0 {
+                    break;
+                }
+                if val & 0x80000000 != 0 {
+                    // Import by ordinal
+                    funcs.push(format!("#{}", val & 0xFFFF));
+                } else if let Ok(name_bytes) = file.slice_bytes(val)
+                    && name_bytes.len() > 2
+                {
+                    // Skip hint (2 bytes), then read name
+                    let end = name_bytes[2..]
+                        .iter()
+                        .position(|&b| b == 0)
+                        .unwrap_or(name_bytes.len() - 2);
+                    funcs.push(String::from_utf8_lossy(&name_bytes[2..2 + end]).to_string());
+                }
+                j += 1;
+            }
+        }
+        if !lib_name.is_empty() || !funcs.is_empty() {
+            result.push(PeImportLibrary {
+                name: lib_name,
+                functions: funcs,
+            });
+        }
+        i += 1;
+    }
+    result
 }
 
 /// Parse import function names from a PE32 import descriptor.
