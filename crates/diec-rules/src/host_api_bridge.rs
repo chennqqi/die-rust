@@ -3447,7 +3447,23 @@ impl HostApiBridge {
                     PE.getManifest = function() { return _peGetBatch().manifest; };
                     // Authenticode signature: native pelite-backed security directory check.
                     PE.isSignedFile = function() { return _peGetBatch().isSigned; };
-                    PE.isSigned = function() { return PE.isSignedFile(); };
+                    // PE.isSigned() maps to XPE::isSigned() which checks
+                    // getSignOffsetSize().nSize > 0. The sign offset size is
+                    // valid only if the security directory's VirtualAddress
+                    // (file offset for security dir) and Size are within file
+                    // bounds (checkOffsetSize). This is NOT the same as
+                    // isSignedFile() which only checks if the data directory
+                    // entry is present (VirtualAddress != 0).
+                    PE.isSigned = function() {
+                        if (!_peIsPE()) return false;
+                        var dbgDirOff = _peDataDirOff(4); // Security dir = index 4
+                        var secOff = _B.read_uint32_le(dbgDirOff);
+                        var secSize = _B.read_uint32_le(dbgDirOff + 4);
+                        if (secOff === 0 || secSize === 0) return false;
+                        // Security dir VirtualAddress is a file offset, not RVA.
+                        // Check it's within file bounds.
+                        return (secOff + secSize <= _B.getSize());
+                    };
                     PE.getGeneralOptionsEx = function() { return ""; };
 
                     // File info: native pelite-backed version info parsing.

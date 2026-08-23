@@ -644,9 +644,11 @@ fn build_minimal_pe(
     data.extend_from_slice(&0u32.to_le_bytes());
     data.extend_from_slice(&0u32.to_le_bytes());
     // Index 4: Security (Certificate Table)
+    // VirtualAddress is a file offset (not RVA) for security directory.
+    // Must be within file bounds for isSigned() to return true.
     if has_security {
-        data.extend_from_slice(&0x1000u32.to_le_bytes()); // VirtualAddress (certificate offset)
-        data.extend_from_slice(&0x200u32.to_le_bytes()); // Size
+        data.extend_from_slice(&0x400u32.to_le_bytes()); // file offset
+        data.extend_from_slice(&0x100u32.to_le_bytes()); // size (within file)
     } else {
         data.extend_from_slice(&0u32.to_le_bytes());
         data.extend_from_slice(&0u32.to_le_bytes());
@@ -722,6 +724,13 @@ fn build_minimal_pe(
         }
         // Pad to cover the debug data area
         while data.len() < 0x500 + debug_entries.len() * 16 {
+            data.push(0);
+        }
+    }
+
+    // Pad to ensure security directory offset is within file bounds.
+    if has_security {
+        while data.len() < 0x500 {
             data.push(0);
         }
     }
