@@ -350,6 +350,34 @@ DIE-engine 规则与 host API 变化，并保持发布物健康度。
   [`docs/research/upstream-gui-analysis.md`](docs/research/upstream-gui-analysis.md)，
   框架选型 ADR 0018（Tauri v2）和 Phase 8 设计文档已交付。
 
+### 当前进展快照
+
+- **上游规则同步**：`upstream/Detect-It-Easy` 为 vendored subtree（非 submodule），
+  固定到 commit `c2c17dfa5`。
+- **种子语料回放**：165 seeds × 6 harnesses，`cd fuzz && cargo test --no-default-features --features replay`。
+- **发布物**：v0.3.0（4 平台：Linux/Windows/macOS arm64/macOS x86_64），含 CLI、died、FFI 库、C 头文件、规则数据库、语言绑定。
+- **Benchmark 基础设施**（criterion 0.5）：scan_corpus、scan_flags、database_load、probe_corpus。
+- **边缘语料差分测试**：20 个边缘样本 + 3 个测试（no-crash/no-spurious/no-hang）。
+- **FFI 跨平台 CI**：ffi-smoke job + python-binding job（Linux/macOS/Windows）。
+- **许可证和供应链审计**：LICENSE、NOTICES.md、AUDIT.md。
+- **6 个 fuzz targets**（core/formats/engine/output/ffi 层）+ 165 个种子语料。
+- **兼容性报告** COMPATIBILITY.md、发布检查清单 RELEASE.md（v0.3.0 已签字）。
+- **database_load 优化**：1.2s → 510ms（并行文件 I/O）。
+- **原生 PE/ELF/Mach-O 解析重构**：使用 pelite（PE）和 goblin（ELF/Mach-O）替换手写 JavaScript 解析。
+  - 新增 `pe_native.rs`、`elf_native.rs`、`macho_native.rs` 三个模块。
+  - PE batch 解析：一次 pelite pass 返回所有 PE 信息，JS 端 JSON.parse 缓存。
+  - PE32 扫描性能：73ms → 89ms（含原生 resource/manifest/version info 解析）。
+  - ELF64 扫描性能：19ms → 15ms。
+  - Mach-O 64 扫描性能：18ms → 14ms。
+- **规则加载** 1186/1186 = 100%（此前 1184/1186 = 99.83%）。
+- **差分测试** 31 基线 + 20 边缘样本，0 不匹配。
+- **477 个测试全部通过**，cargo fmt/clippy 零警告，0 TODO/FIXME。
+- **ADR 0016**：Scanner per-file_type runtime 跨文件复用（Accepted）。
+- **ADR 0017**：died (die daemon) HTTP/JSON 扫描服务层（Accepted）。
+  - 三个端点：/health、/scan/path、/scan/bytes。
+  - Windows 服务安装/卸载 + DEB/RPM/MSI 打包配置。
+  - API 文档含 curl/PowerShell/Python/Go 客户端示例。
+
 退出条件：无固定退出条件；维护阶段持续直到项目所有者决定启动 GUI 阶段或
 停止维护。
 
@@ -1077,7 +1105,7 @@ Phase 11 完成了 8 个批次的基础对齐，但 `gui-gap-analysis-v3.md` 仍
 - ~~**Windows FFI C smoke test 链接**~~：已完成。改用 DLL import library（`diec_ffi.dll.lib`）替代 staticlib（`diec_ffi.lib`），避免手动指定大量 Windows 系统库。移除 `continue-on-error`，Windows smoke test 现在在 CI 中正常运行。
 - ~~**macOS x86_64 构建矩阵**~~：已完成。使用 `macos-14`（arm64 runner）交叉编译 `x86_64-apple-darwin` 目标，避免使用费用较高的 `macos-13` Intel runner。交叉编译构建跳过原生测试（arm64 无法运行 x86_64 二进制），arm64 原生构建仍运行完整测试。
 
-## Phase 14：兼容性阻断修复与差分基线重建 — IN PROGRESS
+## Phase 14：兼容性阻断修复与差分基线重建 — DONE (2026-08-23)
 
 **启动日期**：2026-08-23
 **背景**：实际使用中发现 PE/ELF 规则执行存在脚本异常导致检测能力失效，
@@ -1314,4 +1342,133 @@ Class/Python bytecode 等大量格式误报，`--alltypes` 不可用于生产。
   - GUI-CLI 差分测试通过
   - ADR 0031/0032 Accepted
   - 所有文档更新完成
+
+## Phase 15：对齐方法论重建与缺口闭合 — PLANNED
+
+**背景**：Phase 14 收尾时对"上游对齐方法论"做了系统性回顾（详见
+`docs/research/phase14-methodology-retrospective.md`），发现 6 个方法论根因缺陷
+导致 Phase 0-13 声称的"规则加载 100%、差分 0 不匹配"掩盖了 3 个阻断性问题。
+Phase 15 聚焦"重建对齐方法论 + 闭合已识别缺口"，不再追加新功能。
+
+### 15.1 真差分测试框架 — P0
+
+**目标**：打破"自证非他证"闭环，引入独立上游 oracle 作为参照系。
+
+- [ ] 上游 DIE-engine oracle 集成
+  - 在测试中调用上游 `diec`（或 vendored DIE-engine 二进制）扫描同一语料
+  - 自动提取上游输出并生成期望值，替代手工 `CORPUS_EXPECTATIONS`
+  - 固定上游 commit SHA，与兼容基线一致
+- [ ] `corpus_differential.rs` 重构为真差分
+  - 移除硬编码 `CORPUS_EXPECTATIONS`，改为运行时从 oracle 提取
+  - 增加 waiver 机制：已知差异用 `waivers.toml` 记录并附 ADR 理由
+  - 保留原始 + 规范化输出，规范化不得隐藏语义差异
+- [ ] 上游 oracle 不可用时的降级策略
+  - CI 环境无上游二进制时，回退到 `corpus/expected/*.json` 快照
+  - 快照由本地 `cargo test --features record-oracle` 生成并提交
+  - 快照过期检测：比对规则 db commit 与快照生成时的 commit
+
+### 15.2 规则执行覆盖率与异常断言 — P0
+
+**目标**：消除"加载成功 ≠ 执行成功"的认知盲区。
+
+- [ ] `batch_load_*.rs` 升级为 `batch_execute_*.rs`
+  - 对每个规则执行 `init + evaluate_rule`（用最小合法样本触发）
+  - 统计并断言：执行异常数 = 0、`ReferenceError`/`TypeError` 数 = 0
+  - 输出执行覆盖率矩阵：`db/` × `db_extra/` × 格式
+- [ ] 所有差分测试添加脚本异常硬断言
+  - `corpus_differential.rs`、`edge_corpus.rs` 增加
+    `assert_eq!(script_exception_count, 0)`
+  - 异常类型分类统计（ReferenceError/TypeError/SyntaxError/其他）
+- [ ] db_extra 纳入所有差分测试
+  - `DatabaseBuilder` 默认加载 `db/ + db_extra/`（与 CLI 行为一致）
+  - 差分语料覆盖 db_extra 的 protector/cryptor/installer/joiner/keygen 规则
+
+### 15.3 Host API 方法对照审计 — P0
+
+**目标**：建立"上游 help 文档 → bridge 实现"的自动对照表，消除主观 ✅ 标记。
+
+- [ ] 自动化 host API 覆盖率工具
+  - 解析 `upstream/Detect-It-Easy/help/*.md` 提取方法签名清单
+  - 解析 `host_api_bridge.rs` 提取已实现方法清单
+  - 生成对照矩阵：已实现 / stub / 缺失，并输出到
+    `docs/research/host-api-coverage-matrix.md`
+- [ ] 修正 `COMPATIBILITY.md` 的 ✅ 标记
+  - 区分"完整实现"与"stub（返回默认值）"
+  - stub 方法明确标注 `⚠ stub`，并附影响规则清单
+- [ ] 闭合 P0 host API 缺口（来自回顾报告 G1-G3）
+  - PE .NET 方法 13 项：实现 .NET metadata 解析（CLR header、#~ 表流）
+  - PE resource 枚举方法 6 项：基于 pelite resource tree 实现
+  - `Binary.calculateMD5`/`calculateCRC32`：实现底层 HostApi trait
+
+### 15.4 `--alltypes` 系统性负向断言 — P1
+
+**目标**：从"3 个格式有负向断言"扩展到"所有格式 × 所有不相关格式"。
+
+- [ ] 交叉验证矩阵
+  - 对每种已支持格式（ELF/PE/Mach-O/DEX/Class/PYC/APK/ZIP/...）的样本
+    执行 `--alltypes` 扫描
+  - 断言不产生其他格式的检测（用 `CROSS_FORMAT_FALSE_POSITIVES` 扩展）
+  - 矩阵化：N 种格式 × N-1 种不相关格式 = N(N-1) 个负向断言
+- [ ] `--alltypes` 与上游 DIE-engine 行为差分
+  - 对同一语料运行上游 `diec --alltypes` 与 Rust `diec --alltypes`
+  - 比较检测集合（语义等价，非字符串等价）
+
+### 15.5 语料覆盖盲区补充 — P1
+
+**目标**：覆盖小众格式与 db_extra 特殊检测场景。
+
+- [ ] 小众格式最小样本生成器
+  - MSDOS：最小 MZ + Rich signature 样本
+  - COM：最小 0xC0 字节 COM 样本
+  - Amiga：最小 Amiga HUNK exec 样本
+  - AtariST：最小 GemDOS 样本
+  - DOS16M/DOS4G：最小 LE/LX 样本
+  - 用生成器脚本产出 + 哈希清单，不直接提交二进制
+- [ ] db_extra protector/cryptor/installer 语料
+  - 收集或生成带 protector/cryptor 特征的最小 PE 样本
+  - 优先覆盖高频规则：UPX/ASPack/MPRESS/Themida/VMProtect
+  - 标注来源与许可证，隔离存放
+- [ ] `corpus/manifest.json` 扩展
+  - 增加 `expected_detections` 字段（type/name 列表）
+  - 增加 `applicable_rules` 字段（预期触发的规则文件路径）
+  - 增加 `oracle_snapshot` 字段（上游 oracle 输出快照路径）
+
+### 15.6 P1 host API 缺口闭合 — P1
+
+**目标**：闭合回顾报告 G7-G11 的 9 个缺失方法。
+
+- [ ] `PE.getDisasmLength`：基于 Capstone 指令长度实现
+- [ ] `Binary.adler32`：zlib-rs 或纯 Rust adler32 实现
+- [ ] `ELF.getRunPath`：解析 `DT_RUNPATH`/`DT_RPATH` 动态标签
+- [ ] `MACH.getNumberOfCommands`/`getCommandId`/`isCommandPresent`：
+      基于 goblin Mach-O load commands 实现
+- [ ] `Util.shl64`/`shr64`：有符号 64 位移位
+- [ ] `Util.secondsToTimeStr`：时间戳格式化（与上游 strftime 一致）
+
+### 15.7 文档与基线更新 — P1
+
+- [ ] `COMPATIBILITY.md` 重写
+  - 基于 15.3 的自动对照矩阵，区分"完整实现"/"stub"/"缺失"
+  - 规则加载统计区分 `db/` 与 `db + db_extra`
+  - `--alltypes` 行为更新为对齐上游后的语义
+- [ ] `docs/design/testing.md` 与实现对齐
+  - 标注已实现 / 未实现 / 已偏离 的设计项
+  - 删除从未实现的"raw record + waiver"设计，或标注为 15.1 待实现
+- [ ] 能力矩阵 `capability-matrix.md` 增加 host API 方法维度
+- [ ] ADR 0033：真差分测试框架设计（oracle 集成、waiver、快照降级）
+- [ ] ADR 0034：Host API 覆盖率自动审计工具
+
+### 退出条件
+
+- **真差分**：`corpus_differential.rs` 不再含硬编码期望值，由上游 oracle
+  或快照驱动；waiver 机制可用且每项 waiver 附 ADR
+- **执行覆盖率**：`db/ + db_extra/` 全部规则的执行异常数 = 0；
+  `batch_execute_*.rs` 输出执行覆盖率矩阵
+- **Host API 对照**：自动对照矩阵生成，`COMPATIBILITY.md` 无虚假 ✅；
+  P0 缺口（.NET/resource/MD5/CRC32）闭合
+- **`--alltypes` 负向断言**：N×(N-1) 交叉矩阵全部通过
+- **语料覆盖**：MSDOS/COM/Amiga/AtariST/DOS16M/DOS4G 有最小样本；
+  db_extra 高频 protector/cryptor 有样本
+- **P1 host API**：9 个缺失方法实现并有回归测试
+- **质量门禁**：`cargo fmt/clippy/test` 全部通过；ADR 0033/0034 Accepted
 

@@ -22,10 +22,11 @@ use std::path::PathBuf;
 /// The order doesn't matter — the test sorts both lists before comparing.
 const CORPUS_EXPECTATIONS: &[(&str, &[(&str, &str)])] = &[
     // Executable formats
-    // PE files: heuristic analysis rule runs but isHeuristicScan() returns
-    // false, so no detections are produced without --heuristicscan flag.
-    ("minimal.exe", &[]),
-    ("minimal-pe64.exe", &[]),
+    // PE files: db_extra rules detect PE resources as archive:Resources.
+    // Heuristic analysis rules run but isHeuristicScan() returns false,
+    // so no heuristic detections without --heuristicscan flag.
+    ("minimal.exe", &[("archive", "Resources")]),
+    ("minimal-pe64.exe", &[("archive", "Resources")]),
     // with-tables.exe has import/export tables but no DOS stub or Rich
     // signature, so linker rules don't match. It's used to verify that
     // PE table parsing doesn't crash or produce spurious detections.
@@ -34,7 +35,9 @@ const CORPUS_EXPECTATIONS: &[(&str, &[(&str, &str)])] = &[
     // ELF with DT_NEEDED deps, Mach-O with LC_LOAD_DYLIB.
     // These verify native parsers handle richer structures without crashes.
     ("pe-with-resources.exe", &[]),
-    ("pe-dotnet.exe", &[]),
+    // pe-dotnet.exe: .NET Framework detection now works after Phase 15
+    // getNETVersion() implementation (returns "v4.0.30319" from BSJB metadata).
+    ("pe-dotnet.exe", &[("library", ".NET Framework")]),
     ("elf-with-deps.elf", &[]),
     ("macho-with-dylib.macho", &[]),
     ("minimal.elf", &[]),
@@ -97,6 +100,20 @@ fn db_root() -> String {
         .to_string()
 }
 
+/// Resolve the upstream db_extra directory.
+fn db_extra_root() -> String {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let binding = PathBuf::from(manifest_dir);
+    let root = binding
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("workspace root");
+    root.join("upstream/Detect-It-Easy/db_extra")
+        .to_str()
+        .expect("utf-8 path")
+        .to_string()
+}
+
 /// Check if a detection matches an expected (type, name) pair.
 /// The name match is a substring check (case-insensitive) to handle
 /// version suffixes and additional metadata.
@@ -111,7 +128,12 @@ fn detection_matches(detection: &ScanDetection, expected_type: &str, expected_na
 #[test]
 fn corpus_differential_detections() {
     let db_path = db_root();
-    let database = match DatabaseBuilder::new(&db_path).build() {
+    let extra_path = db_extra_root();
+    let mut builder = DatabaseBuilder::new(&db_path);
+    if std::path::Path::new(&extra_path).is_dir() {
+        builder = builder.with_extra(&extra_path);
+    }
+    let database = match builder.build() {
         Ok(db) => db,
         Err(e) => {
             eprintln!("SKIP: upstream database not found: {e}");
@@ -183,6 +205,23 @@ fn corpus_differential_detections() {
             mismatches.push(format!(
                 "{filename}: expected no detections, got: [{actual}]",
                 actual = actual.join(", ")
+            ));
+        }
+
+        // Phase 15.2c: Hard assertion — zero script exceptions.
+        // Rule execution exceptions indicate a rule that loads successfully
+        // but fails at runtime (ReferenceError, TypeError, etc.).
+        // This is the "load success ≠ execution success" blind spot.
+        if !result.structured_diagnostics.is_empty() {
+            let diags: Vec<String> = result
+                .structured_diagnostics
+                .iter()
+                .map(|d| format!("{}: {}", d.file, d.message))
+                .collect();
+            mismatches.push(format!(
+                "{filename}: {} script exception(s):\n  {}",
+                result.structured_diagnostics.len(),
+                diags.join("\n  ")
             ));
         }
 

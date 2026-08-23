@@ -443,6 +443,98 @@ pub fn is_net(data: &[u8]) -> bool {
     false
 }
 
+/// Parse the .NET CLR runtime version string from the metadata root.
+///
+/// The CLR header (COR20_HEADER) is at the VA specified by data directory
+/// entry 14. It contains a `MetaData` directory entry pointing to the
+/// metadata root, which starts with a BSJB signature followed by a
+/// version string (e.g., "v4.0.30319").
+///
+/// Returns an empty string if the PE is not .NET or the version cannot
+/// be parsed.
+pub fn get_net_version(data: &[u8]) -> String {
+    let clr_rva = if let Some(file) = pe64_from_bytes(data) {
+        match file.data_directory().get(14) {
+            Some(d) if d.Size != 0 => d.VirtualAddress as u64,
+            _ => return String::new(),
+        }
+    } else if let Some(file) = pe32_from_bytes(data) {
+        match file.data_directory().get(14) {
+            Some(d) if d.Size != 0 => d.VirtualAddress as u64,
+            _ => return String::new(),
+        }
+    } else {
+        return String::new();
+    };
+
+    let clr_offset = match rva_to_file_offset(data, clr_rva) {
+        o if o >= 0 => o as usize,
+        _ => return String::new(),
+    };
+
+    // COR20_HEADER layout:
+    //   0: cb (4 bytes)
+    //   4: MajorRuntimeVersion (2 bytes)
+    //   6: MinorRuntimeVersion (2 bytes)
+    //   8: MetaData.VirtualAddress (4 bytes)
+    //  12: MetaData.Size (4 bytes)
+    let md_rva = read_u32_le(data, clr_offset + 8);
+    if md_rva == 0 {
+        return String::new();
+    }
+    let md_offset = match rva_to_file_offset(data, md_rva as u64) {
+        o if o >= 0 => o as usize,
+        _ => return String::new(),
+    };
+
+    // Metadata root layout:
+    //   0: Signature (4 bytes, 0x424A5342 = "BSJB")
+    //   4: MajorVersion (2 bytes)
+    //   6: MinorVersion (2 bytes)
+    //   8: Reserved (4 bytes)
+    //  12: VersionLength (4 bytes)
+    //  16: Version string (VersionLength bytes, padded to 4-byte boundary)
+    if data.len() < md_offset + 16 {
+        return String::new();
+    }
+    let sig = read_u32_le(data, md_offset);
+    if sig != 0x424A5342 {
+        // "BSJB" in little-endian
+        return String::new();
+    }
+    let ver_len = read_u32_le(data, md_offset + 12) as usize;
+    if ver_len == 0 || data.len() < md_offset + 16 + ver_len {
+        return String::new();
+    }
+    let ver_bytes = &data[md_offset + 16..md_offset + 16 + ver_len];
+    let version = String::from_utf8_lossy(ver_bytes)
+        .trim_end_matches('\0')
+        .to_string();
+    if version.is_empty() {
+        return String::new();
+    }
+    // Prefix with "v" if not already present (upstream convention).
+    if version.starts_with('v') || version.starts_with('V') {
+        version
+    } else {
+        format!("v{version}")
+    }
+}
+
+/// Read a little-endian u32 from data at the given offset.
+/// Returns 0 if out of bounds.
+fn read_u32_le(data: &[u8], offset: usize) -> u32 {
+    if data.len() < offset + 4 {
+        return 0;
+    }
+    u32::from_le_bytes([
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
+    ])
+}
+
 /// Batch PE parse result: imports, exports, and metadata in one pass.
 pub struct PeBatchInfo {
     /// Imported library (DLL) names.
@@ -463,19 +555,27 @@ pub struct PeBatchInfo {
     pub product_version: String,
     /// Total number of resource data entries.
     pub number_of_resources: usize,
+    /// .NET CLR runtime version string (e.g., "v4.0.30319"), empty if not .NET.
+    pub net_version: String,
 }
 
 /// Parse all PE information in a single pass to avoid repeated PeFile construction.
 ///
 /// Returns None if not a valid PE.
 pub fn parse_batch(data: &[u8]) -> Option<PeBatchInfo> {
+    // Parse .NET version once (used for both PE32 and PE64 paths).
+    let net_version = get_net_version(data);
     // Try PE64 first.
     if let Some(file) = pe64_from_bytes(data) {
-        return Some(parse_batch_pe64(file));
+        let mut info = parse_batch_pe64(file);
+        info.net_version = net_version;
+        return Some(info);
     }
     // Try PE32.
     if let Some(file) = pe32_from_bytes(data) {
-        return Some(parse_batch_pe32(file));
+        let mut info = parse_batch_pe32(file);
+        info.net_version = net_version;
+        return Some(info);
     }
     None
 }
@@ -536,6 +636,7 @@ fn parse_batch_pe64(file: pelite::pe64::PeFile<'_>) -> PeBatchInfo {
         file_version,
         product_version,
         number_of_resources,
+        net_version: String::new(),
     }
 }
 
@@ -595,6 +696,7 @@ fn parse_batch_pe32(file: pelite::pe32::PeFile<'_>) -> PeBatchInfo {
         file_version,
         product_version,
         number_of_resources,
+        net_version: String::new(),
     }
 }
 

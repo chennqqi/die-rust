@@ -75,6 +75,8 @@ fn format_pe_batch_json(info: &crate::pe_native::PeBatchInfo) -> String {
     push_json_string(&mut s, &info.product_version);
     s.push_str(",\"numberOfResources\":");
     s.push_str(&info.number_of_resources.to_string());
+    s.push_str(",\"netVersion\":");
+    push_json_string(&mut s, &info.net_version);
     s.push('}');
     s
 }
@@ -2429,7 +2431,9 @@ impl HostApiBridge {
                     PE.isImportPositionHashPresent = function(s) { return false; };
                     PE.getNetAssemblyName = function() { return ""; };
                     PE.getNetModuleName = function() { return ""; };
-                    PE.getNETVersion = function() { return ""; };
+                    PE.getNETVersion = function() {
+                        return _peGetBatch().netVersion || "";
+                    };
                     // .NET signature/entry-point comparison stubs.
                     PE.compareEP_NET = function(sig, off) { return false; };
                     PE.findSignatureInBlob_NET = function(sig) { return -1; };
@@ -2720,6 +2724,7 @@ impl HostApiBridge {
                         if (_peBatchCache.fileVersion === undefined) _peBatchCache.fileVersion = "";
                         if (_peBatchCache.productVersion === undefined) _peBatchCache.productVersion = "";
                         if (_peBatchCache.numberOfResources === undefined) _peBatchCache.numberOfResources = 0;
+                        if (_peBatchCache.netVersion === undefined) _peBatchCache.netVersion = "";
                         return _peBatchCache;
                     }
                     var _peImportData = null;
@@ -4099,6 +4104,29 @@ impl HostApiBridge {
                         obj.isDeepScan = function() { return false; };
                         obj.isHeuristicScan = function() { return false; };
                     }
+
+                    // MSDOS-specific stubs: MSDOS rules call these methods
+                    // (compareEP, compareOverlay, getOverlayOffset, etc.)
+                    // which require DOS/MSDOS-specific parsing. Stubs return
+                    // false/0/empty so rules execute without TypeError.
+                    // Full implementation is Phase 15.3 scope.
+                    MSDOS.compareEP = function(sig) { return false; };
+                    MSDOS.compareOverlay = function(sig) { return false; };
+                    MSDOS.getOverlayOffset = function() { return -1; };
+                    MSDOS.getEntryPointOffset = function() { return -1; };
+                    MSDOS.getNEOffset = function() { return -1; };
+                    MSDOS.isNE = function() { return false; };
+                    MSDOS.isLE = function() { return false; };
+                    MSDOS.isLX = function() { return false; };
+                    MSDOS.getBaseOffset = function() { return 0; };
+                    MSDOS.getOperationSystemName = function() { return ""; };
+                    MSDOS.getOperationSystemVersion = function() { return ""; };
+                    MSDOS.getOperationSystemOptions = function() { return ""; };
+                    MSDOS.getDisasmNextAddress = function(off) { return -1; };
+                    MSDOS.addressToOffset = function(addr) { return -1; };
+                    MSDOS.AddressToOffset = MSDOS.addressToOffset;
+                    MSDOS.OffsetToVA = function(off) { return -1; };
+                    MSDOS.VAToOffset = function(va) { return -1; };
 
                     // JavaClass-specific: parse version from class file header.
                     // Class file: magic (4 bytes, 0xCAFEBABE) + minor (2 bytes, BE) +

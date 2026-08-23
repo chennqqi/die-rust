@@ -55,6 +55,37 @@ fn db_path() -> String {
         .to_string()
 }
 
+/// Resolve the upstream db_extra directory.
+fn db_extra_path() -> String {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    PathBuf::from(manifest_dir)
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("upstream/Detect-It-Easy/db_extra")
+        .to_str()
+        .expect("utf-8 path")
+        .to_string()
+}
+
+/// Build a database with both db/ and db_extra/ rules.
+fn build_full_database() -> Option<diec_engine::Database> {
+    let db = db_path();
+    let extra = db_extra_path();
+    let mut builder = DatabaseBuilder::new(&db);
+    if std::path::Path::new(&extra).is_dir() {
+        builder = builder.with_extra(&extra);
+    }
+    match builder.build() {
+        Ok(db) => Some(db),
+        Err(e) => {
+            eprintln!("SKIP: upstream database not found: {e}");
+            None
+        }
+    }
+}
+
 /// Verify that scanning an edge-case sample does not crash or panic.
 /// Returns Ok(()) if the scan completed (regardless of result).
 fn scan_without_crash(
@@ -71,13 +102,9 @@ fn scan_without_crash(
 
 #[test]
 fn edge_corpus_no_crash_on_malformed() {
-    let path = db_path();
-    let database = match DatabaseBuilder::new(&path).build() {
-        Ok(db) => db,
-        Err(e) => {
-            eprintln!("SKIP: upstream database not found: {e}");
-            return;
-        }
+    let database = match build_full_database() {
+        Some(db) => db,
+        None => return,
     };
 
     let edge_dir = edge_corpus_dir();
@@ -123,13 +150,9 @@ fn edge_corpus_no_crash_on_malformed() {
 
 #[test]
 fn edge_corpus_no_spurious_detections() {
-    let path = db_path();
-    let database = match DatabaseBuilder::new(&path).build() {
-        Ok(db) => db,
-        Err(e) => {
-            eprintln!("SKIP: upstream database not found: {e}");
-            return;
-        }
+    let database = match build_full_database() {
+        Some(db) => db,
+        None => return,
     };
 
     let edge_dir = edge_corpus_dir();
@@ -153,18 +176,32 @@ fn edge_corpus_no_spurious_detections() {
             Err(_) => continue,
         };
 
-        if let Ok(result) = scan_bytes(&database, filename, data, ScanFlags::default(), &cancel)
-            && !result.detections.is_empty()
-        {
-            let detections: Vec<String> = result
-                .detections
-                .iter()
-                .map(|d| format!("{}:{}", d.type_name, d.name))
-                .collect();
-            spurious.push(format!(
-                "{filename}: expected no detections, got: [{}]",
-                detections.join(", ")
-            ));
+        if let Ok(result) = scan_bytes(&database, filename, data, ScanFlags::default(), &cancel) {
+            // Check for spurious detections.
+            if !result.detections.is_empty() {
+                let detections: Vec<String> = result
+                    .detections
+                    .iter()
+                    .map(|d| format!("{}:{}", d.type_name, d.name))
+                    .collect();
+                spurious.push(format!(
+                    "{filename}: expected no detections, got: [{}]",
+                    detections.join(", ")
+                ));
+            }
+            // Phase 15.2c: Hard assertion — zero script exceptions on edge cases.
+            if !result.structured_diagnostics.is_empty() {
+                let diags: Vec<String> = result
+                    .structured_diagnostics
+                    .iter()
+                    .map(|d| format!("{}: {}", d.file, d.message))
+                    .collect();
+                spurious.push(format!(
+                    "{filename}: {} script exception(s):\n  {}",
+                    result.structured_diagnostics.len(),
+                    diags.join("\n  ")
+                ));
+            }
         }
         tested += 1;
     }
@@ -181,13 +218,9 @@ fn edge_corpus_no_spurious_detections() {
 
 #[test]
 fn edge_corpus_truncated_does_not_hang() {
-    let path = db_path();
-    let database = match DatabaseBuilder::new(&path).build() {
-        Ok(db) => db,
-        Err(e) => {
-            eprintln!("SKIP: upstream database not found: {e}");
-            return;
-        }
+    let database = match build_full_database() {
+        Some(db) => db,
+        None => return,
     };
 
     let edge_dir = edge_corpus_dir();

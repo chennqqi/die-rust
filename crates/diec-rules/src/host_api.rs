@@ -187,6 +187,12 @@ pub trait HostApi {
     /// Check if the PE has a .NET CLR header.
     fn pe_is_net(&self) -> bool;
 
+    /// Get the .NET CLR runtime version string (e.g., "v4.0.30319").
+    /// Returns empty string if not .NET or version cannot be parsed.
+    fn pe_net_version(&self) -> String {
+        String::new()
+    }
+
     /// Get the PE file version string (from VS_FIXEDFILEINFO).
     /// Returns empty string if no version info or not a valid PE.
     fn pe_file_version(&self) -> String;

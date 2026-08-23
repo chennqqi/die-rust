@@ -505,6 +505,10 @@ impl HostApi for BufferHost {
         diec_rules::pe_native::is_net(self.data())
     }
 
+    fn pe_net_version(&self) -> String {
+        diec_rules::pe_native::get_net_version(self.data())
+    }
+
     fn pe_file_version(&self) -> String {
         diec_rules::pe_native::get_file_version(self.data())
     }
