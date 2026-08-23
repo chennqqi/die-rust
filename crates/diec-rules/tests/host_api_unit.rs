@@ -706,16 +706,23 @@ fn build_minimal_pe(
         while data.len() < 0x400 {
             data.push(0);
         }
-        for &debug_type in debug_entries {
+        for (i, &debug_type) in debug_entries.iter().enumerate() {
             // IMAGE_DEBUG_DIRECTORY_ENTRY (28 bytes)
+            // PointerToRawData must be non-zero and within file bounds for
+            // upstream-compatible getDebugList filtering.
+            let raw_ptr = 0x500 + i as u32 * 16; // valid file offset
             data.extend_from_slice(&0u32.to_le_bytes()); // Characteristics
             data.extend_from_slice(&0u32.to_le_bytes()); // TimeDateStamp
             data.extend_from_slice(&0u16.to_le_bytes()); // MajorVersion
             data.extend_from_slice(&0u16.to_le_bytes()); // MinorVersion
             data.extend_from_slice(&debug_type.to_le_bytes()); // Type
-            data.extend_from_slice(&0u32.to_le_bytes()); // SizeOfData
+            data.extend_from_slice(&16u32.to_le_bytes()); // SizeOfData
             data.extend_from_slice(&0u32.to_le_bytes()); // AddressOfRawData (RVA)
-            data.extend_from_slice(&0u32.to_le_bytes()); // PointerToRawData
+            data.extend_from_slice(&raw_ptr.to_le_bytes()); // PointerToRawData
+        }
+        // Pad to cover the debug data area
+        while data.len() < 0x500 + debug_entries.len() * 16 {
+            data.push(0);
         }
     }
 

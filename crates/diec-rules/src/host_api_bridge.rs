@@ -4077,47 +4077,57 @@ impl HostApiBridge {
                         11: "VC_FEATURE", 12: "POGO", 13: "ILTCG",
                         14: "MPX", 15: "REPRO", 16: "EX_DLLCHARACTERISTICS"
                     };
-                    PE.getNumberOfDebugDataRecords = function() {
-                        if (!_peIsPE()) return 0;
+                    // Debug data records: upstream XPE::getDebugList filters
+                    // records, only including those with PointerToRawData != 0
+                    // and valid offset. It also breaks on the first invalid
+                    // record (does not skip). We replicate this by computing
+                    // a filtered list once and caching it.
+                    var _peDebugRecords = null; // cached array of {type, offset, size}
+                    function _peGetDebugRecords() {
+                        if (_peDebugRecords !== null) return _peDebugRecords;
+                        _peDebugRecords = [];
+                        if (!_peIsPE()) return _peDebugRecords;
                         var dbgDirOff = _peDataDirOff(6);
                         var va = _B.read_uint32_le(dbgDirOff);
                         var size = _B.read_uint32_le(dbgDirOff + 4);
-                        if (va === 0 || size === 0) return 0;
-                        return Math.floor(size / 28);
+                        if (va === 0 || size === 0) return _peDebugRecords;
+                        var dirOff = _peRvaToFileOffset(va);
+                        if (dirOff < 0) return _peDebugRecords;
+                        var count = Math.floor(size / 28);
+                        var fileSize = _B.getSize();
+                        for (var i = 0; i < count; i++) {
+                            var entryOff = dirOff + i * 28;
+                            var typeVal = _B.read_uint32_le(entryOff + 12);
+                            var dataSize = _B.read_uint32_le(entryOff + 16);
+                            var rawPtr = _B.read_uint32_le(entryOff + 24);
+                            // Upstream: only include if PointerToRawData != 0
+                            // and offset is valid. Break on first invalid.
+                            if (rawPtr === 0 || rawPtr >= fileSize) break;
+                            _peDebugRecords.push({
+                                type: _DEBUG_TYPES[typeVal] || "UNKNOWN",
+                                offset: rawPtr,
+                                size: dataSize
+                            });
+                        }
+                        return _peDebugRecords;
+                    }
+                    PE.getNumberOfDebugDataRecords = function() {
+                        return _peGetDebugRecords().length;
                     };
                     PE.getDebugDataOffset = function(n) {
-                        if (!_peIsPE()) return 0;
-                        var dbgDirOff = _peDataDirOff(6);
-                        var va = _B.read_uint32_le(dbgDirOff);
-                        var size = _B.read_uint32_le(dbgDirOff + 4);
-                        if (va === 0 || size === 0) return 0;
-                        var count = Math.floor(size / 28);
-                        if (n < 0 || n >= count) return 0;
-                        var entryOff = _peRvaToFileOffset(va) + n * 28;
-                        return _B.read_uint32_le(entryOff + 24); // PointerToRawData
+                        var recs = _peGetDebugRecords();
+                        if (n < 0 || n >= recs.length) return 0;
+                        return recs[n].offset;
                     };
                     PE.getDebugDataSize = function(n) {
-                        if (!_peIsPE()) return 0;
-                        var dbgDirOff = _peDataDirOff(6);
-                        var va = _B.read_uint32_le(dbgDirOff);
-                        var size = _B.read_uint32_le(dbgDirOff + 4);
-                        if (va === 0 || size === 0) return 0;
-                        var count = Math.floor(size / 28);
-                        if (n < 0 || n >= count) return 0;
-                        var entryOff = _peRvaToFileOffset(va) + n * 28;
-                        return _B.read_uint32_le(entryOff + 16); // SizeOfData
+                        var recs = _peGetDebugRecords();
+                        if (n < 0 || n >= recs.length) return 0;
+                        return recs[n].size;
                     };
                     PE.getDebugDataType = function(n) {
-                        if (!_peIsPE()) return "";
-                        var dbgDirOff = _peDataDirOff(6);
-                        var va = _B.read_uint32_le(dbgDirOff);
-                        var size = _B.read_uint32_le(dbgDirOff + 4);
-                        if (va === 0 || size === 0) return "";
-                        var count = Math.floor(size / 28);
-                        if (n < 0 || n >= count) return "";
-                        var entryOff = _peRvaToFileOffset(va) + n * 28;
-                        var typeVal = _B.read_uint32_le(entryOff + 12);
-                        return _DEBUG_TYPES[typeVal] || "UNKNOWN";
+                        var recs = _peGetDebugRecords();
+                        if (n < 0 || n >= recs.length) return "";
+                        return recs[n].type;
                     };
 
                     // Validation methods: check PE header field validity.
