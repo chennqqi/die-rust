@@ -1462,6 +1462,7 @@ dependencies = [
  "md4",
  "rars",
  "serde",
+ "serde_json",
  "sevenz-rust",
  "sha1 0.10.7",
  "sha2 0.10.9",

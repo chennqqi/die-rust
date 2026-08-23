@@ -1,0 +1,753 @@
+{
+  "diec_version": "die 4.0.0",
+  "database_commit": "c2c17dfa5",
+  "recorded_at": "2026-08-23T07:38:46Z",
+  "cases": {
+    "minimal.exe": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "PE32",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "512",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "Invalid signature:",
+      "stderr": ""
+    },
+    "minimal-pe64.exe": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "PE64",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "512",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "Invalid signature:",
+      "stderr": ""
+    },
+    "with-tables.exe": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "PE32",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "2048",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "Invalid signature:",
+      "stderr": ""
+    },
+    "pe-with-resources.exe": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "PE32",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "1536",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "Invalid signature:",
+      "stderr": ""
+    },
+    "pe-dotnet.exe": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "PE32",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "1024",
+            "values": [
+              {
+                "info": "",
+                "name": ".NET Framework",
+                "string": "Library: .NET Framework(CLR 4.0.30319)",
+                "type": "library",
+                "version": "CLR 4.0.30319"
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "Invalid signature:",
+      "stderr": ""
+    },
+    "elf-with-deps.elf": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "ELF64",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "382",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "macho-with-dylib.macho": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Mach-O64",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "160",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal.elf": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "ELF64",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "64",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal-elf32.elf": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "ELF32",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "52",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal.macho": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Mach-O64",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "104",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal-macho32.macho": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Mach-O32",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "84",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal-fat.macho": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Mach-O FAT",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "360",
+            "values": [
+              {
+                "info": "",
+                "name": "lipo",
+                "string": "Converter: lipo",
+                "type": "converter",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "Minimal.class": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Java Class",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "59",
+            "values": [
+              {
+                "info": "",
+                "name": "Java Class",
+                "string": "Format: Java Class(Java SE 8)",
+                "type": "format",
+                "version": "Java SE 8"
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal.dex": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "DEX",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "112",
+            "values": [
+              {
+                "info": "",
+                "name": "DEX",
+                "string": "Format: DEX(035)",
+                "type": "format",
+                "version": "035"
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "payload.zip": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "ZIP",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "151",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal.apk": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "APK",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "350",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal.jar": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "JAR",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "324",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal.ipa": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Binary",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "300",
+            "values": [
+              {
+                "info": "100.0%, 1 file",
+                "name": "Zip",
+                "string": "Archive: Zip(2.0)[100.0%, 1 file]",
+                "type": "archive",
+                "version": "2.0"
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "payload.tar": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Binary",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "2048",
+            "values": [
+              {
+                "info": "",
+                "name": "tar",
+                "string": "Archive: tar",
+                "type": "archive",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal.cfbf": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "CFBF",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "512",
+            "values": [
+              {
+                "info": "",
+                "name": "CFBF",
+                "string": "Format: CFBF(3.62)",
+                "type": "format",
+                "version": "3.62"
+              },
+              {
+                "info": "",
+                "name": "Microsoft Office",
+                "string": "Format: Microsoft Office(1997-2003)",
+                "type": "format",
+                "version": "1997-2003"
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal.pdf": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "PDF",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "331",
+            "values": [
+              {
+                "info": "",
+                "name": "PDF",
+                "string": "Format: PDF(1.4)",
+                "type": "format",
+                "version": "1.4"
+              },
+              {
+                "info": "",
+                "name": "HeaderComment",
+                "string": "Complier: HeaderComment(e2e3cfd3)",
+                "type": "complier",
+                "version": "e2e3cfd3"
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "pixel.png": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "PNG",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "72",
+            "values": [
+              {
+                "info": "1x1, 8 bits, RGB",
+                "name": "PNG",
+                "string": "Format: PNG[1x1, 8 bits, RGB]",
+                "type": "format",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "pixel.jpg": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "JPEG",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "56",
+            "values": [
+              {
+                "info": "",
+                "name": "JPEG",
+                "string": "Format: JPEG(1.1)",
+                "type": "format",
+                "version": "1.1"
+              },
+              {
+                "info": "d41d8cd98f00b204e9800998ecf8427e",
+                "name": "DQT",
+                "string": "Image: DQT[d41d8cd98f00b204e9800998ecf8427e]",
+                "type": "image",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "pixel.bmp": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Binary",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "58",
+            "values": [
+              {
+                "info": "1x1, 24bpp",
+                "name": "Windows Bitmap",
+                "string": "Image: Windows Bitmap(3)[1x1, 24bpp]",
+                "type": "image",
+                "version": "3"
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "plain.txt": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Binary",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "31",
+            "values": [
+              {
+                "info": "LF",
+                "name": "Plain text",
+                "string": "Format: Plain text[LF]",
+                "type": "format",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "manifest.json": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Binary",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "4971",
+            "values": [
+              {
+                "info": "LF",
+                "name": "Plain text",
+                "string": "Format: Plain text[LF]",
+                "type": "format",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "minimal.rar": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Binary",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "21",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "Invalid signature: 72656766..0000000..00000",
+      "stderr": ""
+    },
+    "payload.txt.gz": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Binary",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "54",
+            "values": [
+              {
+                "info": "",
+                "name": "Unknown",
+                "string": "Unknown: Unknown",
+                "type": "Unknown",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "",
+      "stderr": ""
+    },
+    "empty.bin": {
+      "exit_code": 0,
+      "json": {
+        "detects": [
+          {
+            "filetype": "Binary",
+            "info": "",
+            "offset": "0",
+            "parentfilepart": "Header",
+            "size": "0",
+            "values": [
+              {
+                "info": "",
+                "name": "Empty file",
+                "string": "Format: Empty file",
+                "type": "format",
+                "version": ""
+              }
+            ]
+          }
+        ]
+      },
+      "last_error": "Invalid signature: 0061736d010000000",
+      "stderr": ""
+    }
+  }
+}
