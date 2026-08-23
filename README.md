@@ -97,6 +97,26 @@ cd diec-rust && cargo build --workspace --release
 Python / Go / C bindings: see [README.zh-CN.md](README.zh-CN.md) or
 [bindings/](bindings/).
 
+### Linux Platform Requirements
+
+The pre-built release binaries and the Rust standard library (since Rust
+1.88) require **glibc 2.34+** (Ubuntu 22.04+, Debian 12+, RHEL 9+, Fedora 35+).
+This is a constraint of the Rust toolchain's pre-compiled `std`, not a
+project choice.
+
+To run on older distributions (glibc < 2.34, e.g. Ubuntu 20.04, CentOS 7):
+
+1. **Build from source on the target system** with a compatible Rust
+   toolchain. Use `rustup default 1.87` (the last stable before glibc 2.34
+   became the baseline), then `cargo build --workspace --release`.
+2. **Use the Docker image** which ships a compatible glibc:
+   ```sh
+   docker run --rm -v "$PWD:/work" -w /work ghcr.io/chennqqi/diec-rust:latest \
+       diec --alltypes file.exe
+   ```
+3. **Static linking** (advanced): build with `RUSTFLAGS='-C target-feature=+crt-static'`
+   to produce a fully static binary with no glibc dependency.
+
 ## died (Scan Service)
 
 died (die daemon) is an HTTP/JSON scan service for batch file

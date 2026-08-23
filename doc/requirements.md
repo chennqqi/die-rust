@@ -1115,3 +1115,17 @@
 - GUI ScanFlagsDto 已有 recursive/resources/overlay 字段，From impl 映射到新字段
 - 6 个 nested_scan 单元测试 + 1 个 CLI 集成测试（cli_recursivescan_pe_intra_file）
 - 670 个 workspace 测试全部通过，cargo fmt/clippy 零警告
+
+## 2026-08-23: 兼容性阻断问题修复（Phase 14）
+- 实际使用中发现 PE/ELF 规则执行异常、--alltypes 格式误报，1:1 兼容上游目标未达成
+- 环境：ol7 (glibc 2.17) + Rocky 10 (glibc 2.39)，Rust stable 1.97.1 / nightly-2025-09-15
+- 阻断项（3）：
+  1. PE 规则 TypeError: not a function — protector/cryptor/installer/compiler 类规则全部异常
+  2. ELF 规则 ReferenceError: _B is not defined — 所有 ELF compiler/library 规则异常
+  3. --alltypes 格式误报 — ELF 文件被误检为 CFBF/DEX/JPEG/PDF/PNG 等
+- 非阻断项（3）：
+  4. JSON 输出格式与上游 DIE 不兼容（detects/values vs detections，type 大小写，缺 string 字段）
+  5. Rust 1.88+ 预编译 std 要求 glibc 2.34+（ol7/ol8 无法运行，需 build-std workaround）
+  6. Go 绑定 Scanner.ScanBytes 使用 one-shot API 而非 reusable scanner
+- 本质：1:1 兼容上游目标未达成，差分测试覆盖存在重大盲区（未含 db_extra 规则、未用真实 ELF/PE 二进制、--alltypes 测试只验去重不验误报）
+- 需求：修复 3 个阻断项使项目可用于生产环境；提供上游兼容 JSON 输出；补充真实语料差分测试；明确 glibc 要求文档

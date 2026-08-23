@@ -4,10 +4,12 @@
 // the result JSON contains "7-Zip".
 //
 // Run:
-//   go test -v ./...
+//
+//	go test -v ./...
 //
 // The static library must be built first:
-//   cargo build -p diec-ffi --release
+//
+//	cargo build -p diec-ffi --release
 //
 // On Windows, link against target/release/diec_ffi.lib.
 // On Linux/macOS, link against target/release/libdiec_ffi.a.
@@ -97,5 +99,79 @@ func TestNullDatabasePath(t *testing.T) {
 	_, err := diec.NewDatabase("/nonexistent/path/that/does/not/exist")
 	if err == nil {
 		t.Fatal("expected error for nonexistent path")
+	}
+}
+
+// TestReusableScannerScanBytes verifies that the reusable Scanner's
+// ScanBytes method uses the reusable scanner API (diec_v1_scanner_scan_bytes)
+// and produces correct results across multiple scans.
+func TestReusableScannerScanBytes(t *testing.T) {
+	db, err := diec.NewDatabase(dbPath)
+	if err != nil {
+		t.Skipf("Skipping: cannot load database: %v", err)
+	}
+	defer db.Close()
+
+	scanner, err := db.NewScanner()
+	if err != nil {
+		t.Fatalf("NewScanner failed: %v", err)
+	}
+	defer scanner.Close()
+
+	// First scan: 7-Zip header.
+	result1, err := scanner.ScanBytes(sevenZipHeader(), 0)
+	if err != nil {
+		t.Fatalf("first ScanBytes failed: %v", err)
+	}
+	defer result1.Close()
+	json1 := result1.JSON()
+	if !strings.Contains(json1, "7-Zip") {
+		t.Errorf("first scan JSON does not contain 7-Zip: %s", json1)
+	}
+
+	// Second scan: same data, should still work (runtime reused).
+	result2, err := scanner.ScanBytes(sevenZipHeader(), 0)
+	if err != nil {
+		t.Fatalf("second ScanBytes failed: %v", err)
+	}
+	defer result2.Close()
+	json2 := result2.JSON()
+	if !strings.Contains(json2, "7-Zip") {
+		t.Errorf("second scan JSON does not contain 7-Zip: %s", json2)
+	}
+
+	// Third scan: empty data, should not crash.
+	empty := make([]byte, 64)
+	result3, err := scanner.ScanBytes(empty, 0)
+	if err != nil {
+		t.Fatalf("third ScanBytes (empty) failed: %v", err)
+	}
+	defer result3.Close()
+}
+
+// TestReusableScannerScanPath verifies that the reusable Scanner's
+// ScanPath method uses the reusable scanner API.
+func TestReusableScannerScanPath(t *testing.T) {
+	db, err := diec.NewDatabase(dbPath)
+	if err != nil {
+		t.Skipf("Skipping: cannot load database: %v", err)
+	}
+	defer db.Close()
+
+	scanner, err := db.NewScanner()
+	if err != nil {
+		t.Fatalf("NewScanner failed: %v", err)
+	}
+	defer scanner.Close()
+
+	result, err := scanner.ScanPath("../../../corpus/payload.zip", 0)
+	if err != nil {
+		t.Skipf("Skipping: cannot scan corpus file: %v", err)
+	}
+	defer result.Close()
+
+	json := result.JSON()
+	if !strings.Contains(json, "Zip") {
+		t.Errorf("reusable scanner ScanPath JSON does not contain Zip: %s", json)
 	}
 }

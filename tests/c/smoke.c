@@ -125,6 +125,62 @@ int main(void) {
         diec_v1_result_free(&result);
     }
 
+    /* Reusable scanner test: multiple scans sharing one runtime. */
+    diec_v1_scanner *scanner = NULL;
+    failures += check_status("scanner_new",
+        diec_v1_scanner_new(database, &scanner, &error));
+
+    if (scanner) {
+        /* First scan via reusable scanner. */
+        diec_v1_result *scan1 = NULL;
+        failures += check_status("scanner_scan_bytes (1)",
+            diec_v1_scanner_scan_bytes(scanner, data, sizeof(data), NULL, NULL,
+                &scan1, &error));
+
+        if (scan1) {
+            const uint8_t *json1 = NULL;
+            uint64_t json1_len = 0;
+            diec_v1_result_json(scan1, &json1, &json1_len);
+            if (json1 && json1_len > 0) {
+                int found1 = 0;
+                for (uint64_t i = 0; i + 5 <= json1_len; i++) {
+                    if (memcmp(json1 + i, "7-Zip", 5) == 0) {
+                        found1 = 1;
+                        break;
+                    }
+                }
+                if (found1) {
+                    printf("PASS: scanner scan 1 contains 7-Zip\n");
+                } else {
+                    fprintf(stderr, "FAIL: scanner scan 1 no 7-Zip\n");
+                    failures++;
+                }
+            }
+            diec_v1_result_free(&scan1);
+        }
+
+        /* Second scan (runtime reused). */
+        diec_v1_result *scan2 = NULL;
+        failures += check_status("scanner_scan_bytes (2)",
+            diec_v1_scanner_scan_bytes(scanner, data, sizeof(data), NULL, NULL,
+                &scan2, &error));
+
+        if (scan2) {
+            uint64_t count2 = 0;
+            diec_v1_result_detection_count(scan2, &count2);
+            if (count2 > 0) {
+                printf("PASS: scanner scan 2 count = %llu\n",
+                    (unsigned long long)count2);
+            } else {
+                fprintf(stderr, "FAIL: scanner scan 2 count is 0\n");
+                failures++;
+            }
+            diec_v1_result_free(&scan2);
+        }
+
+        diec_v1_scanner_free(&scanner);
+    }
+
     /* Cleanup */
     diec_v1_database_free(&database);
 

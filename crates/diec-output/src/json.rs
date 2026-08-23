@@ -25,6 +25,57 @@ fn escape_json(s: &str) -> String {
     out
 }
 
+/// Render a scan result as upstream DIE-engine compatible JSON.
+///
+/// Upstream `diec --json` outputs a JSON array of detection objects, each
+/// with fields: `fileType`, `name`, `string`, `info`, `version`, `offset`.
+/// This renderer matches that structure for tooling compatibility.
+///
+/// Field mapping:
+/// - `fileType` <- `file_type` (e.g., "PE", "ELF", "Binary")
+/// - `name` <- `name` (detection name, e.g., "Microsoft Linker")
+/// - `string` <- `type_name` (detection type, e.g., "compiler", "linker")
+/// - `info` <- `options` (additional info, if present)
+/// - `version` <- `version` (version string, if present)
+/// - `offset` <- `offset` (hex string, if present)
+pub fn render_json_upstream(result: &ScanResult) -> String {
+    let mut out = String::new();
+    out.push('[');
+    for (i, det) in result.detections.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push('{');
+        out.push_str("\"fileType\":\"");
+        out.push_str(&escape_json(&det.file_type));
+        out.push_str("\",");
+        out.push_str("\"name\":\"");
+        out.push_str(&escape_json(&det.name));
+        out.push_str("\",");
+        out.push_str("\"string\":\"");
+        out.push_str(&escape_json(&det.type_name));
+        out.push('"');
+        if let Some(info) = &det.options {
+            out.push_str(",\"info\":\"");
+            out.push_str(&escape_json(info));
+            out.push('"');
+        }
+        if let Some(v) = &det.version {
+            out.push_str(",\"version\":\"");
+            out.push_str(&escape_json(v));
+            out.push('"');
+        }
+        if let Some(off) = det.offset {
+            out.push_str(",\"offset\":\"0x");
+            out.push_str(&format!("{:x}", off));
+            out.push('"');
+        }
+        out.push('}');
+    }
+    out.push(']');
+    out
+}
+
 /// Render a scan result as canonical JSON.
 pub fn render_json(result: &ScanResult) -> String {
     let mut out = String::new();

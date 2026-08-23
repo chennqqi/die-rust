@@ -273,3 +273,65 @@ diec CLI 缺口远小于 GUI。缺口分两类：
 - 8 个子任务：13.1-13.8
 - 3 个 ADR：0028/0029/0030
 - 退出条件：差分测试 0 不匹配，macOS 68 项闭合，语料覆盖 68 CAP-* 项
+
+## 2026-08-23: 兼容性阻断 6 问题根因分析（Phase 14 输入）
+
+### 问题 1：PE 规则 TypeError: not a function（阻断）
+- 根因：crates/diec-rules/src/host_api_bridge.rs PE bridge 不完整
+  - PE.isResourceGroupNamePresent / PE.isResourceGroupIdPresent 未实现
+  - PE.section 数组在 host_api_bridge.rs:2253 硬编码为空 []，未填充区段数据
+    （上游 db/PE/_init:147-163 应填充 Number/Name/VirtualSize/VirtualAddress/FileSize/FileOffset/Characteristics）
+  - PE.resource 数组在 host_api_bridge.rs:2361 硬编码为空 []
+  - PE.nLastSection 在 host_api_bridge.rs:2252 硬编码 -1，应为 getNumberOfSections()-1
+  - bridge JS 代码块在 _init 脚本之后执行，覆盖了 _init 填充的数据
+- 影响规则：compiler_RealBasic.4.sg、cryptor_404crypter.1.sg、installer_DockerDesktopInstaller.1.sg、
+  protector_Adept_Protector.2.sg 等（部分在 db_extra）
+- 差分测试盲区：差分测试未含 db_extra 规则；样本不含触发资源组特征的 PE
+
+### 问题 2：ELF 规则 ReferenceError: _B is not defined（阻断）
+- 根因：host_api_bridge.rs:3046-3509 ELF 方法定义闭包缺少 `var _B = Binary;`
+  - PE 闭包（行 2079）正确定义 _B，ELF 闭包（行 3048）遗漏
+  - ELF 辅助函数 _sectionName/_sectionNumber/_libraryNames 使用 _B.__elfSectionNames() / _B.__elfImportLibraries()
+  - _B 在 ELF 上下文未定义 → ReferenceError
+- 影响规则：所有 ELF compiler/library 规则（compiler_Borland_Kylix/DMD/Free_Pascal/Go/Rust/gcc、library_GLIBC/Curl/FFmpeg）
+- 差分测试盲区：corpus_differential.rs 样本不含 ELF 文件（仅 test.7z/jpg/rar/random.bin）
+
+### 问题 3：--alltypes 格式误报（阻断）
+- 根因：scanner.rs:427-437 --alltypes 模式直接返回 all_rule_types()（18 种全部），
+  完全忽略 ProbeTable 探测结果
+  - 上游 bIsAllTypesScan 语义：先 getFileTypes 探测，仅为兼容/容器类型额外执行父类型规则
+    （PE→MSDOS、APK→JAR/ZIP），不执行不相关格式规则
+  - diec-rust 对 ELF 跑 DEX/JPEG/PDF/PNG/JavaClass/PYC 规则 → 字节模式偶然匹配 → 误报
+- 差分测试盲区：--alltypes 测试只验去重和检测数量，未验"不相关格式不应产生检测"；
+  样本为构造的最小 PE，未用真实 ELF 如 /usr/bin/ls
+
+### 问题 4：JSON 输出格式不兼容（非阻断）
+- 根因：crates/diec-output/src/json.rs:29-150 设计为自有结构
+  - 顶层 detections vs 上游 detects；扁平 vs values[] 嵌套
+  - type_name 小写（archive/packer）vs 上游首字母大写（Packer/Protector）
+  - 缺 string 字段（上游 "Packer: UPX" 含前缀）
+  - 无上游兼容模式或 --output json-die 选项
+
+### 问题 5：glibc 2.34+ 要求（非阻断）
+- 根因：Rust 1.88+（2025-06）预编译 std 链接 glibc 2.34+ 符号
+  - rustup stable 产物即使 ol7 编译仍要求 2.34/2.35
+  - nightly + build-std=std 可产出 glibc 2.16 产物
+- 文档缺陷：README 未说明 glibc 最低版本
+
+### 问题 6：Go 绑定 Scanner.ScanBytes（非阻断）
+- 根因：bindings/go/diec/diec.go:214-233 Scanner.ScanBytes 调用 cgo_scan_bytes（one-shot）
+  - 缺 cgo_scanner_scan_bytes / cgo_scanner_scan_path_utf8 helper
+  - FFI 侧 diec_v1_scanner_scan_bytes 已实现，仅 Go 绑定层缺失
+
+### 共性根因：差分测试覆盖盲区
+- 未含 db_extra 规则（PE 阻断规则多在 db_extra）
+- 未用真实系统二进制（/usr/bin/ls、/usr/bin/bash）做 ELF 差分
+- --alltypes 测试无"负向断言"（不相关格式不应检测）
+- COMPATIBILITY.md 声称与实际不符（PE host API "完整实现"实则 section/resource 数组空）
+
+### Phase 14 规划方向
+- P0 阻断修复：ELF _B 注入（1 行级修复）、PE section/resource/nLastSection 填充 + 缺失方法、--alltypes 探测前置过滤
+- P0 差分测试加固：纳入 db_extra、真实系统二进制、--alltypes 负向断言
+- P1 兼容性增强：上游兼容 JSON 输出（--output json-die）、Go 绑定 reusable scanner
+- P1 文档：glibc 要求 + build-std 指南、COMPATIBILITY.md 纠正
+- ADR 需求：--alltypes 语义对齐上游（可能破坏性）、json-die 兼容输出

@@ -247,31 +247,45 @@ fn dedup_detections(detections: &mut Vec<ScanDetection>) {
     });
 }
 
-/// Return all known rule file types for --alltypes mode.
-/// This matches upstream bIsAllTypesScan behavior where all format
-/// rules are evaluated regardless of detected format.
-fn all_rule_types() -> Vec<&'static str> {
-    vec![
-        "PE",
-        "ELF",
-        "MACH",
-        "MACHOFAT",
-        "MSDOS",
-        "Binary",
-        "APK",
-        "JAR",
-        "ZIP",
-        "RAR",
-        "DEX",
-        "PDF",
-        "CFBF",
-        "ISO9660",
-        "JPEG",
-        "PNG",
-        "PYC",
-        "NPM",
-        "JavaClass",
-    ]
+/// Return the rule file types for `--alltypes` mode.
+///
+/// Upstream `bIsAllTypesScan` does NOT run every format's rules blindly.
+/// It first probes the format via `XFormats::getFileTypes`, then runs the
+/// detected format's rules plus compatible parent-type rules (e.g., PE also
+/// runs MS-DOS rules because PE contains a DOS stub; APK also runs JAR/ZIP
+/// rules because APK is a ZIP container).
+///
+/// Running all 18 format rule sets on every file causes massive false
+/// positives (e.g., an ELF file matching JPEG/PDF/PNG byte patterns). This
+/// function delegates to `detect_rule_types` for the probe, then appends
+/// the compatible parent types.
+fn alltypes_rule_types(data: &[u8]) -> Vec<&'static str> {
+    let mut types = detect_rule_types(data);
+
+    // Compatible parent types: container/wrapper formats also run their
+    // parent format's rules.
+    let has_pe = types.contains(&"PE");
+    let has_apk = types.contains(&"APK");
+    let has_jar = types.contains(&"JAR");
+    let has_machofat = types.contains(&"MACHOFAT");
+
+    if has_pe {
+        types.push("MSDOS");
+    }
+    if has_apk {
+        types.push("JAR");
+        types.push("ZIP");
+    } else if has_jar {
+        types.push("ZIP");
+    }
+    if has_machofat {
+        types.push("MACH");
+    }
+
+    // Deduplicate while preserving order.
+    let mut seen = std::collections::HashSet::new();
+    types.retain(|t| seen.insert(*t));
+    types
 }
 
 /// A single detection result from scanning.
@@ -425,13 +439,15 @@ pub fn scan_bytes(
     let mut profiling: Vec<SignatureProfile> = Vec::new();
 
     // Detect the file format to determine which rule types to run.
-    // With --alltypes, all file type rules are run (matching upstream
-    // bIsAllTypesScan behavior: minimal PE32 also reports MSDOS).
+    // With --alltypes, the detected format's rules plus compatible parent
+    // types are run (matching upstream bIsAllTypesScan: PE also reports
+    // MSDOS, APK also reports JAR/ZIP). This avoids false positives from
+    // running unrelated format rules on every file.
     // With file_type override, only the specified type's rules are run.
     let active_types: Vec<&str> = if let Some(ref ft) = flags.file_type {
         vec![ft.as_str()]
     } else if flags.all_types {
-        all_rule_types()
+        alltypes_rule_types(&data)
     } else {
         detect_rule_types(&data)
     };
@@ -736,11 +752,12 @@ impl Scanner {
         let mut profiling: Vec<SignatureProfile> = Vec::new();
 
         // Detect the file format to determine which rule types to run.
+        // With --alltypes, detected format + compatible parent types are run.
         // With file_type override, only the specified type's rules are run.
         let active_types: Vec<&str> = if let Some(ref ft) = flags.file_type {
             vec![ft.as_str()]
         } else if flags.all_types {
-            all_rule_types()
+            alltypes_rule_types(&data)
         } else {
             detect_rule_types(&data)
         };
@@ -1270,6 +1287,81 @@ mod tests {
             "Binary should not be included for ELF files, got: {:?}",
             types
         );
+    }
+
+    #[test]
+    fn alltypes_rule_types_elf_no_false_positive() {
+        // Regression test for Phase 14.3: --alltypes must NOT run all 18
+        // format rule sets blindly. An ELF file should only run ELF rules
+        // (no PE/JPEG/PDF/PNG/CFBF/DEX false positives).
+        let elf_header: Vec<u8> = vec![
+            0x7F, 0x45, 0x4C, 0x46, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x02, 0x00, 0x3E, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00,
+            0x38, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        let types = alltypes_rule_types(&elf_header);
+        assert!(types.contains(&"ELF"), "ELF must be in --alltypes types");
+        // Unrelated formats must NOT appear.
+        for bad in [
+            "PE",
+            "JPEG",
+            "PDF",
+            "PNG",
+            "CFBF",
+            "DEX",
+            "MACH",
+            "JavaClass",
+        ] {
+            assert!(
+                !types.contains(&bad),
+                "{bad} should not be in --alltypes for ELF, got: {:?}",
+                types
+            );
+        }
+    }
+
+    #[test]
+    fn alltypes_rule_types_pe_includes_msdos() {
+        // --alltypes for PE should include PE + MSDOS (PE contains DOS stub).
+        let pe_header: Vec<u8> = {
+            let mut h = vec![0x4D, 0x5A]; // MZ
+            h.resize(0x80, 0); // DOS header
+            // e_lfanew at 0x3C -> 0x80
+            h[0x3C] = 0x80;
+            h[0x3D] = 0x00;
+            h[0x3E] = 0x00;
+            h[0x3F] = 0x00;
+            // PE signature at 0x80
+            h.extend_from_slice(&[0x50, 0x45, 0x00, 0x00]);
+            // COFF header (machine = 0x14C = i386)
+            h.extend_from_slice(&[
+                0x4C, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ]);
+            // Optional header magic 0x10B = PE32
+            h.extend_from_slice(&[0x0B, 0x01]);
+            h.resize(0x200, 0);
+            h
+        };
+
+        let types = alltypes_rule_types(&pe_header);
+        assert!(types.contains(&"PE"), "PE must be in --alltypes types");
+        assert!(
+            types.contains(&"MSDOS"),
+            "MSDOS must be in --alltypes for PE (parent type), got: {:?}",
+            types
+        );
+        // Unrelated formats must NOT appear.
+        for bad in ["ELF", "MACH", "JPEG", "PDF", "PNG", "DEX"] {
+            assert!(
+                !types.contains(&bad),
+                "{bad} should not be in --alltypes for PE, got: {:?}",
+                types
+            );
+        }
     }
 
     #[test]

@@ -28,11 +28,14 @@ fn print_usage() {
     eprintln!("  --customdatabase, --customdb <path>");
     eprintln!("                            Custom database directory");
     eprintln!("  --json                    Output as JSON");
+    eprintln!("  --json-upstream           Output as upstream DIE-engine compatible JSON");
     eprintln!("  --xml                     Output as XML");
     eprintln!("  --csv                     Output as CSV");
     eprintln!("  --tsv                     Output as TSV");
     eprintln!("  --plaintext               Output as plain text");
-    eprintln!("  --output <format>         Output format: text, json, xml, csv, tsv, plaintext");
+    eprintln!(
+        "  --output <format>         Output format: text, json, json-upstream, xml, csv, tsv, plaintext"
+    );
     eprintln!(
         "  --recursivescan, -r       Enable intra-file recursive scan (PE resources + overlay)"
     );
@@ -243,6 +246,9 @@ fn main() -> ExitCode {
             "--json" => {
                 output_format = "json".to_string();
             }
+            "--json-upstream" => {
+                output_format = "json-upstream".to_string();
+            }
             "--xml" => {
                 output_format = "xml".to_string();
             }
@@ -267,7 +273,7 @@ fn main() -> ExitCode {
                 }
                 if !matches!(
                     output_format.as_str(),
-                    "text" | "json" | "xml" | "csv" | "tsv"
+                    "text" | "json" | "json-upstream" | "xml" | "csv" | "tsv"
                 ) {
                     eprintln!("error: unsupported output format: {output_format}");
                     return ExitCode::from(EXIT_USAGE);
@@ -580,6 +586,29 @@ fn main() -> ExitCode {
                         print!(",");
                     }
                     print!("{}", diec_output::render_json(r));
+                }
+                println!("]");
+            }
+        }
+        "json-upstream" => {
+            // Upstream DIE-engine compatible JSON: array of detection objects.
+            if results.len() == 1 {
+                println!("{}", diec_output::render_json_upstream(&results[0]));
+            } else {
+                // Batch: concatenate arrays.
+                print!("[");
+                for (i, r) in results.iter().enumerate() {
+                    if i > 0 {
+                        print!(",");
+                    }
+                    // render_json_upstream returns an array without outer brackets;
+                    // strip them to merge into the batch array.
+                    let inner = diec_output::render_json_upstream(r);
+                    let trimmed = inner
+                        .strip_prefix('[')
+                        .and_then(|s| s.strip_suffix(']'))
+                        .unwrap_or(&inner);
+                    print!("{}", trimmed);
                 }
                 println!("]");
             }

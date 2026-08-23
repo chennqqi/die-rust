@@ -209,6 +209,20 @@ pub trait HostApi {
     /// Returns false if not a valid PE or resource not found.
     fn pe_is_resource_name_present(&self, name: &str) -> bool;
 
+    /// Check if a resource group (type-level directory) with the given name
+    /// exists in the PE resource directory tree.
+    /// Returns false if not a valid PE or group not found.
+    fn pe_is_resource_group_name_present(&self, _group_name: &str) -> bool {
+        false
+    }
+
+    /// Check if a resource group (type-level directory) with the given ID
+    /// exists in the PE resource directory tree.
+    /// Returns false if not a valid PE or group not found.
+    fn pe_is_resource_group_id_present(&self, _group_id: u32) -> bool {
+        false
+    }
+
     /// Get the resource section file offset (data directory index 2).
     /// Returns -1 if not a valid PE or no resource section.
     fn pe_resource_section_offset(&self) -> i64;

@@ -26,3 +26,9 @@ __pycache__/
 /.playwright-mcp/
 /*.png
 
+
+# External feedback reports (not for commit, may contain reporter info)
+/doc/feedback.md
+
+# C smoke test binary (compiled artifact, not source)
+/tests/c/smoke

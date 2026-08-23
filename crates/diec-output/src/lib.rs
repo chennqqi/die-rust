@@ -15,7 +15,7 @@ mod text;
 mod xml;
 
 pub use delimited::{render_csv, render_tsv};
-pub use json::render_json;
+pub use json::{render_json, render_json_upstream};
 pub use struct_formatter::{
     render_struct_csv, render_struct_json, render_struct_text, render_struct_tsv, render_struct_xml,
 };
@@ -60,6 +60,66 @@ mod tests {
         assert!(json.contains("archive"));
         assert!(json.contains("0.4"));
         assert!(json.contains("test.7z"));
+    }
+
+    #[test]
+    fn json_upstream_contains_detection() {
+        let result = sample_result();
+        let json = render_json_upstream(&result);
+        // Upstream format: array of objects with fileType/name/string/version.
+        assert!(json.starts_with('['));
+        assert!(json.ends_with(']'));
+        assert!(json.contains("\"fileType\":\"Binary\""));
+        assert!(json.contains("\"name\":\"7-Zip\""));
+        assert!(json.contains("\"string\":\"archive\""));
+        assert!(json.contains("\"version\":\"0.4\""));
+        // Must NOT contain canonical-format field names.
+        assert!(!json.contains("\"file_type\""));
+        assert!(!json.contains("\"type_name\""));
+        assert!(!json.contains("\"detections\""));
+    }
+
+    #[test]
+    fn json_upstream_empty_result() {
+        let result = diec_engine::ScanResult {
+            path: "empty.bin".into(),
+            detections: vec![],
+            diagnostics: vec![],
+            structured_diagnostics: vec![],
+            profiling: vec![],
+        };
+        let json = render_json_upstream(&result);
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn json_upstream_offset_as_hex() {
+        let result = diec_engine::ScanResult {
+            path: "test.bin".into(),
+            detections: vec![ScanDetection {
+                file_type: "PE".into(),
+                type_name: "compiler".into(),
+                name: "TestCompiler".into(),
+                version: Some("1.0".into()),
+                options: Some("console".into()),
+                signature_path: None,
+                id: None,
+                parent_id: None,
+                file_part: None,
+                offset: Some(0x260),
+                size: None,
+                is_heuristic: None,
+                is_a_heuristic: None,
+                original_name: None,
+            }],
+            diagnostics: vec![],
+            structured_diagnostics: vec![],
+            profiling: vec![],
+        };
+        let json = render_json_upstream(&result);
+        assert!(json.contains("\"offset\":\"0x260\""));
+        assert!(json.contains("\"info\":\"console\""));
+        assert!(json.contains("\"version\":\"1.0\""));
     }
 
     #[test]

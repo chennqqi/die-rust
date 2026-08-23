@@ -206,6 +206,25 @@ _lib.diec_v1_result_detection_count.argtypes = [ResultP, POINTER(c_uint64)]
 _lib.diec_v1_result_free.restype = c_uint32
 _lib.diec_v1_result_free.argtypes = [POINTER(ResultP)]
 
+# Reusable scanner functions.
+_lib.diec_v1_scanner_new.restype = c_uint32
+_lib.diec_v1_scanner_new.argtypes = [DatabaseP, POINTER(ScannerP), POINTER(ErrorP)]
+
+_lib.diec_v1_scanner_scan_bytes.restype = c_uint32
+_lib.diec_v1_scanner_scan_bytes.argtypes = [
+    ScannerP, POINTER(c_uint8), c_uint64, POINTER(ScanOptions), CancelP,
+    POINTER(ResultP), POINTER(ErrorP),
+]
+
+_lib.diec_v1_scanner_scan_path_utf8.restype = c_uint32
+_lib.diec_v1_scanner_scan_path_utf8.argtypes = [
+    ScannerP, POINTER(c_uint8), c_uint64, POINTER(ScanOptions), CancelP,
+    POINTER(ResultP), POINTER(ErrorP),
+]
+
+_lib.diec_v1_scanner_free.restype = c_uint32
+_lib.diec_v1_scanner_free.argtypes = [POINTER(ScannerP)]
+
 _lib.diec_v1_error_status.restype = c_uint32
 _lib.diec_v1_error_status.argtypes = [ErrorP, POINTER(c_uint32)]
 
@@ -292,6 +311,91 @@ class Database:
     @property
     def handle(self) -> DatabaseP:
         return self._handle
+
+    def new_scanner(self) -> "Scanner":
+        """Create a reusable scanner from this database.
+
+        A reusable scanner shares the JavaScript runtime across multiple
+        scans, avoiding the per-scan runtime construction cost of the
+        one-shot :func:`scan_bytes`/:func:`scan_path` functions.
+        """
+        return Scanner.from_database(self)
+
+
+class Scanner:
+    """A reusable scanner that shares runtime state across scans.
+
+    Use this instead of the one-shot :func:`scan_bytes`/:func:`scan_path`
+    functions when scanning many files, to avoid the per-scan runtime
+    construction overhead.
+
+    Usage::
+
+        with Database.from_path(db_path) as db:
+            with db.new_scanner() as scanner:
+                result1 = scanner.scan_bytes(data1)
+                result2 = scanner.scan_bytes(data2)
+    """
+
+    def __init__(self, handle: int):
+        self._handle = ScannerP(handle)
+
+    def __enter__(self) -> "Scanner":
+        return self
+
+    def __exit__(self, *args) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Release the scanner handle."""
+        if self._handle:
+            _lib.diec_v1_scanner_free(byref(self._handle))
+            self._handle = None
+
+    @classmethod
+    def from_database(cls, db: Database) -> "Scanner":
+        """Create a reusable scanner from a database."""
+        scanner = ScannerP()
+        err = ErrorP()
+        status = _lib.diec_v1_scanner_new(db.handle, byref(scanner), byref(err))
+        if status != STATUS_OK:
+            _consume_error(err)
+            raise DiecError(status, "scanner_new failed")
+        return cls(scanner.value)
+
+    def scan_bytes(self, data: bytes, flags: int = 0) -> Result:
+        """Scan a byte buffer, reusing the scanner's runtime."""
+        opts = _make_options(flags)
+        opts_ptr = byref(opts) if opts else None
+        buf = (c_uint8 * len(data))(*data) if data else None
+        result = ResultP()
+        err = ErrorP()
+        status = _lib.diec_v1_scanner_scan_bytes(
+            self._handle, buf, len(data), opts_ptr, None, byref(result), byref(err)
+        )
+        if status != STATUS_OK:
+            _consume_error(err)
+            raise DiecError(status, "scanner_scan_bytes failed")
+        return Result(result.value)
+
+    def scan_path(self, path: str, flags: int = 0) -> Result:
+        """Scan a file path, reusing the scanner's runtime."""
+        opts = _make_options(flags)
+        opts_ptr = byref(opts) if opts else None
+        path_bytes = path.encode("utf-8")
+        buf = (c_uint8 * len(path_bytes))(*path_bytes)
+        result = ResultP()
+        err = ErrorP()
+        status = _lib.diec_v1_scanner_scan_path_utf8(
+            self._handle, buf, len(path_bytes), opts_ptr, None, byref(result), byref(err)
+        )
+        if status != STATUS_OK:
+            _consume_error(err)
+            raise DiecError(status, "scanner_scan_path failed")
+        return Result(result.value)
 
 
 class Result:

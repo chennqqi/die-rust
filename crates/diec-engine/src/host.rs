@@ -525,6 +525,14 @@ impl HostApi for BufferHost {
         diec_rules::pe_native::is_resource_name_present(self.data(), name)
     }
 
+    fn pe_is_resource_group_name_present(&self, group_name: &str) -> bool {
+        diec_rules::pe_native::is_resource_group_name_present(self.data(), group_name)
+    }
+
+    fn pe_is_resource_group_id_present(&self, group_id: u32) -> bool {
+        diec_rules::pe_native::is_resource_group_id_present(self.data(), group_id)
+    }
+
     fn pe_resource_section_offset(&self) -> i64 {
         diec_rules::pe_native::get_resource_section_offset(self.data())
     }

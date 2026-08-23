@@ -1019,6 +1019,36 @@ impl HostApiBridge {
                     detail: format!("__peIsResourceNamePresent set: {e}"),
                 })?;
 
+            // PE resource group name present (type-level directory entry).
+            let h = host.clone();
+            let pe_is_resource_group_name_fn =
+                rquickjs::Function::new(ctx.clone(), move |name: String| {
+                    h.pe_is_resource_group_name_present(&name)
+                })
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("peIsResourceGroupNamePresent: {e}"),
+                })?;
+            binary
+                .set("__peIsResourceGroupNamePresent", pe_is_resource_group_name_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__peIsResourceGroupNamePresent set: {e}"),
+                })?;
+
+            // PE resource group id present (type-level directory entry).
+            let h = host.clone();
+            let pe_is_resource_group_id_fn =
+                rquickjs::Function::new(ctx.clone(), move |id: u32| {
+                    h.pe_is_resource_group_id_present(id)
+                })
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("peIsResourceGroupIdPresent: {e}"),
+                })?;
+            binary
+                .set("__peIsResourceGroupIdPresent", pe_is_resource_group_id_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__peIsResourceGroupIdPresent set: {e}"),
+                })?;
+
             // PE resource section offset.
             let h = host.clone();
             let pe_resource_section_fn = rquickjs::Function::new(ctx.clone(), move || {
@@ -2249,8 +2279,11 @@ impl HostApiBridge {
                         if (!_peIsPE()) return false;
                         return _peSectionNumber(name) >= 0;
                     };
-                    PE.nLastSection = -1;
-                    PE.section = [];
+                    // PE.nLastSection and PE.section are populated by the
+                    // upstream db/PE/_init script (executed during init),
+                    // which iterates sections via getSectionName/Size/etc.
+                    // Do NOT hardcode them here — that would overwrite the
+                    // _init script's populated arrays.
 
                     PE.getEntryPoint = function() {
                         if (!_peIsPE()) return 0;
@@ -2358,19 +2391,38 @@ impl HostApiBridge {
                     PE.getResourceSizeByNumber = function(n) { return 0; };
                     PE.getResourceTypeByNumber = function(n) { return 0; };
                     PE.getResourceNameOffset = function(s) { return 0; };
-                    PE.resource = [];
+                    // PE.resource is populated by the upstream db/PE/_init
+                    // script (executed during init), which iterates resources
+                    // via getResourceNameByNumber/Id/Offset/Size/Type. Do NOT
+                    // hardcode it here — that would overwrite the _init
+                    // script's populated array.
 
                     // OS/options stubs.
                     PE.getOperationSystemOptions = function() { return ""; };
                     PE.isResourceNamePresent = function(s) {
                         return _B.__peIsResourceNamePresent(s);
                     };
+                    // Resource group (type-level directory) checks.
+                    PE.isResourceGroupNamePresent = function(s) {
+                        return _B.__peIsResourceGroupNamePresent(s);
+                    };
+                    PE.isResourceGroupIdPresent = function(n) {
+                        return _B.__peIsResourceGroupIdPresent(n);
+                    };
 
                     // .NET detection: native pelite-backed CLR header check.
                     PE.isNet = function() {
                         return _peGetBatch().isNet;
                     };
+                    // Alias: upstream help documents `isNET` and many rules
+                    // (cryptor/installer/protector) call `PE.isNET()` with
+                    // uppercase. JavaScript is case-sensitive, so both forms
+                    // must be registered.
+                    PE.isNET = PE.isNet;
                     // .NET stubs (needed to pass stubForLegacyEngines check).
+                    // These methods require .NET metadata parsing which is
+                    // not yet implemented. Stubs return false/empty/-1 so
+                    // rules execute without TypeError instead of crashing.
                     PE.isNetObjectPresent = function(s) { return false; };
                     PE.isNetUStringPresent = function(s) { return false; };
                     PE.isNetGlobalCctorPresent = function(s) { return false; };
@@ -2378,6 +2430,14 @@ impl HostApiBridge {
                     PE.getNetAssemblyName = function() { return ""; };
                     PE.getNetModuleName = function() { return ""; };
                     PE.getNETVersion = function() { return ""; };
+                    // .NET signature/entry-point comparison stubs.
+                    PE.compareEP_NET = function(sig, off) { return false; };
+                    PE.findSignatureInBlob_NET = function(sig) { return -1; };
+                    PE.isSignatureInBlobPresent_NET = function(sig) { return false; };
+                    // .NET metadata analysis stubs.
+                    PE.isNetTypePresent = function(ns, tn) { return false; };
+                    PE.isNetMethodPresent = function(ns, tn, mn) { return false; };
+                    PE.isNetFieldPresent = function(ns, tn, fn) { return false; };
 
                     // PE-specific string methods.
                     // Manifest: parsed natively via pelite resources (batch cache).
@@ -3046,6 +3106,11 @@ impl HostApiBridge {
             ctx.eval::<(), _>(
                 r#"
                 (function() {
+                    // Save Binary reference in a local variable to ensure
+                    // closures always access the correct object (the _init
+                    // script sets File = ELF, which would cause infinite
+                    // recursion if methods used File.* instead of Binary.*).
+                    var _B = Binary;
                     // ELF magic: 7F 45 4C 46
                     var ELF_MAGIC0 = 0x7F, ELF_MAGIC1 = 0x45, ELF_MAGIC2 = 0x4C, ELF_MAGIC3 = 0x46;
 
@@ -3557,6 +3622,11 @@ impl HostApiBridge {
             ctx.eval::<(), _>(
                 r#"
                 (function() {
+                    // Save Binary reference in a local variable to ensure
+                    // closures always access the correct object (the _init
+                    // script sets File = MACH, which would cause infinite
+                    // recursion if methods used File.* instead of Binary.*).
+                    var _B = Binary;
                     // Mach-O magic numbers.
                     var MH_MAGIC_32 = 0xFEEDFACE;
                     var MH_MAGIC_32_LE = 0xCEFAEDFE;

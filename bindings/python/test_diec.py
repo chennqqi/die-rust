@@ -89,5 +89,68 @@ class TestErrorHandling(unittest.TestCase):
             diec.Database.from_path("/nonexistent/path/that/does/not/exist")
 
 
+class TestReusableScanner(unittest.TestCase):
+    """Verify the reusable Scanner API works across multiple scans.
+
+    Regression test: the Python binding previously had no Scanner class
+    at all, forcing users to use the one-shot scan_bytes/scan_path
+    functions and pay the per-scan runtime construction cost.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not pathlib.Path(DB_PATH).is_dir():
+            raise unittest.SkipTest(f"database not found: {DB_PATH}")
+        cls.db = diec.Database.from_path(DB_PATH)
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "db"):
+            cls.db.close()
+
+    def test_scan_bytes_reuses_runtime(self):
+        """Multiple scan_bytes calls on the same scanner must succeed."""
+        with self.db.new_scanner() as scanner:
+            # First scan.
+            result1 = scanner.scan_bytes(seven_zip_header())
+            try:
+                self.assertIn("7-Zip", result1.json)
+                self.assertGreater(result1.detection_count, 0)
+            finally:
+                result1.close()
+
+            # Second scan (same data, runtime reused).
+            result2 = scanner.scan_bytes(seven_zip_header())
+            try:
+                self.assertIn("7-Zip", result2.json)
+                self.assertGreater(result2.detection_count, 0)
+            finally:
+                result2.close()
+
+            # Third scan (different data, should not crash).
+            empty = b"\x00" * 64
+            result3 = scanner.scan_bytes(empty)
+            result3.close()
+
+    def test_scan_path_reuses_runtime(self):
+        """scan_path on a reusable scanner must work."""
+        corpus_zip = pathlib.Path(__file__).resolve().parent.parent.parent / "corpus" / "payload.zip"
+        if not corpus_zip.is_file():
+            self.skipTest("corpus/payload.zip not found")
+        with self.db.new_scanner() as scanner:
+            result = scanner.scan_path(str(corpus_zip))
+            try:
+                self.assertIn("Zip", result.json)
+            finally:
+                result.close()
+
+    def test_context_manager_closes_scanner(self):
+        """Scanner context manager must close the handle on exit."""
+        scanner = self.db.new_scanner()
+        scanner.close()
+        # Double close must not crash.
+        scanner.close()
+
+
 if __name__ == "__main__":
     unittest.main()

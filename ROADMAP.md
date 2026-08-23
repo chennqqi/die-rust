@@ -1076,3 +1076,242 @@ Phase 11 完成了 8 个批次的基础对齐，但 `gui-gap-analysis-v3.md` 仍
 - ~~**升级 GitHub Actions 到 Node.js 24**~~：已完成。`actions/checkout@v5`、`actions/upload-artifact@v5`、`actions/download-artifact@v5` 已升级，支持 Node.js 24。
 - ~~**Windows FFI C smoke test 链接**~~：已完成。改用 DLL import library（`diec_ffi.dll.lib`）替代 staticlib（`diec_ffi.lib`），避免手动指定大量 Windows 系统库。移除 `continue-on-error`，Windows smoke test 现在在 CI 中正常运行。
 - ~~**macOS x86_64 构建矩阵**~~：已完成。使用 `macos-14`（arm64 runner）交叉编译 `x86_64-apple-darwin` 目标，避免使用费用较高的 `macos-13` Intel runner。交叉编译构建跳过原生测试（arm64 无法运行 x86_64 二进制），arm64 原生构建仍运行完整测试。
+
+## Phase 14：兼容性阻断修复与差分基线重建 — IN PROGRESS
+
+**启动日期**：2026-08-23
+**背景**：实际使用中发现 PE/ELF 规则执行存在脚本异常导致检测能力失效，
+`--alltypes` 模式产生大量格式误报，使项目无法达到 1:1 兼容上游的目标。
+经核查，项目此前声称"规则加载 100%、差分 0 不匹配"的结论建立在覆盖不足的
+差分测试之上，存在重大盲区，导致阻断性缺陷长期未被发现：
+- 差分测试未纳入 `db_extra` 规则（PE 阻断规则多在此目录）
+- 差分测试未使用真实系统二进制（如 `/usr/bin/ls`、`/usr/bin/bash`）做 ELF 差分
+- `--alltypes` 测试只验去重和检测数量，无"不相关格式不应产生检测"的负向断言
+- `COMPATIBILITY.md` 声称的 host API 完整性与实际实现不符（PE section/resource
+  数组实际为空、ELF `_B` 未注入）
+
+本 Phase 优先级高于 Phase 13 剩余项。Phase 13 的 13.6/13.7 语料补充与本 Phase
+14.4 差分加固有协同，可合并执行。
+
+**ADR 需求**：
+- ADR 0031：`--alltypes` 语义对齐上游（先探测再分发兼容父类型，可能改变现有输出）
+- ADR 0032：上游兼容 JSON 输出模式（`--output json-die`）
+
+**进展**：
+- 14.1 ELF `_B` 注入修复 — ✅ 完成（ELF + Mach-O 闭包添加 `var _B = Binary;`）
+- 14.2 PE host API 补全 — ✅ 完成（`PE.isNET` 别名、`isResourceGroupNamePresent`/
+  `isResourceGroupIdPresent`、`.NET` stub 方法 `compareEP_NET`/`findSignatureInBlob_NET`/
+  `isSignatureInBlobPresent_NET`/`isNetTypePresent`/`isNetMethodPresent`/`isNetFieldPresent`，
+  移除 `PE.section`/`PE.resource`/`PE.nLastSection` 硬编码，由上游 `_init` 脚本填充）
+- 14.3 `--alltypes` 探测前置过滤 — ✅ 完成（`alltypes_rule_types` 基于探测结果 +
+  兼容父类型，ELF `--alltypes` 误报从 11 个降到 0）
+- 14.4 差分测试加固 — ✅ 完成（6 个新差分测试：`--alltypes` ELF/PE/Mach-O 跨格式
+  误报断言、db_extra 规则加载、PE TypeError 断言、真实系统二进制扫描）
+- 14.5 上游兼容 JSON 输出 — ✅ 完成（`--json-upstream` 选项 + `render_json_upstream`
+  renderer，输出 `[{fileType,name,string,info,version,offset}]` 格式）
+- 14.6 Go 绑定 reusable scanner — ✅ 完成（`Scanner.ScanBytes`/`ScanPath` 改用
+  `diec_v1_scanner_scan_bytes`/`diec_v1_scanner_scan_path_utf8`，复用 runtime）
+- 14.7 文档纠正与 glibc 指南 — ✅ 完成（README 添加 Linux glibc 2.34+ 要求说明）
+- 14.8 收尾与回归 — 进行中
+
+### 14.1 ELF `_B` 注入修复 — P0 阻断
+
+**问题**：所有 ELF compiler/library 规则抛出 `ReferenceError: _B is not defined`，
+ELF 检测能力完全失效。
+
+**根因**：`crates/diec-rules/src/host_api_bridge.rs:3046-3509` ELF 方法定义闭包
+缺少 `var _B = Binary;`（PE 闭包在行 2079 正确定义）。ELF 辅助函数
+`_sectionName`/`_sectionNumber`/`_libraryNames` 使用 `_B.__elfSectionNames()` /
+`_B.__elfImportLibraries()`，但 `_B` 在 ELF 上下文未定义。
+
+**修复**：
+- 在 ELF 方法定义闭包（`host_api_bridge.rs:3048` 之后）添加 `var _B = Binary;`
+- 将 ELF 辅助函数中所有 `Binary.*` 引用统一为 `_B.*`（与 PE 实现一致，避免
+  `_init` 设置 `File = ELF` 后的潜在递归问题）
+- 同步检查 Mach-O、MACHOFAT、MSDOS、DEX、JavaClass、PYC 等其他格式闭包是否
+  也遗漏 `_B` 定义，统一修复
+
+**验证**：
+- 扫描 `/usr/bin/ls`、`/usr/bin/bash`、`corpus/minimal.elf`、`corpus/elf-with-deps.elf`
+  无 `ReferenceError`，能检测到 compiler/library（如 gcc/glibc）
+- 单元测试：ELF 规则执行不抛 `_B` 相关异常
+- 差分测试：与上游 DIE 3.21 对比 `/usr/bin/ls` 检测结果 0 不匹配
+
+### 14.2 PE host API 补全 — P0 阻断
+
+**问题**：PE protector/cryptor/installer/compiler 规则抛出
+`TypeError: not a function`，PE 文件无法检测 protector/packer/compiler/linker。
+
+**根因**：`host_api_bridge.rs` PE bridge 不完整：
+1. `PE.isResourceGroupNamePresent(sName)` / `PE.isResourceGroupIdPresent(nID)`
+   未实现（`compiler_RealBasic.4.sg:13` 等规则调用）
+2. `PE.section` 数组在 `host_api_bridge.rs:2253` 硬编码为空 `[]`，未填充区段数据
+   （上游 `db/PE/_init:147-163` 应填充 Number/Name/VirtualSize/VirtualAddress/
+   FileSize/FileOffset/Characteristics，支持数字和名称索引）
+3. `PE.resource` 数组在 `host_api_bridge.rs:2361` 硬编码为空 `[]`
+4. `PE.nLastSection` 在 `host_api_bridge.rs:2252` 硬编码 `-1`，应为
+   `getNumberOfSections() - 1`
+5. bridge JS 代码块在 `_init` 脚本之后执行，覆盖了 `_init` 填充的数据
+
+**修复**：
+- **方案 A（首选）**：移除 bridge 中 `PE.section = []`、`PE.resource = []`、
+  `PE.nLastSection = -1` 硬编码，让上游 `db/PE/_init` 脚本负责填充。需验证
+  `_init` 脚本依赖的 host API 方法（`getNumberOfSections`、section 遍历等）
+  在 bridge 中已实现且返回正确数据。
+- **方案 B（兜底）**：若 `_init` 脚本依赖的底层方法不全，在 bridge 中用
+  pelite 原生解析填充 `PE.section`/`PE.resource` 数组（参考 `pe_native.rs`
+  已有解析能力）。
+- 实现 `PE.isResourceGroupNamePresent` / `PE.isResourceGroupIdPresent`：
+  使用 pelite 遍历资源目录树，检查指定名称/ID 的资源组是否存在。
+- 修正 `PE.nLastSection` 为 `PE.getNumberOfSections() - 1`。
+- 审计 `db/PE/_init` 脚本中所有被引用的 PE 属性/方法，逐一核对 bridge 实现，
+  补齐缺失项（避免逐个规则报错才发现）。
+
+**验证**：
+- 扫描 `corpus/minimal.exe`、`corpus/minimal-pe64.exe`、`corpus/pe-dotnet.exe`、
+  `corpus/pe-with-resources.exe`、`corpus/with-tables.exe` 无 `TypeError`
+- `pe-dotnet.exe` 检测到 .NET 相关特征
+- protector/cryptor/installer/compiler 类规则正常执行（不要求全部命中，但不应异常）
+- 差分测试：与上游 DIE 3.21 对比上述 PE 样本检测结果 0 不匹配
+- 单元测试：`PE.section`/`PE.resource` 数组填充正确性、`isResourceGroupNamePresent`
+  正负用例
+
+### 14.3 `--alltypes` 探测前置过滤 — P0 阻断
+
+**问题**：`diec --alltypes /usr/bin/ls`（ELF）产生 CFBF/DEX/JPEG/PDF/PNG/Java
+Class/Python bytecode 等大量格式误报，`--alltypes` 不可用于生产。
+
+**根因**：`crates/diec-engine/src/scanner.rs:427-437` `--alltypes` 模式直接返回
+`all_rule_types()`（18 种全部），完全忽略 `ProbeTable` 探测结果。上游
+`bIsAllTypesScan` 语义是"先 `getFileTypes` 探测，仅为兼容/容器类型额外执行父类型
+规则"（PE→MSDOS、APK→JAR/ZIP），不执行不相关格式规则。
+
+**ADR 0031：`--alltypes` 语义对齐上游**
+- `--alltypes` 改为先 `ProbeTable::probe_all` 探测格式，再根据探测结果分发：
+  - 主类型规则正常执行
+  - 兼容父类型规则额外执行（PE→MSDOS、APK→JAR/ZIP、Mach-O FAT→Mach-O）
+  - 不相关格式规则不执行（ELF 不跑 DEX/JPEG/PDF/PNG 等）
+- 此为破坏性变更：当前 `--alltypes` 输出含大量误报，修复后输出会显著减少。
+  需 ADR 记录，并在 RELEASE_NOTES 明确说明。
+- 保留 `--no-dedup` 逃生通道用于匹配上游原始重复行为。
+- 若用户确需"对所有格式跑规则"的旧行为（调试/研究），考虑新增
+  `--force-all-formats` 选项保留旧行为（ADR 决定）。
+
+**修复**：
+- `scanner.rs:427-437` 重构 `--alltypes` 分支：调用 `detect_rule_types` 后，
+  追加兼容父类型（基于探测主类型映射），而非返回全部 18 种。
+- 抽取兼容父类型映射表：PE→[MSDOS]、APK→[JAR, ZIP]、JAR→[ZIP]、
+  Mach-O FAT→[MACH]、IPA→[ZIP] 等（对照上游 `XFormats` 兼容关系）。
+- 非可执行格式（PDF/JPEG/PNG 等）的 `--alltypes` 行为：仅运行自身格式规则 +
+  Binary 规则（与默认模式一致），不跨格式。
+
+**验证**：
+- `diec --alltypes /usr/bin/ls` 不再产生 CFBF/DEX/JPEG/PDF/PNG 等误报
+- `diec --alltypes minimal.exe` 仍能检测 PE + MSDOS（兼容父类型）
+- 差分测试：真实 ELF/PE/Mach-O 样本 `--alltypes` 与上游 0 不匹配
+- 负向断言测试：ELF 样本 `--alltypes` 结果不含 archive:Resources 之外的无关格式
+
+### 14.4 差分测试加固 — P0
+
+**问题**：现有差分测试覆盖盲区导致 3 个阻断项长期未发现。本子任务重建兼容基线
+可信度，是 Phase 14 的核心交付物。
+
+**修复**：
+- **纳入 `db_extra` 规则**：差分测试和规则加载统计纳入 `db_extra` 目录规则
+  （当前 COMPATIBILITY.md 称 1186/1186 仅指 `db/`）。更新规则加载基线数。
+- **真实系统二进制语料**：新增 `/usr/bin/ls`、`/usr/bin/bash`、`/usr/bin/echo`
+  等 ELF 样本到差分语料（用哈希清单记录，可重复获取）。新增真实 PE 样本
+  （含 resources/.NET/protector 特征的合法样本）。
+- **`--alltypes` 负向断言**：新增测试断言"不相关格式不应产生检测"
+  （ELF 不含 CFBF/JPEG/PDF 等）。
+- **host API 完整性审计**：逐一审计 `db/PE/_init`、`db/ELF/_init`、
+  `db/MACH/_init` 等脚本引用的全部属性/方法，对照 bridge 实现生成覆盖矩阵，
+  标记缺失项。此矩阵成为 COMPATIBILITY.md 的新基线。
+- **异常计数断言**：差分测试增加"规则执行异常数 = 0"的断言（当前只验检测结果，
+  不验规则是否抛异常）。
+- 与 Phase 13 的 13.7（大型语料补充）合并执行，避免重复工作。
+
+**验证**：
+- 差分测试语料覆盖 db + db_extra 规则、真实 ELF/PE 二进制
+- `--alltypes` 差分测试含负向断言
+- 规则执行异常数 = 0 成为差分测试硬性指标
+- host API 覆盖矩阵文档化
+
+### 14.5 上游兼容 JSON 输出 — P1
+
+**问题**：diec-rust JSON 输出结构与上游 DIE 不兼容，无法直接替换上游工具。
+
+**ADR 0032：上游兼容 JSON 输出模式**
+- 新增 `--output json-die` 选项，输出上游 DIE 兼容结构：
+  ```json
+  {"detects":[{"filetype":"PE","values":[
+    {"name":"Linker","type":"Linker","string":"Linker: Microsoft Linker(14.00)"},
+    {"name":"Packer","type":"Packer","string":"Packer: UPX"}]}]}
+  ```
+- `type` 首字母大写（Packer/Protector/Linker/Compiler/Archive/Installer）
+- `string` 字段含类型前缀（`"Packer: UPX"`）
+- `values[]` 按 filetype 分组嵌套
+- 默认 `--output json` 保持现有结构（向后兼容），`json-die` 为兼容模式
+- 差分测试：`json-die` 输出与上游 DIE JSON 逐字节对比（规范化后）
+
+**修复**：
+- `crates/diec-output/src/json.rs` 新增 `render_json_die_compat()` 函数
+- `crates/diec-cli/src/main.rs` 新增 `json-die` 输出格式选项
+- FFI `diec_v1_result_json` 可考虑新增 `json_die` 变体（可选，ADR 决定）
+
+### 14.6 Go 绑定 reusable scanner — P1
+
+**问题**：`bindings/go/diec/diec.go:214-233` `Scanner.ScanBytes` 调用 one-shot
+`cgo_scan_bytes`，未复用 scanner runtime 缓存。
+
+**修复**：
+- 新增 `cgo_scanner_scan_bytes` / `cgo_scanner_scan_path_utf8` cgo helper
+  （包装 `diec_v1_scanner_scan_bytes` / `diec_v1_scanner_scan_path_utf8`）
+- `Scanner.ScanBytes` / `Scanner.ScanPath` 改用新 helper
+- Go 绑定测试：验证 Scanner 复用 database 加载上下文，性能优于 one-shot
+
+### 14.7 文档纠正与 glibc 指南 — P1
+
+**问题**：COMPATIBILITY.md 声明与实际不符；README 未说明 glibc 最低版本要求。
+
+**修复**：
+- **COMPATIBILITY.md 纠正**：
+  - PE host API 表：`PE.section`/`PE.resource` 数组填充状态如实标注
+  - `isResourceGroupNamePresent`/`isResourceGroupIdPresent` 实现状态
+  - ELF host API 表：`_B` 注入状态（修复后标注 ✅）
+  - 规则加载统计：区分 `db/` 与 `db + db_extra`，更新基线数
+  - `--alltypes` 行为：更新为对齐上游后的语义
+- **README.md glibc 说明**：
+  - 明确 stable Rust 1.88+ 产物要求 glibc 2.34+（RHEL 9+ / Rocky 9+）
+  - 提供 nightly + `build-std=std` 构建指南（产出 glibc 2.16 产物，支持 ol7/ol8）
+  - 提供 musl 静态链接替代方案（如适用）
+- **RELEASE_NOTES.md**：记录 Phase 14 阻断修复 + 破坏性变更（`--alltypes` 语义）
+
+### 14.8 收尾与回归 — P1
+
+- 全量回归：`cargo fmt --check` + `cargo clippy --workspace --all-targets --all-features -- -D warnings` + `cargo test --workspace --all-features`
+- GUI-CLI 差分测试通过（GUI 同步 `--alltypes` 语义变更）
+- ADR 0031/0032 Accepted
+- COMPATIBILITY.md、README.md、能力矩阵、RELEASE_NOTES 全部更新
+- 发布 patch 版本（v0.x.x）并标注阻断修复
+
+### 退出条件
+
+- **P0 阻断修复**：
+  - ELF 规则无 `ReferenceError: _B`，`/usr/bin/ls` 能检测 compiler/library
+  - PE 规则无 `TypeError`，protector/cryptor/installer/compiler 规则正常执行
+  - `--alltypes` 不再产生跨格式误报，对齐上游 bIsAllTypesScan 语义
+- **差分测试加固**：
+  - 差分语料覆盖 db + db_extra 规则、真实 ELF/PE 系统二进制
+  - `--alltypes` 差分含负向断言，规则执行异常数 = 0 为硬性指标
+  - host API 覆盖矩阵文档化，COMPATIBILITY.md 声明与实际一致
+- **P1 兼容性**：
+  - `--output json-die` 输出与上游 DIE JSON 兼容（差分 0 不匹配）
+  - Go 绑定 Scanner 真正复用 reusable scanner
+  - README 明确 glibc 要求 + build-std 指南
+- **质量门禁**：
+  - `cargo fmt/clippy/test` 全部通过
+  - GUI-CLI 差分测试通过
+  - ADR 0031/0032 Accepted
+  - 所有文档更新完成
+

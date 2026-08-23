@@ -32,6 +32,19 @@ fn db_root() -> String {
         .to_string()
 }
 
+/// Path to the upstream Detect-It-Easy db_extra database.
+fn db_extra_root() -> String {
+    let manifest = env!("CARGO_MANIFEST_DIR");
+    let root = std::path::Path::new(manifest)
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("workspace root");
+    root.join("upstream/Detect-It-Easy/db_extra")
+        .to_str()
+        .expect("utf-8 path")
+        .to_string()
+}
+
 /// Test host with an in-memory byte buffer.
 struct BufferHost {
     data: Vec<u8>,
@@ -442,7 +455,26 @@ fn run_real_rule_typed(
 ) -> Option<Vec<DetectionResult>> {
     let db = db_root();
     let rule_path = format!("{db}/{rule_relative_path}");
-    let source = std::fs::read_to_string(&rule_path).ok()?;
+    run_real_rule_from_path(
+        &rule_path,
+        file_type,
+        init_source,
+        type_init_scripts,
+        includes,
+        data,
+    )
+}
+
+/// Run a real rule file from an absolute path (e.g., db_extra rules).
+fn run_real_rule_from_path(
+    rule_path: &str,
+    file_type: &str,
+    init_source: &str,
+    type_init_scripts: &[(String, String)],
+    includes: &BTreeMap<String, String>,
+    data: Vec<u8>,
+) -> Option<Vec<DetectionResult>> {
+    let source = std::fs::read_to_string(rule_path).ok()?;
 
     let snapshot = DatabaseSnapshot {
         rules: vec![LoadedRule {
@@ -836,6 +868,102 @@ fn real_rule_pe_islibrarypresent_works_with_real_imports() {
     assert!(results.is_some(), "PE rule execution failed");
 }
 
+#[test]
+fn real_rule_pe_isnet_alias_no_type_error() {
+    // Regression test for Phase 14.2: rules call `PE.isNET()` (uppercase)
+    // but the bridge only registered `PE.isNet` (camelCase). JavaScript is
+    // case-sensitive, so `PE.isNET` threw TypeError: not a function.
+    // This affected cryptor_404crypter, cryptor_njCrypter, installer_Store,
+    // installer_DockerDesktopInstaller, protector_Adept_Protector, etc.
+    let (init_source, type_init_scripts, includes) = match load_upstream_framework_for_type("PE") {
+        Some(x) => x,
+        None => {
+            eprintln!("Skipping: upstream rules not found");
+            return;
+        }
+    };
+
+    let data = match load_corpus_pe("with-tables.exe") {
+        Some(d) => d,
+        None => {
+            eprintln!("Skipping: corpus/with-tables.exe not found");
+            return;
+        }
+    };
+
+    // Rules that call PE.isNET() — must not throw TypeError.
+    // These rules live in db_extra, not db.
+    let extra = db_extra_root();
+    for rule_rel in [
+        "PE/cryptor_404crypter.1.sg",
+        "PE/installer_Store_Installer.1.sg",
+    ] {
+        let rule_path = format!("{extra}/{rule_rel}");
+        let results = run_real_rule_from_path(
+            &rule_path,
+            "PE",
+            &init_source,
+            &type_init_scripts,
+            &includes,
+            data.clone(),
+        );
+        assert!(
+            results.is_some(),
+            "{rule_rel} threw TypeError (expected PE.isNET to be defined)"
+        );
+    }
+}
+
+#[test]
+fn real_rule_pe_resource_group_and_net_stubs_no_type_error() {
+    // Regression test for Phase 14.2: PE.isResourceGroupNamePresent and
+    // PE.compareEP_NET were missing, causing TypeError in
+    // compiler_RealBasic and protector_Phoenix/protector_Skater.
+    let (init_source, type_init_scripts, includes) = match load_upstream_framework_for_type("PE") {
+        Some(x) => x,
+        None => {
+            eprintln!("Skipping: upstream rules not found");
+            return;
+        }
+    };
+
+    let data = match load_corpus_pe("with-tables.exe") {
+        Some(d) => d,
+        None => {
+            eprintln!("Skipping: corpus/with-tables.exe not found");
+            return;
+        }
+    };
+
+    // compiler_RealBasic calls PE.isResourceGroupNamePresent("PICKLE").
+    let results = run_real_rule_typed(
+        "PE/compiler_RealBasic.4.sg",
+        "PE",
+        &init_source,
+        &type_init_scripts,
+        &includes,
+        data.clone(),
+    );
+    assert!(
+        results.is_some(),
+        "compiler_RealBasic threw TypeError (expected isResourceGroupNamePresent defined)"
+    );
+
+    // protector_Phoenix calls PE.compareEP_NET.
+    let results = run_real_rule_typed(
+        "PE/protector_Phoenix.2.sg",
+        "PE",
+        &init_source,
+        &type_init_scripts,
+        &includes,
+        data,
+    );
+    assert!(
+        results.is_some(),
+        "protector_Phoenix threw TypeError (expected compareEP_NET defined)"
+    );
+}
+
 // ============================================================================
 // ELF format rule tests
 // ============================================================================
@@ -872,6 +1000,108 @@ fn real_rule_elf_init_loads_without_error() {
 
     // Rule should execute without error.
     assert!(results.is_some(), "ELF rule execution failed");
+}
+
+#[test]
+fn real_rule_elf_compiler_rules_no_b_reference_error() {
+    // Regression test for Phase 14.1: ELF compiler/library rules used
+    // _B.__elfSectionNames() / _B.__elfImportLibraries() in the
+    // _sectionNumber / _libraryNames helpers, but the ELF method closure
+    // did not define `var _B = Binary;`, causing ReferenceError: _B is
+    // not defined and total ELF detection failure.
+    //
+    // These rules call _sectionNumber (compiler_gcc, compiler_Rust, ...) and
+    // _libraryNames (library_GLIBC, library_Curl, ...). They must execute
+    // without throwing a ReferenceError, regardless of whether they detect.
+    let (init_source, type_init_scripts, includes) = match load_upstream_framework_for_type("ELF") {
+        Some(x) => x,
+        None => {
+            eprintln!("Skipping: upstream rules not found");
+            return;
+        }
+    };
+
+    let data = match load_corpus_pe("minimal.elf") {
+        Some(d) => d,
+        None => {
+            eprintln!("Skipping: corpus/minimal.elf not found");
+            return;
+        }
+    };
+
+    // Rules that exercise _sectionNumber (uses _B.__elfSectionNames).
+    for rule in [
+        "ELF/compiler_gcc.4.sg",
+        "ELF/compiler_Rust.4.sg",
+        "ELF/compiler_Go.4.sg",
+    ] {
+        let results = run_real_rule_typed(
+            rule,
+            "ELF",
+            &init_source,
+            &type_init_scripts,
+            &includes,
+            data.clone(),
+        );
+        assert!(
+            results.is_some(),
+            "{rule} threw an exception (expected no ReferenceError: _B)"
+        );
+    }
+
+    // Rules that exercise _libraryNames (uses _B.__elfImportLibraries).
+    for rule in ["ELF/library_GLIBC.3.sg", "ELF/library_Curl.4.sg"] {
+        let results = run_real_rule_typed(
+            rule,
+            "ELF",
+            &init_source,
+            &type_init_scripts,
+            &includes,
+            data.clone(),
+        );
+        assert!(
+            results.is_some(),
+            "{rule} threw an exception (expected no ReferenceError: _B)"
+        );
+    }
+}
+
+#[test]
+fn real_rule_mach_section_helpers_no_b_reference_error() {
+    // Regression test for Phase 14.1: the Mach-O method closure had the
+    // same _B omission as ELF. _machoSectionNames / _machoImportLibraries
+    // helpers use _B.__machoSectionNames() / _B.__machoImportLibraries().
+    let (init_source, type_init_scripts, includes) = match load_upstream_framework_for_type("MACH")
+    {
+        Some(x) => x,
+        None => {
+            eprintln!("Skipping: upstream rules not found");
+            return;
+        }
+    };
+
+    let data = match load_corpus_pe("minimal.macho") {
+        Some(d) => d,
+        None => {
+            eprintln!("Skipping: corpus/minimal.macho not found");
+            return;
+        }
+    };
+
+    // Run a Mach-O rule that exercises section/library helpers.
+    // _MACH.0.sg is the OS detection rule; it should not throw.
+    let results = run_real_rule_typed(
+        "MACH/_MACH.0.sg",
+        "MACH",
+        &init_source,
+        &type_init_scripts,
+        &includes,
+        data,
+    );
+    assert!(
+        results.is_some(),
+        "MACH rule threw an exception (expected no ReferenceError: _B)"
+    );
 }
 
 // ============================================================================

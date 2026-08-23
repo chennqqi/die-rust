@@ -116,6 +116,46 @@ static uint32_t cgo_error_status(diec_v1_error *e) {
     diec_v1_error_status(e, &status);
     return status;
 }
+
+// Helper: call scanner_scan_bytes (reusable scanner API).
+// This reuses the scanner's internal runtime across multiple scans,
+// avoiding the per-scan runtime construction cost of the one-shot API.
+static diec_v1_result* cgo_scanner_scan_bytes(
+    diec_v1_scanner *scanner,
+    const uint8_t *data, uint64_t length,
+    uint32_t flags,
+    diec_v1_error **out_error)
+{
+    diec_v1_result *result = NULL;
+    diec_v1_scan_options opts;
+    diec_v1_scan_options_init(&opts, sizeof(opts));
+    opts.flags = flags;
+    uint32_t status = diec_v1_scanner_scan_bytes(scanner, data, length, &opts, NULL, &result, out_error);
+    if (status != DIEC_STATUS_OK) {
+        if (result) diec_v1_result_free(&result);
+        return NULL;
+    }
+    return result;
+}
+
+// Helper: call scanner_scan_path_utf8 (reusable scanner API).
+static diec_v1_result* cgo_scanner_scan_path(
+    diec_v1_scanner *scanner,
+    const char *path, uint64_t length,
+    uint32_t flags,
+    diec_v1_error **out_error)
+{
+    diec_v1_result *result = NULL;
+    diec_v1_scan_options opts;
+    diec_v1_scan_options_init(&opts, sizeof(opts));
+    opts.flags = flags;
+    uint32_t status = diec_v1_scanner_scan_path_utf8(scanner, (const uint8_t*)path, length, &opts, NULL, &result, out_error);
+    if (status != DIEC_STATUS_OK) {
+        if (result) diec_v1_result_free(&result);
+        return NULL;
+    }
+    return result;
+}
 */
 import "C"
 import (
@@ -212,6 +252,10 @@ func (s *Scanner) Close() {
 }
 
 // ScanBytes scans a byte buffer with the reusable scanner.
+//
+// This uses the reusable scanner API (diec_v1_scanner_scan_bytes) which
+// reuses the internal JavaScript runtime across scans, avoiding the
+// per-scan runtime construction cost of the one-shot ScanBytes function.
 func (s *Scanner) ScanBytes(data []byte, flags uint32) (*Result, error) {
 	var err *C.diec_v1_error
 	var ptr *C.uint8_t
@@ -220,11 +264,23 @@ func (s *Scanner) ScanBytes(data []byte, flags uint32) (*Result, error) {
 		ptr = (*C.uint8_t)(unsafe.Pointer(&data[0]))
 		length = C.uint64_t(len(data))
 	}
-	r := C.cgo_scan_bytes((*C.diec_v1_database)(unsafe.Pointer(s.handle)), ptr, length, C.uint32_t(flags), &err)
-	// Note: reusable scanner uses diec_v1_scanner_scan_bytes internally;
-	// the cgo helper uses the one-shot variant. For simplicity in this
-	// binding example, we use the one-shot API. A production binding
-	// would add a separate cgo helper for scanner_scan_bytes.
+	r := C.cgo_scanner_scan_bytes(s.handle, ptr, length, C.uint32_t(flags), &err)
+	if r == nil {
+		return nil, makeGoError(err)
+	}
+	C.diec_v1_error_free(&err)
+	return &Result{handle: r}, nil
+}
+
+// ScanPath scans a file path with the reusable scanner.
+//
+// This uses the reusable scanner API (diec_v1_scanner_scan_path_utf8)
+// which reuses the internal JavaScript runtime across scans.
+func (s *Scanner) ScanPath(path string, flags uint32) (*Result, error) {
+	cPath := C.CString(path)
+	defer C.free(unsafe.Pointer(cPath))
+	var err *C.diec_v1_error
+	r := C.cgo_scanner_scan_path(s.handle, cPath, C.uint64_t(len(path)), C.uint32_t(flags), &err)
 	if r == nil {
 		return nil, makeGoError(err)
 	}

@@ -1248,6 +1248,76 @@ pub fn is_resource_name_present(data: &[u8], name: &str) -> bool {
     false
 }
 
+/// Check if a resource group (type-level directory) with the given name exists.
+///
+/// PE resources are organized as root -> type -> name -> language.
+/// A "resource group" is a type-level directory entry. This checks whether
+/// any type-level entry has a name matching `group_name` (case-sensitive).
+/// Returns false if not a valid PE or the group is not found.
+pub fn is_resource_group_name_present(data: &[u8], group_name: &str) -> bool {
+    if let Some(file) = pe64_from_bytes(data) {
+        if let Ok(res) = file.resources()
+            && let Ok(root) = res.root()
+        {
+            for entry in root.entries() {
+                if let Ok(n) = entry.name()
+                    && format_resource_name(&n) == group_name
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    if let Some(file) = pe32_from_bytes(data)
+        && let Ok(res) = file.resources()
+        && let Ok(root) = res.root()
+    {
+        for entry in root.entries() {
+            if let Ok(n) = entry.name()
+                && format_resource_name(&n) == group_name
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Check if a resource group (type-level directory) with the given ID exists.
+///
+/// PE resources are organized as root -> type -> name -> language.
+/// Standard type IDs include 1 (CURSOR), 2 (BITMAP), 3 (ICON), 4 (MENU),
+/// 5 (DIALOG), 6 (STRING), 7 (FONTDIR), 8 (FONT), 9 (ACCELERATOR),
+/// 10 (RCDATA), 11 (MESSAGETABLE), 12 (GROUP_CURSOR), 14 (GROUP_ICON),
+/// 16 (VERSION), 24 (MANIFEST).
+/// Returns false if not a valid PE or the group is not found.
+pub fn is_resource_group_id_present(data: &[u8], group_id: u32) -> bool {
+    if let Some(file) = pe64_from_bytes(data) {
+        if let Ok(res) = file.resources()
+            && let Ok(root) = res.root()
+        {
+            for entry in root.entries() {
+                if entry.image().Name == group_id {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    if let Some(file) = pe32_from_bytes(data)
+        && let Ok(res) = file.resources()
+        && let Ok(root) = res.root()
+    {
+        for entry in root.entries() {
+            if entry.image().Name == group_id {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Get the resource section file offset (data directory index 2).
 ///
 /// Returns -1 if not a valid PE or no resource section.
