@@ -12,7 +12,7 @@ for diec-rust. Every item must be verified before publishing a release.
 - [x] All `unsafe` blocks have safety documentation and tests
 
 ### Testing
-- [x] `cargo test --workspace --all-features --locked` passes (686 tests)
+- [x] `cargo test --workspace --all-features --locked` passes (720 tests)
 - [x] Corpus differential tests pass (31 baseline + 20 edge samples)
 - [x] FFI tests pass (unit + integration + sanitizer)
 - [x] Edge corpus tests pass (no-crash, no-spurious, no-hang)
@@ -29,7 +29,7 @@ for diec-rust. Every item must be verified before publishing a release.
 
 ### Performance
 - [x] Benchmarks run on release build
-- [x] database_load < 600ms (actual: ~510ms)
+- [x] database_load < 600ms (actual: ~12ms debug, ~510ms release)
 - [x] scan_corpus per-file < 250ms
 - [x] No performance regression vs previous release
 - [x] Benchmark results recorded in COMPATIBILITY.md
@@ -99,10 +99,10 @@ for diec-rust. Every item must be verified before publishing a release.
 - [x] Changelog / release notes drafted (`RELEASE_NOTES.md`)
 
 ## Version and Tag
-- [x] Version bumped in `Cargo.toml` (workspace.package.version = 0.8.0)
-- [ ] Git tag created: `v0.8.0`
-- [ ] Tag is annotated (`git cat-file -t v0.8.0` => `tag`)
-- [ ] Tag message includes release summary ("v0.8.0 - Phase 13 CLI parity: --struct mode, nested scanning, archive extraction, GUI sync")
+- [x] Version bumped in `Cargo.toml` (workspace.package.version = 0.9.0)
+- [ ] Git tag created: `v0.9.0`
+- [ ] Tag is annotated (`git cat-file -t v0.9.0` => `tag`)
+- [ ] Tag message includes release summary ("v0.9.0 - Phase 15: host API 100% coverage, true differential testing, --alltypes negative assertions")
 
 ## Post-Release
 - [x] Release notes published (`RELEASE_NOTES.md` committed)
@@ -113,6 +113,54 @@ for diec-rust. Every item must be verified before publishing a release.
 ---
 
 ## Release Sign-off
+
+### v0.9.0 — 2026-08-16
+
+- **Tag**: `v0.9.0` (annotated, pending CI green)
+- **Tests**: 720 pass, 0 failures (up from 686 in v0.8.0, +34 new tests)
+- **Phase 14-15 alignment methodology** (7 sub-phases):
+  - 15.1 True differential test framework vs upstream diec 4.0.0
+    - 31 golden baselines from upstream diec 4.0.0 (commit c2c17dfa5)
+    - filetype mapping: ZIP/TAR/RAR/PDF/CFBF/DEX/JavaClass/PNG/JPEG/Amiga/LE/LX/NE
+    - 0 engine mismatches, known gaps documented (NPM/CAB)
+  - 15.2 Rule execution coverage matrix + exception hardening
+    - 1186/1186 rules execute without TypeError
+    - Exception logging for runtime errors
+  - 15.3 Host API coverage audit + P0 gap closure
+    - `tools/audit_host_api.py`: automated audit vs upstream help docs
+    - Coverage matrix: 270 methods tracked across 8 classes
+  - 15.4 `--alltypes` systemic negative assertions
+    - 20 edge corpus samples, 0 spurious detections
+  - 15.5 Corpus coverage blind spot supplementation
+    - New corpus files: minimal-le.exe, minimal-lx.exe, minimal-ne.exe, etc.
+  - 15.6 Host API coverage 44.1% → 100%
+    - 151 methods implemented (119 → 270)
+    - PE .NET: BSJB metadata parsing, #US/#Strings heap extraction
+    - PE: isPE32/isPEPlus/isDriver/isImportPresent/isExportPresent/isResourcesPresent
+    - PE: getImportHash32/64 (FNV-1a), isImportPositionHashPresent
+    - PE: compareEP_NET, findSignatureInBlob_NET, isNetTypePresent/MethodPresent/FieldPresent
+    - Binary: read_int24/float/double/float16/32/64/bcd_uint8/16/32/64
+    - Binary: read_utf8String, find_ansiString/find_unicodeString, upperCase/lowerCase
+    - Binary: RVAToOffset/VAToOffset/OffsetToRVA/OffsetToVA (PE section table)
+    - Binary: getImageBase/getAddressOfEntryPoint/compareEP/compareOverlay
+    - Binary: isJpeg/getJpegComment/isJpegChunkPresent/getJpegExifCameraName
+    - Binary: detectZLIB/detectGZIP/detectZIP/getCompressedDataSize
+    - Binary: 15 correctness checks (is*Correct/is*Build/is*Table)
+    - Binary: profiling (startTiming/endTiming/isProfiling)
+    - Binary: getFileFormatName/Version/Options (magic byte detection)
+    - ELF: getElfHeader_version/flags/ehsize, getRunPath
+    - MSDOS: getDosStubOffset/Size/isDosStubPresent/isRichVersionPresent
+    - ISO9660: 12 PVD field readers (isValid + all identifiers + dates)
+    - Util: shl64/shr64/secondsToTimeStr
+    - Global: includeScript/result, Archive: isArchiveRecordPresent/Exp
+  - 15.7 Documentation and baseline update
+    - ROADMAP.md, COMPATIBILITY.md, host-api-coverage-matrix.md updated
+- **Host API coverage**: 100% (270/270 methods, 0 stub, 0 missing)
+- **Rule loading**: 100% (1186/1186)
+- **Differential**: 0 engine mismatches vs upstream diec 4.0.0
+- **GUI**: no changes needed (architecture isolation verified)
+- **No new dependencies**
+- **No new ADRs** (all changes within existing architecture)
 
 ### v0.8.0 — 2026-08-15
 

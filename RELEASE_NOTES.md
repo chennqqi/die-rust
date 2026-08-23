@@ -1,5 +1,98 @@
 # Release Notes
 
+## diec-rust v0.9.0
+
+Phase 15 alignment methodology release — host API 100% coverage, true
+differential testing framework, and `--alltypes` negative assertions.
+
+### Phase 15: Alignment Methodology (7 sub-phases)
+
+#### 15.1: True Differential Test Framework
+
+Established a true differential testing framework comparing diec-rust
+output against upstream DIE-engine `diec` 4.0.0 (commit `c2c17dfa5`):
+
+- 31 golden baselines recorded from upstream `diec` binary
+- Filetype mapping: ZIP/TAR/RAR/PDF/CFBF/DEX/JavaClass/PNG/JPEG/Amiga/LE/LX/NE
+- 0 engine mismatches; known gaps (NPM/CAB) documented
+
+#### 15.2: Rule Execution Coverage + Exception Hardening
+
+- 1186/1186 rules execute without TypeError
+- Exception logging for runtime errors in rule evaluation
+
+#### 15.3: Host API Coverage Audit
+
+- `tools/audit_host_api.py`: automated audit comparing upstream help docs
+  against `host_api_bridge.rs` implementation
+- Coverage matrix tracks 270 methods across 8 classes (Binary, PE, ELF,
+  MSDOS, ISO9660, Util, Global, Archive)
+
+#### 15.4-15.5: `--alltypes` Negative Assertions + Corpus Coverage
+
+- 20 edge corpus samples verified: 0 spurious detections
+- New corpus files: minimal-le.exe, minimal-lx.exe, minimal-ne.exe,
+  minimal-dos16m.exe, minimal-dos4g.exe
+
+#### 15.6: Host API Coverage 44.1% → 100%
+
+The headline achievement: **all 270 host API methods are now implemented**.
+
+Starting from 44.1% (119/270), systematic gap closure brought coverage
+to 100% (270/270) with 0 stubs and 0 missing methods:
+
+| Class | Methods | Coverage |
+|-------|---------|----------|
+| Binary | 128 | 100% |
+| PE | 76 | 100% |
+| ELF | 25 | 100% |
+| MSDOS | 13 | 100% |
+| ISO9660 | 19 | 100% |
+| Util | 5 | 100% |
+| Global | 2 | 100% |
+| Archive | 2 | 100% |
+
+Key implementations:
+- **PE .NET**: BSJB metadata parsing, #US/#Strings heap extraction,
+  isNetObjectPresent/isNetUStringPresent/isNetGlobalCctorPresent,
+  compareEP_NET, findSignatureInBlob_NET, isNetTypePresent/MethodPresent/FieldPresent
+- **PE imports**: getImportHash32/64 (FNV-1a), isImportPositionHashPresent
+- **Binary numeric**: read_int24, read_float/double, read_float16/32/64,
+  read_bcd_uint8/16/32/64
+- **Binary address**: RVAToOffset/VAToOffset/OffsetToRVA/OffsetToVA
+  (PE section table traversal), getImageBase, getAddressOfEntryPoint
+- **Binary JPEG**: isJpeg, getJpegComment, isJpegChunkPresent,
+  getJpegExifCameraName (APP1 Exif IFD parsing)
+- **Binary compression**: detectZLIB/detectGZIP/detectZIP,
+  getCompressedDataSize
+- **Binary correctness**: 15 checks (isChecksumCorrect, isHeaderCorrect,
+  is*TableCorrect, isReleaseBuild, isSigned, etc.)
+- **ISO9660**: 12 PVD field readers (all identifiers + date/time fields)
+
+#### 15.7: Documentation and Baseline Update
+
+- ROADMAP.md, COMPATIBILITY.md, host-api-coverage-matrix.md updated
+- RELEASE.md checklist updated for v0.9.0
+
+### Metrics
+
+| Metric | v0.8.0 | v0.9.0 |
+|--------|--------|--------|
+| Tests | 686 | 720 |
+| Host API coverage | ~44% | 100% |
+| Rule loading | 100% | 100% |
+| Differential mismatches | N/A | 0 |
+| Edge corpus spurious detections | N/A | 0 |
+
+### Compatibility
+
+- No breaking changes to CLI, FFI, or output formats
+- No new dependencies
+- GUI unaffected (architecture isolation verified via GUI-CLI differential)
+- ABI version unchanged (0x0001_0000)
+
+---
+
 ## diec-rust v0.8.0
 
 Phase 13 CLI parity release — `--struct` mode, intra-file recursive
