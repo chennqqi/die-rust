@@ -71,6 +71,20 @@ Phase 16 的 7 条根因和改进建议见
 13. **对齐是 O(n) 问题，验证是 O(n×m×k) 问题**：155 个方法 × 1186 个规则 ×
     数百个样本 = 数万次交互。每轮差分只发现当前样本集触发的错误。持续差分
     + 源码考古 + 语义对照矩阵是唯一收敛策略，不追求"100% 一致"。
+14. **规则优先级排序是 includeScript 正确性的前提**：上游
+    `sort_signature_prio` 按优先级（文件名倒数第二段数字）排序规则。
+    `includeScript` 中 `var x = val` 在全局作用域会修改全局变量（Qt Script
+    和 QuickJS 行为一致），"保护"来自 `if (typeof x === "undefined")` 守卫
+    而非 `var` 作用域。若规则按字母序执行，低优先级规则（如 `_linkers.6.sg`）
+    会在高优先级规则（如 `compiler_Free_Pascal.6.sg`）之后运行，其
+    `includeScript("Borland")` 会覆盖 FPC 设置的 `nOffset`。**必须在
+    `load_database` 读取文件内容之前完成优先级排序**，否则 rule_files 与
+    contents 索引错位导致格式检测完全错乱。
+15. **规则源码不能在 load_database 阶段预评估**：预评估会污染全局作用域
+    （`includeScript` 的 `var` 声明修改全局变量），导致后续规则看到前序规则
+    的 include 副作用。规则源码必须在 `evaluate_rule_source` 中通过 IIFE
+    按需评估，`detect()` 在 IIFE 内调用。`evaluate_rule` 应委托给
+    `evaluate_rule_source`，不应直接调用全局 `detect()`。
 
 ## 兼容基线
 

@@ -544,3 +544,53 @@ packer/protector 检测一致率从 98.4% 提升至 **100%**（500 个 PE 恶意
 
 AGENTS.md 第 12 条已更新，要求所有上游 bug 记录到
 `doc/upstream-bugs.md`，发现新 bug 时追加。
+
+## 2026-08-24: Free Pascal 版本检测 + Zip 归档检测回归修复
+
+### 根因分析
+
+Free Pascal 版本缺失和 Zip 归档检测丢失的根因是**缺少规则优先级排序**。
+
+上游 DIE-engine 使用 `sort_signature_prio` 按优先级（文件名倒数第二段数字）
+排序规则。diec-rust 的 `database.rs` 有 TODO 但未实现，规则按目录遍历顺序
+（等价于字母序）执行。
+
+#### 执行顺序差异示例
+
+优先级排序后（正确）：
+1. compiler_Delphi.4.sg → includeScript("Borland") → nOffset=1531904, bBorlandC=0
+2. library_LCL.5.sg → includeScript("FPC") → nOffset=1646556, bFPC=true
+3. _linkers.6.sg → includeScript("FPC")(跳过,bFPC已设), includeScript("Borland")(跳过,bBorlandC已设)
+4. compiler_Free_Pascal.6.sg → includeScript("FPC")(跳过) → nOffset=1646556 ✓
+
+字母序（错误）：
+1. compiler_Borland_C++.6.sg → Borland → nOffset=1531904
+2. compiler_Free_Pascal.6.sg → FPC → nOffset=1646556
+3. _linkers.6.sg → FPC(跳过), Borland(跳过,bBorlandC已设) → nOffset=1646556
+4. library_LCL.5.sg → FPC(跳过,bFPC已设) → nOffset=1646556
+   但某些情况下顺序不同导致 nOffset 被 Borland 覆盖
+
+#### var 作用域误区
+
+之前错误地认为 Qt Script 的 `var` 在 includeScript 中有局部作用域，实现了
+save/restore 机制。通过 DIE-engine 调试追踪确认：Qt Script 中 `var x = val`
+在全局作用域**确实修改全局变量**，与 QuickJS 的间接 eval 行为一致。"保护"来自
+`if (typeof x === "undefined")` 守卫模式，而非 `var` 作用域。
+
+### 修复内容
+
+1. **database.rs**: 实现优先级排序（`extract_priority` + `sort_by`），在读取
+   文件内容之前排序以避免索引错位
+2. **backend_rquickjs.rs**: 移除错误的 save/restore 机制，简化 includeScript
+3. **backend_rquickjs.rs**: 移除 load_database 中的规则源码预评估，改为
+   evaluate_rule_source 中的 IIFE 按需评估
+4. **backend_rquickjs.rs**: evaluate_rule 委托给 evaluate_rule_source
+5. **conformance.rs**: 更新测试以匹配新行为（无 detect 函数返回空结果而非错误）
+
+### 验证结果
+
+- PE malicious 50 样本：98% 匹配（1个 Costura.Fody/DNGuard 差异）
+- PE malicious 200 样本：99.5% 匹配（1个 Records debug data 差异）
+- PE benign 200 样本：99.5% 匹配（1个 NTkrnl Protector 差异）
+- ELF benign 100 样本：96% 匹配（4个版本字符串细微差异）
+- 所有 workspace 测试通过，clippy 无警告

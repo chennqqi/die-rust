@@ -1528,9 +1528,9 @@ VMProtect（2 样本漏检）和 UPX（1 样本漏检）。Phase 15 的覆盖率
 - 16.5d `isImportPositionHashPresent` CRC32C 修正 — ✅
 - 16.5e 资源条目 3 层嵌套 + RVA→文件偏移 — ✅
 - 16.6 新发现 packer/protector 漏检调查 — ✅（全部修复）
-- 16.7 非 packer 检测差异修复 — TODO
-- 16.8 host API 参数签名审计 — TODO
-- 16.9 收尾与回归 — TODO
+- 16.7 非 packer 检测差异修复 — ✅（commit 5770542，2026-08-23）
+- 16.8 host API 参数签名审计 — ✅（回归测试补充，2026-08-26）
+- 16.9 收尾与回归 — ✅（10 个回归测试覆盖问题 7-9）
 
 **修复后差分结果**（2026-08-23）：
 

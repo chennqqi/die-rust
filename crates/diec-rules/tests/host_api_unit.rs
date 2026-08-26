@@ -738,6 +738,299 @@ fn build_minimal_pe(
     data
 }
 
+/// Build a PE32 file with custom section names (beyond .text) and an
+/// import directory with multiple libraries and functions.
+///
+/// Layout:
+///   0x00:  DOS header (e_lfanew = 0x80)
+///   0x80:  PE sig + COFF header + optional header (PE32, 224 bytes)
+///   Section headers: .text + .rdata + `extra_sections`
+///   0x200: .text raw data (0x200 bytes)
+///   0x400: .rdata raw data (import directory + ILT + IAT + name strings)
+///   0x600+: extra section raw data (0x200 bytes each, zeros)
+///
+/// `extra_sections` are additional section names (max 8 chars each).
+/// `imports` is a list of (dll_name, function_names) pairs.
+fn build_pe_with_imports_and_sections(
+    extra_sections: &[&str],
+    imports: &[(&str, &[&str])],
+) -> Vec<u8> {
+    let pe_offset = 0x80u32;
+    let n_extra = extra_sections.len();
+    let n_sections = 2 + n_extra; // .text + .rdata + extra
+
+    // Calculate aligned header size: PE sig(4) + COFF(20) + OptHdr(224) +
+    // section headers (n_sections * 40), aligned up to file alignment (0x200).
+    let headers_unaligned = pe_offset as usize + 4 + 20 + 224 + n_sections * 40;
+    let headers_aligned = (headers_unaligned + 0x1FF) & !0x1FF; // align up to 0x200
+    let text_raw = headers_aligned as u32;
+    let rdata_raw = text_raw + 0x200;
+    let extra_raw_base = rdata_raw + 0x200;
+
+    let mut data = vec![0u8; pe_offset as usize];
+    data[0] = b'M';
+    data[1] = b'Z';
+    data[0x3C..0x40].copy_from_slice(&pe_offset.to_le_bytes());
+
+    // PE signature
+    data.extend_from_slice(b"PE\0\0");
+
+    // COFF header (20 bytes)
+    data.extend_from_slice(&0x014Cu16.to_le_bytes()); // Machine: I386
+    data.extend_from_slice(&(n_sections as u16).to_le_bytes()); // NumberOfSections
+    data.extend_from_slice(&0u32.to_le_bytes()); // TimeDateStamp
+    data.extend_from_slice(&0u32.to_le_bytes()); // PointerToSymbolTable
+    data.extend_from_slice(&0u32.to_le_bytes()); // NumberOfSymbols
+    data.extend_from_slice(&224u16.to_le_bytes()); // SizeOfOptionalHeader (PE32)
+    data.extend_from_slice(&0x0102u16.to_le_bytes()); // Characteristics
+
+    // Optional header (PE32, 224 bytes)
+    let opt_start = data.len();
+    data.extend_from_slice(&0x010Bu16.to_le_bytes()); // Magic: PE32
+    data.push(0x0E); // MajorLinkerVersion
+    data.push(0x00); // MinorLinkerVersion
+    data.extend_from_slice(&0x200u32.to_le_bytes()); // SizeOfCode
+    data.extend_from_slice(&0u32.to_le_bytes()); // SizeOfInitializedData
+    data.extend_from_slice(&0u32.to_le_bytes()); // SizeOfUninitializedData
+    data.extend_from_slice(&0x1000u32.to_le_bytes()); // AddressOfEntryPoint
+    data.extend_from_slice(&0u32.to_le_bytes()); // BaseOfCode
+    data.extend_from_slice(&0u32.to_le_bytes()); // BaseOfData
+    data.extend_from_slice(&0x00400000u32.to_le_bytes()); // ImageBase
+    data.extend_from_slice(&0x1000u32.to_le_bytes()); // SectionAlignment
+    data.extend_from_slice(&0x200u32.to_le_bytes()); // FileAlignment
+    data.extend_from_slice(&6u16.to_le_bytes()); // MajorOSVersion
+    data.extend_from_slice(&0u16.to_le_bytes()); // MinorOSVersion
+    data.extend_from_slice(&0u16.to_le_bytes()); // MajorImageVersion
+    data.extend_from_slice(&0u16.to_le_bytes()); // MinorImageVersion
+    data.extend_from_slice(&6u16.to_le_bytes()); // MajorSubsystemVersion
+    data.extend_from_slice(&0u16.to_le_bytes()); // MinorSubsystemVersion
+    data.extend_from_slice(&0u32.to_le_bytes()); // Win32VersionValue
+    // SizeOfImage: .text(0x1000) + .rdata(0x1000) + extra(0x1000 each)
+    let size_of_image = (2 + n_extra) as u32 * 0x1000 + 0x1000;
+    data.extend_from_slice(&size_of_image.to_le_bytes());
+    data.extend_from_slice(&(headers_aligned as u32).to_le_bytes()); // SizeOfHeaders
+    data.extend_from_slice(&0u32.to_le_bytes()); // CheckSum
+    data.extend_from_slice(&3u16.to_le_bytes()); // Subsystem (CONSOLE)
+    data.extend_from_slice(&0u16.to_le_bytes()); // DllCharacteristics
+    data.extend_from_slice(&0x100000u32.to_le_bytes()); // SizeOfStackReserve
+    data.extend_from_slice(&0x1000u32.to_le_bytes()); // SizeOfStackCommit
+    data.extend_from_slice(&0x100000u32.to_le_bytes()); // SizeOfHeapReserve
+    data.extend_from_slice(&0x1000u32.to_le_bytes()); // SizeOfHeapCommit
+    data.extend_from_slice(&0u32.to_le_bytes()); // LoaderFlags
+    data.extend_from_slice(&16u32.to_le_bytes()); // NumberOfRvaAndSizes
+
+    // Data directories (16 entries, 8 bytes each = 128 bytes)
+    // Index 0: Export (zeros)
+    data.extend_from_slice(&0u32.to_le_bytes());
+    data.extend_from_slice(&0u32.to_le_bytes());
+    // Index 1: Import — RVA and size will be filled later
+    let import_dd_off = data.len();
+    data.extend_from_slice(&0u32.to_le_bytes()); // RVA (placeholder)
+    data.extend_from_slice(&0u32.to_le_bytes()); // Size (placeholder)
+    // Index 2-15: zeros
+    for _ in 2..16 {
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes());
+    }
+
+    assert_eq!(data.len() - opt_start, 224, "Optional header size mismatch");
+
+    // Section headers
+    // .text: VA=0x1000, VSize=0x200, RPtr=text_raw, RSize=0x200
+    data.extend_from_slice(b".text\0\0\0");
+    data.extend_from_slice(&0x200u32.to_le_bytes()); // VirtualSize
+    data.extend_from_slice(&0x1000u32.to_le_bytes()); // VirtualAddress
+    data.extend_from_slice(&0x200u32.to_le_bytes()); // SizeOfRawData
+    data.extend_from_slice(&text_raw.to_le_bytes()); // PointerToRawData
+    data.extend_from_slice(&0u32.to_le_bytes()); // PointerToRelocations
+    data.extend_from_slice(&0u32.to_le_bytes()); // PointerToLinenumbers
+    data.extend_from_slice(&0u16.to_le_bytes()); // NumberOfRelocations
+    data.extend_from_slice(&0u16.to_le_bytes()); // NumberOfLinenumbers
+    data.extend_from_slice(&0x60000020u32.to_le_bytes()); // Characteristics
+
+    // .rdata: VA=0x2000, VSize=0x400, RPtr=rdata_raw, RSize=0x200
+    data.extend_from_slice(b".rdata\0\0");
+    data.extend_from_slice(&0x400u32.to_le_bytes()); // VirtualSize
+    data.extend_from_slice(&0x2000u32.to_le_bytes()); // VirtualAddress
+    data.extend_from_slice(&0x200u32.to_le_bytes()); // SizeOfRawData
+    data.extend_from_slice(&rdata_raw.to_le_bytes()); // PointerToRawData
+    data.extend_from_slice(&0u32.to_le_bytes());
+    data.extend_from_slice(&0u32.to_le_bytes());
+    data.extend_from_slice(&0u16.to_le_bytes());
+    data.extend_from_slice(&0u16.to_le_bytes());
+    data.extend_from_slice(&0x40000040u32.to_le_bytes()); // Characteristics (INITIALIZED_DATA | READ)
+
+    // Extra sections: VA=0x3000+, each 0x1000 apart, RPtr=extra_raw_base+, each 0x200 apart
+    for (i, name) in extra_sections.iter().enumerate() {
+        let mut name_buf = [0u8; 8];
+        let nb = name.as_bytes();
+        let copy_len = nb.len().min(8);
+        name_buf[..copy_len].copy_from_slice(&nb[..copy_len]);
+        data.extend_from_slice(&name_buf);
+        data.extend_from_slice(&0x100u32.to_le_bytes()); // VirtualSize
+        data.extend_from_slice(&(0x3000 + i as u32 * 0x1000).to_le_bytes()); // VirtualAddress
+        data.extend_from_slice(&0x200u32.to_le_bytes()); // SizeOfRawData
+        data.extend_from_slice(&(extra_raw_base + i as u32 * 0x200).to_le_bytes()); // PointerToRawData
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&0u16.to_le_bytes());
+        data.extend_from_slice(&0u16.to_le_bytes());
+        data.extend_from_slice(&0x40000040u32.to_le_bytes()); // INITIALIZED_DATA | READ
+    }
+
+    // Pad headers to headers_aligned (file alignment)
+    while data.len() < headers_aligned {
+        data.push(0);
+    }
+
+    // .text raw data (0x200 bytes of 0xCC)
+    data.extend_from_slice(&[0xCC; 0x200]);
+
+    // .rdata raw data: build import directory at file offset rdata_raw (RVA 0x2000)
+    let rdata_start = data.len();
+    assert_eq!(
+        rdata_start, rdata_raw as usize,
+        ".rdata should start at rdata_raw"
+    );
+
+    if imports.is_empty() {
+        // No imports: pad .rdata with zeros
+        data.extend_from_slice(&[0u8; 0x200]);
+    } else {
+        // Calculate layout within .rdata (RVA base = 0x2000, file base = rdata_raw)
+        let rva_base = 0x2000u32;
+        let file_base = rdata_raw;
+
+        // Import descriptors: (n_imports + 1) * 20 bytes (null terminator)
+        let n_imports = imports.len();
+        let desc_size = (n_imports + 1) * 20;
+
+        // ILT entries: for each library, (n_funcs + 1) * 4 bytes
+        let mut ilt_offsets = Vec::new();
+        let mut ilt_cursor = desc_size;
+        for (_, funcs) in imports {
+            ilt_offsets.push(ilt_cursor);
+            ilt_cursor += (funcs.len() + 1) * 4;
+        }
+
+        // IAT entries: same sizes as ILT
+        let mut iat_offsets = Vec::new();
+        let mut iat_cursor = ilt_cursor;
+        for (_, funcs) in imports {
+            iat_offsets.push(iat_cursor);
+            iat_cursor += (funcs.len() + 1) * 4;
+        }
+
+        // DLL name strings
+        let mut dll_name_offsets = Vec::new();
+        let mut name_cursor = iat_cursor;
+        for (dll, _) in imports {
+            dll_name_offsets.push(name_cursor);
+            name_cursor += dll.len() + 1; // +1 for null terminator
+        }
+
+        // Hint+name entries (2 bytes hint + name + null), WORD-aligned.
+        // Real PE files align each hint+name entry to a 2-byte boundary.
+        // Without alignment, pelite returns Misaligned for odd-offset entries.
+        let mut func_name_offsets = Vec::new();
+        for (_, funcs) in imports {
+            for fname in *funcs {
+                // Align to 2 bytes
+                name_cursor = (name_cursor + 1) & !1;
+                func_name_offsets.push(name_cursor);
+                name_cursor += 2 + fname.len() + 1; // hint(2) + name + null
+            }
+        }
+
+        let total_rdata_size = name_cursor;
+        assert!(
+            total_rdata_size <= 0x200,
+            "Import data too large: {total_rdata_size} > 0x200"
+        );
+
+        // Helper to convert .rdata-relative offset to RVA
+        let to_rva = |off: usize| -> u32 { rva_base + off as u32 };
+
+        // Write ALL import descriptors first (including null terminator).
+        // Each descriptor: OFT(4) + TimeDateStamp(4) + ForwarderChain(4) +
+        //                   Name(4) + FirstThunk(4) = 20 bytes.
+        for (i, (_dll, _funcs)) in imports.iter().enumerate() {
+            let ilt_rva = to_rva(ilt_offsets[i]);
+            let name_rva = to_rva(dll_name_offsets[i]);
+            let iat_rva = to_rva(iat_offsets[i]);
+            data.extend_from_slice(&ilt_rva.to_le_bytes()); // OriginalFirstThunk
+            data.extend_from_slice(&0u32.to_le_bytes()); // TimeDateStamp
+            data.extend_from_slice(&0u32.to_le_bytes()); // ForwarderChain
+            data.extend_from_slice(&name_rva.to_le_bytes()); // Name
+            data.extend_from_slice(&iat_rva.to_le_bytes()); // FirstThunk
+        }
+        // Null terminator descriptor
+        data.extend_from_slice(&[0u8; 20]);
+
+        // Write ALL ILT entries (Import Lookup Tables), one per library.
+        let mut func_idx = 0;
+        for (_, funcs) in imports.iter() {
+            for _ in *funcs {
+                let fn_rva = to_rva(func_name_offsets[func_idx]);
+                data.extend_from_slice(&fn_rva.to_le_bytes());
+                func_idx += 1;
+            }
+            data.extend_from_slice(&0u32.to_le_bytes()); // ILT terminator
+        }
+
+        // Write ALL IAT entries (Import Address Tables), same values as ILT.
+        let mut func_idx2 = 0;
+        for (_, funcs) in imports.iter() {
+            for _ in *funcs {
+                let fn_rva = to_rva(func_name_offsets[func_idx2]);
+                data.extend_from_slice(&fn_rva.to_le_bytes());
+                func_idx2 += 1;
+            }
+            data.extend_from_slice(&0u32.to_le_bytes()); // IAT terminator
+        }
+
+        // Write DLL name strings (null-terminated ASCII).
+        for (dll, _) in imports {
+            data.extend_from_slice(dll.as_bytes());
+            data.push(0);
+        }
+
+        // Write hint+name entries: 2-byte hint + null-terminated name,
+        // each entry WORD-aligned (pad with zero byte if needed).
+        for (_, funcs) in imports {
+            for fname in *funcs {
+                // Align current position to 2 bytes within .rdata
+                let rdata_pos = data.len() - file_base as usize;
+                let aligned = (rdata_pos + 1) & !1;
+                while data.len() - (file_base as usize) < aligned {
+                    data.push(0);
+                }
+                data.extend_from_slice(&0u16.to_le_bytes()); // hint = 0
+                data.extend_from_slice(fname.as_bytes());
+                data.push(0);
+            }
+        }
+
+        // Pad .rdata to 0x200
+        while data.len() - (file_base as usize) < 0x200 {
+            data.push(0);
+        }
+
+        // Fill in import data directory
+        let import_rva = rva_base;
+        let import_size = (desc_size) as u32;
+        data[import_dd_off..import_dd_off + 4].copy_from_slice(&import_rva.to_le_bytes());
+        data[import_dd_off + 4..import_dd_off + 8].copy_from_slice(&import_size.to_le_bytes());
+    }
+
+    // Extra section raw data (0x200 bytes of zeros each)
+    for _ in 0..n_extra {
+        data.extend_from_slice(&[0u8; 0x200]);
+    }
+
+    data
+}
+
 // =====================================================================
 // Rich signature tests
 // =====================================================================
@@ -1225,5 +1518,281 @@ if (!da || da.length === 0) {
     assert!(
         found,
         "Expected InvalidVA detection for out-of-range VA, got: {results:?}"
+    );
+}
+
+// =====================================================================
+// getSectionNameCollision tests (upstream issue #7, Phase 16.7 fix)
+// =====================================================================
+
+#[test]
+fn get_section_name_collision_returns_common_prefix() {
+    // VMProtect-style section names: "oiNRhy0" and "oiNRhy1" share
+    // common prefix "oiNRhy" with suffixes "0" and "1".
+    let pe = build_pe_with_imports_and_sections(&["oiNRhy0", "oiNRhy1"], &[]);
+
+    let results = run_js_pe(
+        r#"var prefix = PE.getSectionNameCollision("0", "1");
+if (prefix === "oiNRhy") {
+    bDetected = true;
+    sName = "CollisionPrefix";
+    sVersion = prefix;
+}"#,
+        pe,
+    );
+
+    let results = results.expect("run_js_pe returned None");
+    let det = results
+        .iter()
+        .find(|r| r.name == "CollisionPrefix")
+        .expect("expected CollisionPrefix detection");
+    assert_eq!(
+        det.version, "oiNRhy",
+        "getSectionNameCollision('0','1') should return 'oiNRhy', got: {}",
+        det.version
+    );
+}
+
+#[test]
+fn get_section_name_collision_vmprotect_rule_pattern() {
+    // Simulate the exact VMProtect.2.sg rule pattern:
+    //   var sCollision = PE.getSectionNameCollision("0", "1");
+    //   if (PE.isSectionNamePresent(sCollision + "1")) { bDetected = true; }
+    let pe = build_pe_with_imports_and_sections(&["oiNRhy0", "oiNRhy1"], &[]);
+
+    let results = run_js_pe(
+        r#"var sCollision = PE.getSectionNameCollision("0", "1");
+if (sCollision !== "" && PE.isSectionNamePresent(sCollision + "1")) {
+    bDetected = true;
+    sName = "VMProtect";
+}"#,
+        pe,
+    );
+
+    let results = results.expect("run_js_pe returned None");
+    let found = results.iter().any(|r| r.name == "VMProtect");
+    assert!(
+        found,
+        "VMProtect pattern should detect with collision sections, got: {results:?}"
+    );
+}
+
+#[test]
+fn get_section_name_collision_no_match_returns_empty() {
+    // Sections without colliding suffixes should return "".
+    let pe = build_pe_with_imports_and_sections(&[".data", ".rsrc"], &[]);
+
+    let results = run_js_pe(
+        r#"var prefix = PE.getSectionNameCollision("0", "1");
+if (prefix === "") {
+    bDetected = true;
+    sName = "NoCollision";
+}"#,
+        pe,
+    );
+
+    let results = results.expect("run_js_pe returned None");
+    let found = results.iter().any(|r| r.name == "NoCollision");
+    assert!(
+        found,
+        "getSectionNameCollision with non-colliding sections should return empty, got: {results:?}"
+    );
+}
+
+#[test]
+fn get_section_name_collision_single_section_returns_empty() {
+    // Only one section with a matching suffix — no pair, should return "".
+    let pe = build_pe_with_imports_and_sections(&["abc0"], &[]);
+
+    let results = run_js_pe(
+        r#"var prefix = PE.getSectionNameCollision("0", "1");
+if (prefix === "") {
+    bDetected = true;
+    sName = "SingleSection";
+}"#,
+        pe,
+    );
+
+    let results = results.expect("run_js_pe returned None");
+    let found = results.iter().any(|r| r.name == "SingleSection");
+    assert!(
+        found,
+        "Single section should not produce collision, got: {results:?}"
+    );
+}
+
+// =====================================================================
+// getImportFunctionName tests (upstream issue #8, Phase 16.7 fix)
+// =====================================================================
+
+#[test]
+fn get_import_function_name_two_args_returns_correct_function() {
+    // PE with 2 libraries: kernel32.dll (LoadLibraryA, GetProcAddress)
+    // and user32.dll (MessageBoxA).
+    let pe = build_pe_with_imports_and_sections(
+        &[],
+        &[
+            ("kernel32.dll", &["LoadLibraryA", "GetProcAddress"]),
+            ("user32.dll", &["MessageBoxA"]),
+        ],
+    );
+
+    let results = run_js_pe(
+        r#"var f00 = PE.getImportFunctionName(0, 0);
+var f01 = PE.getImportFunctionName(0, 1);
+var f10 = PE.getImportFunctionName(1, 0);
+if (f00 === "LoadLibraryA" && f01 === "GetProcAddress" && f10 === "MessageBoxA") {
+    bDetected = true;
+    sName = "ImportFuncName";
+}"#,
+        pe,
+    );
+
+    let results = results.expect("run_js_pe returned None");
+    let found = results.iter().any(|r| r.name == "ImportFuncName");
+    assert!(
+        found,
+        "getImportFunctionName(libIdx, funcIdx) should return correct function names, got: {results:?}"
+    );
+}
+
+#[test]
+fn get_import_function_name_out_of_range_returns_empty() {
+    let pe = build_pe_with_imports_and_sections(&[], &[("kernel32.dll", &["LoadLibraryA"])]);
+
+    let results = run_js_pe(
+        r#"var bad1 = PE.getImportFunctionName(5, 0);
+var bad2 = PE.getImportFunctionName(0, 5);
+var bad3 = PE.getImportFunctionName(-1, 0);
+if (bad1 === "" && bad2 === "" && bad3 === "") {
+    bDetected = true;
+    sName = "ImportFuncOOB";
+}"#,
+        pe,
+    );
+
+    let results = results.expect("run_js_pe returned None");
+    let found = results.iter().any(|r| r.name == "ImportFuncOOB");
+    assert!(
+        found,
+        "Out-of-range indices should return empty string, got: {results:?}"
+    );
+}
+
+#[test]
+fn get_import_function_name_upx_rule_pattern() {
+    // Simulate the UPX.2.sg rule pattern:
+    //   if (PE.getImportFunctionName(0, 0) == "LoadLibraryA") { funcCounter++; }
+    //   if (PE.getImportFunctionName(0, 1) == "GetProcAddress") { funcCounter++; }
+    let pe = build_pe_with_imports_and_sections(
+        &[],
+        &[("kernel32.dll", &["LoadLibraryA", "GetProcAddress"])],
+    );
+
+    let results = run_js_pe(
+        r#"var funcCounter = 0;
+if (PE.getImportFunctionName(0, 0) == "LoadLibraryA") { funcCounter++; }
+if (PE.getImportFunctionName(0, 1) == "GetProcAddress") { funcCounter++; }
+if (funcCounter === 2) {
+    bDetected = true;
+    sName = "UPXPattern";
+}"#,
+        pe,
+    );
+
+    let results = results.expect("run_js_pe returned None");
+    let found = results.iter().any(|r| r.name == "UPXPattern");
+    assert!(
+        found,
+        "UPX import function pattern should match, got: {results:?}"
+    );
+}
+
+// =====================================================================
+// getNumberOfImportThunks tests (upstream issue #9, Phase 16.7 fix)
+// =====================================================================
+
+#[test]
+fn get_number_of_import_thunks_per_library() {
+    // kernel32.dll has 2 functions, user32.dll has 1 function.
+    let pe = build_pe_with_imports_and_sections(
+        &[],
+        &[
+            ("kernel32.dll", &["LoadLibraryA", "GetProcAddress"]),
+            ("user32.dll", &["MessageBoxA"]),
+        ],
+    );
+
+    let results = run_js_pe(
+        r#"var n0 = PE.getNumberOfImportThunks(0);
+var n1 = PE.getNumberOfImportThunks(1);
+if (n0 === 2 && n1 === 1) {
+    bDetected = true;
+    sName = "ThunkCount";
+}"#,
+        pe,
+    );
+
+    let results = results.expect("run_js_pe returned None");
+    let found = results.iter().any(|r| r.name == "ThunkCount");
+    assert!(
+        found,
+        "getNumberOfImportThunks(libIdx) should return per-library count, got: {results:?}"
+    );
+}
+
+#[test]
+fn get_number_of_import_thunks_out_of_range_returns_zero() {
+    let pe = build_pe_with_imports_and_sections(&[], &[("kernel32.dll", &["LoadLibraryA"])]);
+
+    let results = run_js_pe(
+        r#"var n = PE.getNumberOfImportThunks(5);
+if (n === 0) {
+    bDetected = true;
+    sName = "ThunkOOB";
+}"#,
+        pe,
+    );
+
+    let results = results.expect("run_js_pe returned None");
+    let found = results.iter().any(|r| r.name == "ThunkOOB");
+    assert!(
+        found,
+        "Out-of-range library index should return 0, got: {results:?}"
+    );
+}
+
+#[test]
+fn get_number_of_import_thunks_upx_range_check() {
+    // Simulate UPX.2.sg isPatchedUPX range check:
+    //   var nNumberOfFunctions = PE.getNumberOfImportThunks(0);
+    //   if (nNumberOfFunctions > 1 && nNumberOfFunctions < 7) { ... }
+    let pe = build_pe_with_imports_and_sections(
+        &[],
+        &[(
+            "kernel32.dll",
+            &["LoadLibraryA", "GetProcAddress", "VirtualProtect"],
+        )],
+    );
+
+    let results = run_js_pe(
+        r#"var nNumberOfFunctions = PE.getNumberOfImportThunks(0);
+if (nNumberOfFunctions > 1 && nNumberOfFunctions < 7) {
+    bDetected = true;
+    sName = "UPXRangeCheck";
+    sVersion = String(nNumberOfFunctions);
+}"#,
+        pe,
+    );
+
+    let results = results.expect("run_js_pe returned None");
+    let det = results
+        .iter()
+        .find(|r| r.name == "UPXRangeCheck")
+        .expect("expected UPXRangeCheck detection");
+    assert_eq!(
+        det.version, "3",
+        "getNumberOfImportThunks(0) should return 3, got: {}",
+        det.version
     );
 }

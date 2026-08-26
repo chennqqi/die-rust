@@ -314,6 +314,19 @@ impl RquickjsRuntime {
         // Register the native includeScript function.
         // The function reads the script source from __diec_includes and evals it.
         // Cycle detection is handled by checking a JS-side active stack.
+        //
+        // IMPORTANT: In Qt Script, includeScript evaluates the source in the
+        // global scope. `var x = val` at global scope creates/modifies the
+        // global variable (same as `x = val`). The "protection" against
+        // accidental overwrites comes from the `if (typeof x === "undefined")`
+        // guard pattern used in include scripts, NOT from `var` scoping.
+        //
+        // QuickJS's indirect eval `(0, eval)(source)` also evaluates in the
+        // global scope and `var x = val` creates/modifies globals, which
+        // matches Qt Script behavior. No save/restore is needed.
+        //
+        // The correct evaluation order is ensured by the priority-based rule
+        // sorting in database.rs (matching upstream's sort_signature_prio).
         let include_js = r#"
             var __diec_include_stack = [];
             function includeScript(name) {
@@ -332,10 +345,8 @@ impl RquickjsRuntime {
                 if (source === undefined) {
                     throw new Error("include script not found: " + name);
                 }
-                // Push, eval, pop.
-                // Use indirect eval (0,eval)(source) to evaluate in global scope,
-                // matching Qt Script's behavior of includeScript evaluating
-                // in the global scope.
+                // Use indirect eval (0, eval)(source) to evaluate in global
+                // scope, matching Qt Script's includeScript behavior.
                 __diec_include_stack.push(name);
                 try {
                     (0, eval)(source);
@@ -503,15 +514,12 @@ impl RuleRuntime for RquickjsRuntime {
         // host API objects (Binary, X, File) that are only registered during
         // init(). They are run in init() instead.
 
-        for rule in &snapshot.rules {
-            self.eval_script(&rule.source).map_err(|e| match e {
-                RuleError::ScriptException { message, .. } => RuleError::ScriptException {
-                    path: rule.path.clone(),
-                    message,
-                },
-                other => other,
-            })?;
-        }
+        // Note: Rule sources are NOT pre-evaluated here. They are evaluated
+        // on-demand by evaluate_rule_source(), which wraps each rule in an
+        // IIFE to isolate variable declarations. Pre-evaluating all rules
+        // here would pollute the global scope with includeScript side effects
+        // (e.g. FPC's nOffset, Borland's nOffset), causing later rules to
+        // see stale values from earlier rules' include scripts.
 
         self.database_loaded = true;
         Ok(())
@@ -545,42 +553,11 @@ impl RuleRuntime for RquickjsRuntime {
         _host: &dyn HostApi,
         cancel: &CancellationToken,
     ) -> Result<Vec<DetectionResult>, RuleError> {
-        if !self.initialized {
-            return Err(RuleError::Backend {
-                detail: "evaluate_rule called before init".into(),
-            });
-        }
-
-        // Reset cancel flag and link to external token.
-        self.cancel_flag.clear();
-        if cancel.is_cancelled() {
-            self.cancel_flag.set_cancelled();
-            return Err(RuleError::Cancelled);
-        }
-
-        // Clear previous results from the JS __diec_results array.
-        self.clear_results()?;
-
-        // Call detect() — the function was defined when the rule source
-        // was evaluated during load_database.
-        let detect_call = "detect();";
-        let eval_result: Result<(), rquickjs::Error> = self
-            .context
-            .with(|ctx: Ctx<'_>| ctx.eval::<(), _>(detect_call));
-
-        match eval_result {
-            Ok(_) => self.read_results(),
-            Err(e) => {
-                if self.cancel_flag.is_cancelled() {
-                    Err(RuleError::Cancelled)
-                } else {
-                    Err(RuleError::ScriptException {
-                        path: rule.path.clone(),
-                        message: e.to_string(),
-                    })
-                }
-            }
-        }
+        // Delegate to evaluate_rule_source which wraps the rule source in an
+        // IIFE, evaluates it, and calls detect() inside the IIFE scope.
+        // This avoids the need to pre-evaluate all rule sources during
+        // load_database (which would pollute the global scope).
+        self.evaluate_rule_source(&rule.path, &rule.source, cancel)
     }
 
     fn shutdown(&mut self) {
@@ -661,6 +638,11 @@ impl RquickjsRuntime {
         // 2. Checks if `detect` was defined
         // 3. Calls `detect()` if it exists
         // 4. Returns the result
+        //
+        // Note: `includeScript` uses indirect eval `(0, eval)(source)` which
+        // evaluates in the global scope, so variables set by include scripts
+        // (like `bFPC`, `nOffset`) are accessible inside the IIFE via the
+        // scope chain (IIFE → global).
         let wrapped = format!(
             r#"(function() {{
                 {processed_source}
@@ -1078,9 +1060,13 @@ mod tests {
             include_scripts: std::collections::BTreeMap::new(),
         };
 
-        // load_database should fail because includeScript("nonexistent")
-        // is called during rule loading and the script is not found.
-        let result = runtime.load_database(&snapshot);
+        // load_database succeeds (rule sources are not pre-evaluated).
+        // The error occurs when evaluate_rule calls includeScript.
+        runtime.load_database(&snapshot).unwrap();
+        let token = CancellationToken::new();
+        let host = DummyHost;
+        runtime.init(&host).unwrap();
+        let result = runtime.evaluate_rule(&snapshot.rules[0], &host, &token);
         assert!(result.is_err());
     }
 
@@ -1109,8 +1095,13 @@ mod tests {
             include_scripts: includes,
         };
 
-        // load_database should fail because of the self-cycle.
-        let result = runtime.load_database(&snapshot);
+        // load_database succeeds (rule sources are not pre-evaluated).
+        // The cycle error occurs when evaluate_rule calls includeScript.
+        runtime.load_database(&snapshot).unwrap();
+        let token = CancellationToken::new();
+        let host = DummyHost;
+        runtime.init(&host).unwrap();
+        let result = runtime.evaluate_rule(&snapshot.rules[0], &host, &token);
         assert!(result.is_err());
     }
 

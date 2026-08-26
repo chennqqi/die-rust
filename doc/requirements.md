@@ -1162,3 +1162,18 @@
 用户要求将上游 DIE-engine 的已知 bug 记录下来。已创建
 `doc/upstream-bugs.md`，并在 AGENTS.md 第 12 条中引用，
 要求后续发现的上游 bug 追加到此文件。
+
+## 用户需求（2026-08-24）：修复 Free Pascal 版本检测和 Zip 归档检测回归
+
+继续上一会话的工作，修复 Free Pascal 版本字符串缺失和 Zip 归档检测丢失
+的问题。根因是缺少规则优先级排序（上游 `sort_signature_prio` 逻辑），
+导致 includeScript 的全局变量被错误覆盖。同时移除了错误的 save/restore
+机制和规则源码预评估。
+
+## 2026-08-26: 上游问题报告 7-9 回归测试补充
+
+下游用户（OneAV 引擎）在 2026-08-23 报告了 3 个 host API 语义错误（问题 7-9:
+getSectionNameCollision/getImportFunctionName/getNumberOfImportThunks）。
+这些问题已在 Phase 16.7（commit 5770542）修复，但缺少回归测试。本次补充了
+10 个回归测试到 host_api_unit.rs，使用手工构建的 PE32 二进制验证三个方法的
+语义正确性。

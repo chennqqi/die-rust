@@ -154,6 +154,20 @@ impl DatabaseBuilder {
             return Err(DatabaseError::Empty);
         }
 
+        // Sort rules using upstream's sort_signature_prio logic:
+        // 1. By file_type (lexicographic)
+        // 2. By priority extracted from filename (second-to-last dot-separated
+        //    section, as a string; default "9" if fewer than 2 dots)
+        // 3. By filename (lexicographic)
+        // This must happen BEFORE reading file contents so that the contents
+        // vector indices align with the sorted rule_files vector.
+        rule_files.sort_by(|a, b| {
+            a.file_type
+                .cmp(b.file_type)
+                .then_with(|| extract_priority(&a.file_name).cmp(extract_priority(&b.file_name)))
+                .then_with(|| a.file_name.cmp(&b.file_name))
+        });
+
         // Phase 2: read file contents in parallel using scoped threads.
         // Each thread reads a chunk of files and returns the results.
         // This avoids unsafe code while parallelizing the I/O bottleneck.
@@ -192,7 +206,6 @@ impl DatabaseBuilder {
         };
 
         // Phase 3: assemble LoadedRule structs in order.
-        // TODO: sort rules using upstream's sort_signature_prio logic.
         let mut rules: Vec<LoadedRule> = Vec::with_capacity(file_count);
         for (i, rf) in rule_files.iter().enumerate() {
             let source = match &contents[i] {
@@ -257,6 +270,19 @@ impl DatabaseBuilder {
 
 /// Try to load `DatabaseVersion` from `rule-source-manifest.json`.
 ///
+/// Extract the priority from a rule filename, matching upstream's
+/// `sort_signature_prio` logic. The priority is the second-to-last
+/// dot-separated section (e.g. "6" in "compiler_Free_Pascal.6.sg").
+/// Returns "9" (lowest priority) if the filename has fewer than 2 dots.
+fn extract_priority(name: &str) -> &str {
+    let sections: Vec<&str> = name.split('.').collect();
+    if sections.len() > 2 {
+        sections[sections.len() - 2]
+    } else {
+        "9"
+    }
+}
+
 /// The manifest is expected at the parent of the db directory (e.g.
 /// `upstream/rule-source-manifest.json` when db is at
 /// `upstream/Detect-It-Easy/db`). Falls back to `DatabaseVersion::unknown`

@@ -501,9 +501,11 @@ fn rule_with_no_detect_function() {
     let host = BufferHost::new(vec![0x00]);
     runtime.init(&host).unwrap();
 
-    // evaluate_rule should fail because detect() is not defined.
+    // evaluate_rule should succeed with empty results (no detect function
+    // means no detections, which is not an error).
     let result = runtime.evaluate_rule(&snapshot.rules[0], &host, &token);
-    assert!(result.is_err());
+    assert!(result.is_ok());
+    assert!(result.unwrap().is_empty());
 }
 
 #[test]
