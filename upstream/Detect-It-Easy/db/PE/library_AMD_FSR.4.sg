@@ -1,8 +1,8 @@
 // Detect It Easy: detection rule file
 
 // Author: DosX
-// E-Mail: collab@kay-software.ru
 // GitHub: https://github.com/DosX-dev
+// Website: https://dosx.su
 // Telegram: @DosX_dev
 
 // https://www.amd.com/en/products/graphics/technologies/fidelityfx/super-resolution.html
@@ -22,7 +22,7 @@ function detect() {
             sVersion = "3.X";
         } else if (PE.isLibraryPresentExp(/^ffx_fsr/i) || PE.isLibraryPresentExp(/fidelityfx/i)) { // unknown version
             bDetected = true;
-        } else if (PE.isExportFunctionPresentExp(/^ffxFsr/)) {
+        } else if (PE.isExportFunctionPresentExpFastAnchor("ffxfsr", /^ffxFsr/)) {
             sOptions = "static"; // EAT
         }
     }

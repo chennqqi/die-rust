@@ -1,8 +1,8 @@
 // Detect It Easy: detection rule file
 
 // Author: DosX
-// E-Mail: collab@kay-software.ru
 // GitHub: https://github.com/DosX-dev
+// Website: https://dosx.su
 // Telegram: @DosX_dev
 
 // https://www.vulkan.org/
@@ -11,7 +11,7 @@ meta("library", "Vulkan");
 function detect() {
     if (PE.isLibraryPresentExp(/[V|v]ulkan/i)) {
         bDetected = true;
-    } else if (PE.isExportFunctionPresentExp(/VULKAN/)) {
+    } else if (PE.isExportFunctionPresentExpFastAnchor("vulkan", /VULKAN/)) {
         bDetected = true;
     }
 

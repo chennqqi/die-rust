@@ -1,0 +1,16 @@
+// Detect It Easy: detection rule file
+
+// Author: DosX
+// GitHub: https://github.com/DosX-dev
+// Website: https://dosx.su
+// Telegram: @DosX_dev
+
+meta("protector", "QQProtect");
+
+function detect() {
+    if (PE.isResourceNamePresent("QQPROTECT")) {
+        bDetected = true;
+    }
+
+    return result();
+}

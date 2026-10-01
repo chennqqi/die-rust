@@ -1,0 +1,1 @@
+function detect(){return X.isNetObjectPresent("FlurlClient")&&(bDetected=1),result()}meta("library","Flurl.Http")

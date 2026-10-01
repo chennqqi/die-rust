@@ -1,12 +1,10 @@
 // Detect It Easy: detection rule file
 // Author: Xylitol <xylitol@temari.fr>
 
-// // TODO: Optimize & refactor (Temporarily placed in DB_EXTRA)
-
 // Supported variants:
 //
 // - ROCKEY4ND Win98/2000/XP/2003/Vista Enveloper v2.30
-// - Feitian Shell Protect Center v1.0.12.917
+// - Feitian Shell Protect Center v1.0.x
 
 meta("protector", "FEITIAN Rockey4nd Software Protection");
 
@@ -39,11 +37,6 @@ function detect() {
      *
      * The four-byte relative CALL destination is masked.
      */
-    var rockey4ndSignature =
-        "e8........c3" +
-        "2280ba3038857f8a439b" +
-        "192afdfbe18bca237b58847aaaf84ebb" +
-        "ac795ee5561788ff1550c3";
 
     /*
      * Feitian Shell Protect Center entry-point stub:
@@ -60,39 +53,14 @@ function detect() {
      *
      * The four-byte relative JMP destination is masked.
      */
-    var shellProtectSignature = "eb02909090e9........c3";
 
-    /*
-     * Internal loader marker observed in samples generated with
-     * Feitian Shell Protect Center v1.0.10.105 and v1.0.12.917.
-     *
-     * The final bytes contain the ASCII string "KERNEL32".
-     */
-
-    var shellProtect1010105 =
-        "89770100000000000000000000000000b911000000004000440000005f000000" +
-        "a300000040000000e300000002000000e5000000000000004b45524e454c3332" +
-        "2e646c6c";
-
-    var shellProtect1012917 =
-        "19790100000000000000000000000000b911000000004000440000005f000000" +
-        "a300000040000000e300000002000000e5000000000000004b45524e454c3332" +
-        "2e646c6c";
-
-    // ROCKEY4ND Enveloper v2.30
-    if (PE.section["RY4SHL"] && PE.compareEP(rockey4ndSignature)) {
+    if (PE.isSectionNamePresent("RY4SHL") && PE.compareEP("e8........c32280ba3038857f8a439b192afdfbe18bca237b58847aaaf84ebbac795ee5561788ff1550c3")) {
         sName = "Rockey4nd Enveloper";
         sVersion = "2.30";
         bDetected = true;
-    } else if (PE.section[".ftsafe"] && PE.compareEP(shellProtectSignature)) { // Feitian Shell Protect Center
+    } else if (PE.isSectionNamePresent(".ftsafe") && PE.compareEP("eb02909090e9........c3")) {
         sName = "Rockey4nd Feitian Shell Protect Center";
-
-        if (PE.isSignaturePresent(0, PE.getSize(), shellProtect1012917)) {
-            sVersion = "1.0.12.917";
-        } else if (PE.isSignaturePresent(0, PE.getSize(), shellProtect1010105)) {
-            sVersion = "1.0.10.105";
-        }
-
+        sVersion = "1.0.x";
         bDetected = true;
     }
 

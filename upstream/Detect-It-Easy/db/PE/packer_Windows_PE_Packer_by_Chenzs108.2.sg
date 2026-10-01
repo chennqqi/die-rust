@@ -1,8 +1,8 @@
 // Detect It Easy: detection rule file
 
 // Author: DosX
-// E-Mail: collab@kay-software.ru
 // GitHub: https://github.com/DosX-dev
+// Website: https://dosx.su
 // Telegram: @DosX_dev
 
 // https://github.com/czs108/Windows-PE-Packer
@@ -16,7 +16,7 @@ function detect() {
         if (PE.compareEP("60E8E10000002E0002000000000000")) {
             var shellSectionByIndex = PE.section[PE.nLastSection];
 
-            if (shellSectionByIndex.Characteristics & 0xe0000040) { // R/W/X
+            if (shellSectionByIndex.hasFlags(0xE0000040)) { // R/W/X and initialized data
                 bDetected = true;
 
                 if (shellSectionByIndex.Name !== ".shell") {

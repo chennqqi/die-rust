@@ -1,0 +1,1 @@
+function detect(){return X.isNetObjectPresent("Sha256Digest")&&(bDetected=1),result()}meta("library","Bouncy Castle")

@@ -1,15 +1,15 @@
 // Detect It Easy: detection rule file
 
 // Author: DosX
-// E-Mail: collab@kay-software.ru
 // GitHub: https://github.com/DosX-dev
+// Website: https://dosx.su
 // Telegram: @DosX_dev
 
 // https://www.nvidia.com/en-gb/drivers/physx/physx-9-19-0218-driver/
 meta("library", "Nvidia PhysX");
 
 function detect() {
-    if (PE.is64() && PE.section[".rdata"] && PE.isLibraryPresentExp(/^physx/i)) {
+    if (PE.isLibraryPresentExp(/^physx/i)) {
         bDetected = true;
     }
 

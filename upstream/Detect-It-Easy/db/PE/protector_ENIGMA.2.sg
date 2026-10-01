@@ -2,6 +2,7 @@
 // Author: horsicq <horsicq@gmail.com>
 // 07.12.2014 detect x64, build date added //ajax
 
+// https://enigmaprotector.com/en/downloads.html
 meta("protector", "Enigma");
 
 function getEnigmaVersion() {
@@ -135,7 +136,7 @@ function detect() {
             if (PE.getNumberOfImports() > 1 &&
                 PE.getNumberOfImportThunks(1) == 1 &&
                 PE.getImportFunctionName(1, 0) == "MessageBoxA" &&
-                PE.getSectionCharacteristics(0) == 0xe0000040 &&
+                PE.section[0] && PE.section[0].Flags == 0xe0000040 &&
                 getEnigmaVersion()) {
                 bDetected = true;
             } else if (PE.getSectionNameCollision("1", "2") == "enigma") {

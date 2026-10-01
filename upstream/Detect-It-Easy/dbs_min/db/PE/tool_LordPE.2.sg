@@ -1,1 +1,2 @@
-function detect(){return 0===PE.getDosStubSize()&&PE.isSignaturePresent(0,128,"'[LordPE]'")&&(sOptions="rebuilded",bDetected=1),result()}meta("tool","LordPE")
+function detect(){var e=X.section[".NewSec"]
+return 0===X.getDosStubSize()&&X.isSignaturePresent(0,Math.min(128,X.Sz()),"'[LordPE]'")?(sOptions="rebuilded",bDetected=1):e&&e.IsReadWriteExecute&&(sOptions="section added",bDetected=1),result()}meta("tool","LordPE")

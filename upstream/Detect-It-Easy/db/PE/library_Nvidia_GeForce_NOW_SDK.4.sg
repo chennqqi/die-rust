@@ -1,8 +1,8 @@
 // Detect It Easy: detection rule file
 
 // Author: DosX
-// E-Mail: collab@kay-software.ru
 // GitHub: https://github.com/DosX-dev
+// Website: https://dosx.su
 // Telegram: @DosX_dev
 
 // https://github.com/NVIDIAGameWorks/GeForceNOW-SDK
@@ -11,7 +11,7 @@ meta("library", "Nvidia GeForce NOW SDK");
 function detect() {
     if (PE.isLibraryPresent("GfnRuntimeSdk.dll")) {
         bDetected = true;
-    } else if (PE.isExportFunctionPresentExp(/^gfn(?:Free|Get|Register|Start|Stop)/)) {
+    } else if (PE.isExportFunctionPresentExpFastAnchor("gfn", /^gfn(?:Free|Get|Register|Start|Stop)/)) {
         sOptions = "static"; // EAT
         bDetected = true;
     }
