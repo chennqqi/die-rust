@@ -49,10 +49,12 @@ const CORPUS_EXPECTATIONS: &[(&str, &[(&str, &str)])] = &[
     ("Minimal.class", &[("format", "Java Class")]),
     ("minimal.dex", &[("format", "DEX")]),
     ("minimal.pyc", &[("format", "Python bytecode compiled")]),
-    // Archive formats — archive:Zip comes from Binary rules
-    ("payload.zip", &[("archive", "Zip")]),
-    ("minimal.apk", &[("archive", "Zip")]),
-    ("minimal.jar", &[("archive", "Zip")]),
+    // Archive formats — upstream dispatch is exclusive: ZIP/APK/JAR run only
+    // their own rule group, so a minimal container yields filetype "Unknown"
+    // (golden: ZIP/APK/JAR → Unknown). No Binary archive rule fires.
+    ("payload.zip", &[]),
+    ("minimal.apk", &[]),
+    ("minimal.jar", &[]),
     ("minimal.ipa", &[("archive", "Zip")]),
     ("payload.tar", &[("archive", "tar")]),
     (

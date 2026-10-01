@@ -5,10 +5,14 @@
 //! the MZ header, validates `e_lfanew`, then checks the PE signature. A
 //! successful PE match is strong and supersedes the weak MSDOS match.
 //!
-//! The PE32/PE64 distinction is made from the `Magic` field of the PE
-//! optional header. This probe also extracts COFF header fields (machine
-//! type, number of sections) and optional header fields (entry point,
-//! size of code) as metadata for downstream rule matching.
+//! This mirrors upstream `XPE::isValid` (xpe.cpp): the check is only the
+//! MZ/ZM magic plus `0 < e_lfanew < file_size` plus the 4-byte NT signature.
+//! The COFF and optional headers are NOT validated — files whose headers
+//! are truncated or carry an unknown optional-header magic still classify
+//! as PE upstream, and so do here. The PE32/PE64 distinction follows
+//! `XPE::getMode`/`getFileType`: it is derived from the COFF `Machine`
+//! field (AMD64/IA64/ARM64/ALPHA64/RISCV64/LOONGARCH64 => PE64), not from
+//! the optional header magic; unreadable or unknown machines are PE32.
 
 use crate::probe::{FormatProbe, ProbeError, ProbeOutcome, strong_deferred};
 use diec_core::format::FileType;
@@ -18,18 +22,23 @@ use diec_core::input::ByteView;
 #[derive(Debug, Default)]
 pub struct PeProbe;
 
-/// MZ DOS header minimum size.
+/// MZ DOS header minimum size (upstream reads the full IMAGE_DOS_HEADER).
 const MZ_MIN_SIZE: u64 = 64;
 /// Offset of `e_lfanew` in the MZ header.
 const E_LFANEW_OFFSET: u64 = 0x3C;
-/// PE signature "PE\0\0".
+/// PE signature "PE\0\0" (test fixtures).
+#[cfg(test)]
 const PE_SIGNATURE: [u8; 4] = [0x50, 0x45, 0x00, 0x00];
+/// PE signature "PE\0\0" as a little-endian u32.
+const PE_SIGNATURE_U32: u32 = 0x0000_4550;
 /// Offset of the optional header magic from the PE signature.
 /// PE sig (4) + COFF header (20) = 24.
 const OPT_HDR_MAGIC_OFFSET_FROM_SIG: u64 = 24;
-/// PE32 optional header magic.
+/// PE32 optional header magic (test fixtures; upstream no longer reads it).
+#[cfg(test)]
 const PE32_MAGIC: u16 = 0x010B;
-/// PE64 (PE32+) optional header magic.
+/// PE64 (PE32+) optional header magic (test fixtures).
+#[cfg(test)]
 const PE64_MAGIC: u16 = 0x020B;
 
 /// COFF machine type: i386.
@@ -42,6 +51,37 @@ pub const COFF_MACHINE_ARM: u16 = 0x01C0;
 pub const COFF_MACHINE_ARM64: u16 = 0xAA64;
 /// COFF machine type: IA64.
 pub const COFF_MACHINE_IA64: u16 = 0x0200;
+/// COFF machine type: Alpha AXP 64-bit.
+pub const COFF_MACHINE_ALPHA64: u16 = 0x0284;
+/// COFF machine type: RISC-V 64-bit.
+pub const COFF_MACHINE_RISCV64: u16 = 0x5064;
+/// COFF machine type: LoongArch 64-bit.
+pub const COFF_MACHINE_LOONGARCH64: u16 = 0x6264;
+/// Native-OS override XOR mask (XPE_DEF::S_IMAGE_FILE_MACHINE_NATIVE_OS_OVERRIDE_LINUX).
+const MACHINE_NATIVE_OS_OVERRIDE_LINUX: u16 = 0x7B79;
+
+/// COFF machine types that upstream `XPE::getMode` classifies as 64-bit.
+fn is_machine_64bit(machine: u16) -> bool {
+    matches!(
+        machine,
+        COFF_MACHINE_AMD64
+            | COFF_MACHINE_IA64
+            | COFF_MACHINE_ARM64
+            | COFF_MACHINE_ALPHA64
+            | COFF_MACHINE_RISCV64
+            | COFF_MACHINE_LOONGARCH64
+    )
+}
+
+/// Apply upstream `XPE::_getMachine` normalization: a machine value XORed
+/// with the Linux native-OS override is reported as plain AMD64.
+fn get_machine(machine: u16) -> u16 {
+    if machine == (MACHINE_NATIVE_OS_OVERRIDE_LINUX ^ COFF_MACHINE_AMD64) {
+        COFF_MACHINE_AMD64
+    } else {
+        machine
+    }
+}
 
 /// PE header metadata extracted during probing.
 ///
@@ -82,110 +122,58 @@ impl FormatProbe for PeProbe {
     }
 
     fn probe(&self, view: &ByteView<'_>) -> Result<Option<ProbeOutcome>, ProbeError> {
-        // Need at least the MZ DOS header.
+        // Need at least the MZ DOS header (upstream reads the full
+        // IMAGE_DOS_HEADER before consulting e_lfanew).
         if view.len() < MZ_MIN_SIZE {
             return Ok(None);
         }
 
-        // Check MZ magic.
+        // Check MZ or ZM magic (both are accepted by XMSDOS/XPE upstream).
         let mz_magic = view.read_u16_le(0).map_err(ProbeError::Io)?;
-        if mz_magic != 0x5A4D {
+        if mz_magic != 0x5A4D && mz_magic != 0x4D5A {
             return Ok(None);
         }
 
         // Read e_lfanew (offset to PE header).
         let e_lfanew = view.read_u32_le(E_LFANEW_OFFSET).map_err(ProbeError::Io)?;
-
-        // e_lfanew must point within the file and leave room for the PE
-        // signature (4 bytes) + COFF header (20 bytes) + optional header
-        // magic (2 bytes) = 26 bytes minimum.
         let pe_sig_offset = u64::from(e_lfanew);
-        let min_needed = pe_sig_offset
-            .checked_add(OPT_HDR_MAGIC_OFFSET_FROM_SIG + 2)
-            .ok_or_else(|| ProbeError::InvalidHeader {
-                file_type: FileType::new("PE32"),
-                detail: "e_lfanew overflow".into(),
-            })?;
 
-        if view.len() < min_needed {
-            // e_lfanew points outside the file: not a valid PE.
+        // Upstream: `lfanew > 0 && lfanew < size`, then a bounds-checked
+        // u32 read of the NT signature (out-of-bounds reads yield 0).
+        if e_lfanew == 0 || pe_sig_offset >= view.len() {
+            return Ok(None);
+        }
+        let Ok(sig) = view.read_u32_le(pe_sig_offset) else {
+            return Ok(None);
+        };
+        if sig != PE_SIGNATURE_U32 {
             return Ok(None);
         }
 
-        // Read and verify PE signature.
-        let mut sig = [0u8; 4];
-        view.read_exact_at(pe_sig_offset, &mut sig)
-            .map_err(|cause| ProbeError::Truncated {
-                file_type: FileType::new("PE32"),
-                cause,
-            })?;
-        if sig != PE_SIGNATURE {
-            return Ok(None);
-        }
-
-        // Read COFF header fields (20 bytes after PE signature).
-        // Offset 0: Machine (u16 LE)
-        // Offset 2: NumberOfSections (u16 LE)
-        let coff_offset = pe_sig_offset + 4;
+        // COFF machine sits 4 bytes after the signature. Out-of-bounds
+        // reads upstream return 0, which classifies as PE32 via getMode.
         let machine = view
-            .read_u16_le(coff_offset)
-            .map_err(|cause| ProbeError::Truncated {
-                file_type: FileType::new("PE32"),
-                cause,
-            })?;
-        let number_of_sections =
-            view.read_u16_le(coff_offset + 2)
-                .map_err(|cause| ProbeError::Truncated {
-                    file_type: FileType::new("PE32"),
-                    cause,
-                })?;
-
-        // Read optional header magic to distinguish PE32 vs PE64.
-        let opt_magic_offset = pe_sig_offset + OPT_HDR_MAGIC_OFFSET_FROM_SIG;
-        let opt_magic =
-            view.read_u16_le(opt_magic_offset)
-                .map_err(|cause| ProbeError::Truncated {
-                    file_type: FileType::new("PE32"),
-                    cause,
-                })?;
-
-        let name = match opt_magic {
-            PE32_MAGIC => "PE32",
-            PE64_MAGIC => "PE64",
-            _ => {
-                // Unknown optional header magic: still a PE, but we cannot
-                // determine 32 vs 64. Report as PE32 with invalid header.
-                return Err(ProbeError::InvalidHeader {
-                    file_type: FileType::new("PE32"),
-                    detail: format!("unknown optional header magic: 0x{opt_magic:04X}"),
-                });
-            }
+            .read_u16_le(pe_sig_offset + 4)
+            .map(get_machine)
+            .unwrap_or(0);
+        let name = if is_machine_64bit(machine) {
+            "PE64"
+        } else {
+            "PE32"
         };
 
-        // Read optional header fields: entry point and size of code.
-        // Both are at offset 16 and 4 from the optional header start
-        // respectively (same layout for PE32 and PE64).
-        let opt_hdr_offset = opt_magic_offset;
-        let entry_point =
-            view.read_u32_le(opt_hdr_offset + 16)
-                .map_err(|cause| ProbeError::Truncated {
-                    file_type: FileType::new("PE32"),
-                    cause,
-                })?;
-        let size_of_code =
-            view.read_u32_le(opt_hdr_offset + 4)
-                .map_err(|cause| ProbeError::Truncated {
-                    file_type: FileType::new("PE32"),
-                    cause,
-                })?;
-
+        // Best-effort metadata for downstream consumers. Fields that fall
+        // outside the file simply stay zero — upstream performs the same
+        // bounds-checked reads in its header accessors.
+        let coff_offset = pe_sig_offset + 4;
+        let opt_hdr_offset = pe_sig_offset + OPT_HDR_MAGIC_OFFSET_FROM_SIG;
         let _info = PeHeaderInfo {
             format_name: name,
             machine,
-            number_of_sections,
-            opt_magic,
-            entry_point,
-            size_of_code,
+            number_of_sections: view.read_u16_le(coff_offset + 2).unwrap_or(0),
+            opt_magic: view.read_u16_le(opt_hdr_offset).unwrap_or(0),
+            entry_point: view.read_u32_le(opt_hdr_offset + 16).unwrap_or(0),
+            size_of_code: view.read_u32_le(opt_hdr_offset + 4).unwrap_or(0),
         };
 
         Ok(Some(ProbeOutcome {
@@ -235,13 +223,87 @@ mod tests {
 
     #[test]
     fn pe64_matches() {
-        let data = build_minimal_pe(PE64_MAGIC);
+        // Upstream classifies PE64 by the COFF machine, not the optional
+        // header magic (XPE::getMode/getFileType).
+        let data = build_pe_with_fields(PE64_MAGIC, COFF_MACHINE_AMD64, 0, 0, 0);
         let src = MemorySource::new(&data);
         let view = view_of(&src);
         let probe = PeProbe;
         let outcome = probe.probe(&view).unwrap().unwrap();
         assert_eq!(outcome.candidate.file_type.name, "PE64");
         assert_eq!(outcome.candidate.strength, FormatStrength::Strong);
+    }
+
+    #[test]
+    fn pe64_classified_by_machine_not_opt_magic() {
+        // PE32 magic + AMD64 machine: upstream reports PE64.
+        let data = build_pe_with_fields(PE32_MAGIC, COFF_MACHINE_AMD64, 0, 0, 0);
+        let src = MemorySource::new(&data);
+        let view = view_of(&src);
+        let probe = PeProbe;
+        let outcome = probe.probe(&view).unwrap().unwrap();
+        assert_eq!(outcome.candidate.file_type.name, "PE64");
+    }
+
+    #[test]
+    fn pe64_machines_cover_upstream_set() {
+        for machine in [
+            COFF_MACHINE_AMD64,
+            COFF_MACHINE_IA64,
+            COFF_MACHINE_ARM64,
+            COFF_MACHINE_ALPHA64,
+            COFF_MACHINE_RISCV64,
+            COFF_MACHINE_LOONGARCH64,
+        ] {
+            let data = build_pe_with_fields(0, machine, 0, 0, 0);
+            let src = MemorySource::new(&data);
+            let view = view_of(&src);
+            let outcome = PeProbe.probe(&view).unwrap().unwrap();
+            assert_eq!(
+                outcome.candidate.file_type.name, "PE64",
+                "machine 0x{machine:04X}"
+            );
+        }
+    }
+
+    #[test]
+    fn zm_magic_is_accepted() {
+        // Upstream XPE::isValid accepts both MZ and ZM magics.
+        let mut data = build_minimal_pe(PE32_MAGIC);
+        data[0] = 0x5A;
+        data[1] = 0x4D;
+        let src = MemorySource::new(&data);
+        let view = view_of(&src);
+        let outcome = PeProbe.probe(&view).unwrap().unwrap();
+        assert_eq!(outcome.candidate.file_type.name, "PE32");
+    }
+
+    #[test]
+    fn sig_only_pe32_matches() {
+        // mocks_pe.bin-style: MZ + e_lfanew + "PE\0\0" but zero COFF/opt
+        // header. Upstream accepts this as PE32 (machine reads as 0).
+        let mut buf = vec![0u8; 64];
+        buf[0] = 0x4D;
+        buf[1] = 0x5A;
+        buf[0x3C..0x40].copy_from_slice(&0x10u32.to_le_bytes());
+        buf[0x10..0x14].copy_from_slice(&PE_SIGNATURE);
+        let src = MemorySource::new(&buf);
+        let view = view_of(&src);
+        let outcome = PeProbe.probe(&view).unwrap().unwrap();
+        assert_eq!(outcome.candidate.file_type.name, "PE32");
+    }
+
+    #[test]
+    fn pe_sig_at_last_byte_does_not_match() {
+        // lfanew < size but the 4-byte signature read is out of bounds;
+        // upstream's bounds-checked read yields 0 -> no match.
+        let mut buf = vec![0u8; 68];
+        buf[0] = 0x4D;
+        buf[1] = 0x5A;
+        buf[0x3C..0x40].copy_from_slice(&67u32.to_le_bytes());
+        let src = MemorySource::new(&buf);
+        let view = view_of(&src);
+        assert!(PeProbe.probe(&view).unwrap().is_none());
     }
 
     #[test]
@@ -276,13 +338,15 @@ mod tests {
     }
 
     #[test]
-    fn unknown_opt_magic_returns_error() {
+    fn unknown_opt_magic_still_matches() {
+        // Upstream does not read the optional header magic at all: an
+        // unknown value still classifies as PE32 (machine reads as 0).
         let data = build_minimal_pe(0xABCD);
         let src = MemorySource::new(&data);
         let view = view_of(&src);
         let probe = PeProbe;
-        let err = probe.probe(&view).unwrap_err();
-        assert!(matches!(err, ProbeError::InvalidHeader { .. }));
+        let outcome = probe.probe(&view).unwrap().unwrap();
+        assert_eq!(outcome.candidate.file_type.name, "PE32");
     }
 
     #[test]
@@ -387,8 +451,9 @@ mod tests {
     }
 
     #[test]
-    fn pe_boundary_one_byte_short_returns_truncated() {
-        // One byte short of the full optional header read.
+    fn pe_signature_only_still_matches_when_headers_truncated() {
+        // Upstream validates only the NT signature: a file whose COFF and
+        // optional headers extend past EOF still classifies as PE32.
         let mut buf = vec![0u8; 0x6B];
         buf[0] = 0x4D;
         buf[1] = 0x5A;
@@ -397,11 +462,8 @@ mod tests {
         buf[0x58..0x5A].copy_from_slice(&PE32_MAGIC.to_le_bytes());
         let src = MemorySource::new(&buf);
         let view = view_of(&src);
-        let probe = PeProbe;
-        // The probe tries to read entry_point at opt+16 which needs 0x6C bytes.
-        // With 0x6B bytes, it should return a Truncated error.
-        let result = probe.probe(&view);
-        assert!(result.is_err() || result.unwrap().is_none());
+        let outcome = PeProbe.probe(&view).unwrap().unwrap();
+        assert_eq!(outcome.candidate.file_type.name, "PE32");
     }
 
     #[test]

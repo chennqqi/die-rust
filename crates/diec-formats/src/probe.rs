@@ -151,6 +151,10 @@ impl ProbeTable {
         // CAP-DISPATCH-001: PE/MSDOS, ELF, Mach-O
         table.push(Box::new(super::msdos::MsdosProbe));
         table.push(Box::new(super::pe::PeProbe));
+        // MZ subtypes promoted via the signature at e_lfanew, mirroring
+        // XFormats::getFileTypes (PE -> NE -> LE/LX ordering).
+        table.push(Box::new(super::ne_lx::NeProbe));
+        table.push(Box::new(super::ne_lx::LeLxProbe));
         table.push(Box::new(super::elf::ElfProbe));
         table.push(Box::new(super::macho::MachOProbe));
         // CAP-DISPATCH-004: Archive (ZIP, RAR, 7Z, GZIP, TAR, ISO9660, CAB)
@@ -217,8 +221,9 @@ mod tests {
     #[test]
     fn default_phase2_table_has_all_probes() {
         let table = ProbeTable::default_phase2();
-        // 4 (PE/ELF/Mach-O) + 7 (Archive) + 3 (DEX/Class/PYC) + 2 (PDF/CFBF) + 4 (Image: JPEG/PNG/BMP/WAV) = 20
-        assert_eq!(table.len(), 20);
+        // 6 (PE/MSDOS/NE/LE-LX/ELF/Mach-O) + 7 (Archive) + 3 (DEX/Class/PYC)
+        // + 2 (PDF/CFBF) + 4 (Image: JPEG/PNG/BMP/WAV) = 22
+        assert_eq!(table.len(), 22);
         assert_eq!(table.version, PROBE_TABLE_VERSION);
     }
 

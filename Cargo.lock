@@ -1500,7 +1500,10 @@ version = "0.9.1"
 dependencies = [
  "capstone",
  "diec-core",
+ "diec-formats",
+ "flate2",
  "goblin",
+ "md-5",
  "pelite",
  "rquickjs",
 ]

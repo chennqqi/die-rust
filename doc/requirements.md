@@ -1208,3 +1208,36 @@ Bug 6，CipherWall 规则上游死代码）；实现 APK AXML 解码器（
 `axml.rs` 移植 XAndroidBinary::recordToString，修复 `package_PackageName`
 漏检）；全量移植 NE.isImportPresent/isExportPresent/isResourcesPresent
 （getImportStructs/getExportStructs/getResourceStructs 存在性语义）。
+
+## 2026-10-01 扩展外部测试语料 + 全量差分测试
+
+用户反馈 `/data/virus` 语料仅 PE/ELF 两类、覆盖度不足，要求从 GitHub 扩充
+测试数据集并跑全量测试。选定语料源（下载至 `/data/virus/corpus_ext/`，不入库）：
+corkami/pocs（PE/PDF/ZIP/RAR 畸形 PoC）、file/file tests（88 testfile+期望值）、
+JonathanSalwan/binary-samples（多架构 ELF/MachO）、mandiant/capa-testfiles
+（432 真实样本）、mozilla/pdf.js test/pdfs（983 PDF）、OWASP/mas-crackmes
+（APK/IPA/JAR）、ytisf/theZoo（288 zip 活体恶意样本，密码 infected，
+已解出 3336 文件）。按类别建软链目录 corpus_{pe_edge,pdf,arch,mobile,
+capa,filemagic,thezoo,multiarch}。上游 oracle 用 podman `--network=host`
+重建（host 代理 127.0.0.1:10090 需在容器内可达）。
+
+## 2026-10-02 签名语义源码考古修正（Invalid signature 不中止规则）
+
+本轮对上游 `XBinary::convertSignature`/`getSignatureRecords`/`compareSignature` 与
+`Binary_Script::compare`/`compareEP`/`compareOverlay`/`findSignature` 做了完整源码
+考古，纠正此前"非法签名 → JS 异常中止规则"的错误假设：
+
+- 上游脚本层签名 API **从不抛异常**：`compare` 非法签名记 PDSTRUCT
+  "Invalid signature" 错误并返回 `false`，`findSignature` 返回 `-1`，规则继续执行。
+- `Binary_Script::compare` 快路径（归一化长度 + offset < 头部缓存 256 且不含
+  `$#+%*`）用 `compareSignatureStrings` 逐半字节比较，非法字符静默不匹配。
+- `convertSignature` 遇未闭合引号/非 latin1 字符返回**空串**（不是错误）。
+- `findSignature` 对结构性失败（奇数 `.`/`$`/`#` 跑、畸形 `[base]`、`+` 后无模式）
+  静默返回 -1；仅 `_getSignatureBytes` 级失败（非法字符/奇数 hex）记错误。
+- 上游规则自身含多处非法签名（compiler_Zig/_linkers/zip/Nullsoft/PEP 等），
+  已记入 doc/upstream-bugs.md Bug 7。
+
+实现：`convert_signature` 返回 String（空串语义）；新增 `parse_signature_ex`
+区分 byte_level/structural 失败；`HostApi::note_scan_error` 非致命诊断通道，
+scanner 按规则归属 drain 进 `diagnostics`；JS `_peCompareSigWithJumps`/`fSig`
+的 throw 改为 `return false`/`-1`。

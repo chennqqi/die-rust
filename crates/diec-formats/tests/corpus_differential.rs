@@ -19,7 +19,8 @@ use std::path::PathBuf;
 /// Corpus sample: (filename, expected strongest probe name).
 ///
 /// Formats not yet probed (empty, text, BMP, WAV, PYC) are excluded.
-/// APK/JAR/IPA are ZIP-based, so the probe detects ZIP.
+/// APK/JAR/IPA are ZIP-based and classified by member names, mirroring
+/// upstream `XFormats::getFileTypesZIP` (APK > IPA > JAR > ZIP).
 const CORPUS_EXPECTATIONS: &[(&str, &str)] = &[
     ("minimal.elf", "ELF64"),
     ("minimal-elf32.elf", "ELF32"),
@@ -38,10 +39,12 @@ const CORPUS_EXPECTATIONS: &[(&str, &str)] = &[
     ("minimal.pdf", "PDF"),
     ("minimal.cfbf", "CFBF"),
     ("payload.zip", "ZIP"),
-    ("minimal.apk", "ZIP"),
-    ("minimal.jar", "ZIP"),
-    ("minimal.ipa", "ZIP"),
-    ("minimal.rar", "RAR"),
+    ("minimal.apk", "APK"),
+    ("minimal.jar", "JAR"),
+    ("minimal.ipa", "IPA"),
+    // minimal.rar is a bare marker+MAIN_HEAD with no ENDARC/file blocks:
+    // upstream XRar::isValid (full block-chain parse) rejects it -> Binary.
+    ("minimal.rar", "(none)"),
     ("minimal.iso", "ISO9660"),
     ("payload.tar", "TAR"),
     ("payload.txt.gz", "GZIP"),
@@ -196,16 +199,22 @@ fn corpus_pe64_also_produces_msdos_weak() {
 }
 
 #[test]
-fn corpus_zip_based_formats_detect_zip() {
-    // APK, JAR, IPA are all ZIP-based; the probe should detect ZIP.
-    for name in &["payload.zip", "minimal.apk", "minimal.jar", "minimal.ipa"] {
+fn corpus_zip_based_formats_detect_subtype() {
+    // APK, JAR, IPA are all ZIP-based; the probe classifies the subtype by
+    // member names exactly as upstream `XFormats::getFileTypesZIP` does.
+    for (name, expected) in [
+        ("payload.zip", "ZIP"),
+        ("minimal.apk", "APK"),
+        ("minimal.jar", "JAR"),
+        ("minimal.ipa", "IPA"),
+    ] {
         let data = read_corpus(name);
         if data.is_empty() {
             continue;
         }
         let (cands, errs) = probe_bytes(&data);
         assert!(errs.is_empty(), "{name}: unexpected errors: {errs:?}");
-        let has_zip = cands.iter().any(|c| c.file_type.name == "ZIP");
-        assert!(has_zip, "{name}: should detect ZIP, got {cands:?}");
+        let has = cands.iter().any(|c| c.file_type.name == expected);
+        assert!(has, "{name}: should detect {expected}, got {cands:?}");
     }
 }

@@ -15,11 +15,14 @@ pub mod dex_class_pyc;
 pub mod elf;
 pub mod image;
 pub mod image_extra;
+pub mod jpeg;
 pub mod macho;
 pub mod msdos;
+pub mod ne_lx;
 pub mod pdf_cfbf;
 pub mod pe;
 pub mod probe;
+pub mod tiff;
 
 pub use probe::{FormatProbe, PROBE_TABLE_VERSION, ProbeError, ProbeOutcome, ProbeTable};
 
@@ -85,7 +88,15 @@ mod tests {
 
     #[test]
     fn default_table_detects_macho_64() {
-        let data = 0xFEEDFACFu32.to_be_bytes();
+        // Minimal structurally valid Mach-O 64 BE header (ncmds=0).
+        let mut data = 0xFEEDFACFu32.to_be_bytes().to_vec();
+        data.extend_from_slice(&7u32.to_be_bytes()); // cputype
+        data.extend_from_slice(&3u32.to_be_bytes()); // cpusubtype
+        data.extend_from_slice(&2u32.to_be_bytes()); // filetype = EXECUTE
+        data.extend_from_slice(&0u32.to_be_bytes()); // ncmds
+        data.extend_from_slice(&0u32.to_be_bytes()); // sizeofcmds
+        data.extend_from_slice(&0u32.to_be_bytes()); // flags
+        data.extend_from_slice(&0u32.to_be_bytes()); // reserved
         let src = MemorySource::new(&data);
         let view = view_of(&src);
         let table = ProbeTable::default_phase2();
@@ -97,7 +108,9 @@ mod tests {
 
     #[test]
     fn default_table_detects_zip() {
-        let data = [0x50u8, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00];
+        // Minimal ZIP: end-of-central-directory record only.
+        let mut data = vec![0x50u8, 0x4B, 0x05, 0x06];
+        data.extend_from_slice(&[0u8; 18]);
         let src = MemorySource::new(&data);
         let view = view_of(&src);
         let table = ProbeTable::default_phase2();
@@ -133,7 +146,7 @@ mod tests {
 
     #[test]
     fn default_table_detects_png() {
-        let data = [0x89u8, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00];
+        let data = crate::image::tests::minimal_png();
         let src = MemorySource::new(&data);
         let view = view_of(&src);
         let table = ProbeTable::default_phase2();

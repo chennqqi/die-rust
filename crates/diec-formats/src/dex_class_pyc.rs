@@ -6,10 +6,10 @@
 //!   `0xCAFEBABE`; the Mach-O probe runs before this one in the dispatch
 //!   order, so FAT binaries are identified first. A Java class file has
 //!   major/minor version fields after the magic that a FAT binary does not.
-//! - PYC: Python compiled bytecode. Magic varies by version; the first 4
-//!   bytes are a version-specific magic number. We use a heuristic: the magic
-//!   is a 16-bit field followed by a `\r\n` (0x0D 0x0A) at bytes 2-3. This
-//!   pattern is shared by all CPython PYC formats from 2.0 onward.
+//! - PYC: Python compiled bytecode. The first 4 bytes are a version-specific
+//!   u16 magic (little-endian) followed by the `0x0D 0x0A` marker at bytes
+//!   2-3. Upstream `XPYC::isValid` requires the magic u16 to be in the known
+//!   CPython magic table — arbitrary prefixes are not accepted.
 
 use crate::probe::{FormatProbe, ProbeError, ProbeOutcome, strong_deferred};
 use diec_core::format::FileType;
@@ -34,6 +34,23 @@ const DEX_MAGIC_PREFIX: [u8; 4] = [0x64, 0x65, 0x78, 0x0A];
 const DEX_MAGIC_LEN: u64 = 8;
 /// Java Class magic: `0xCAFEBABE` big-endian.
 const JAVA_CLASS_MAGIC: u32 = 0xCAFEBABE;
+
+/// Known CPython PYC magic values (LE u16 at offset 0), sorted for binary
+/// search. Ported verbatim from upstream `XPYC::g_records` (xpyc.cpp).
+const PYC_KNOWN_MAGICS: &[u16] = &[
+    2012, 3000, 3111, 3131, 3141, 3151, 3160, 3170, 3180, 3190, 3200, 3210, 3220, 3230, 3250, 3260,
+    3270, 3280, 3290, 3300, 3310, 3320, 3330, 3340, 3350, 3351, 3360, 3361, 3370, 3371, 3372, 3373,
+    3375, 3376, 3377, 3378, 3379, 3390, 3391, 3392, 3393, 3394, 3400, 3401, 3410, 3411, 3412, 3413,
+    3420, 3421, 3422, 3423, 3424, 3425, 3430, 3431, 3432, 3433, 3434, 3435, 3436, 3437, 3438, 3439,
+    3450, 3451, 3452, 3453, 3454, 3455, 3456, 3457, 3458, 3459, 3460, 3461, 3462, 3463, 3464, 3465,
+    3466, 3467, 3468, 3469, 3470, 3471, 3472, 3473, 3474, 3475, 3476, 3477, 3478, 3479, 3480, 3481,
+    3482, 3483, 3484, 3485, 3486, 3487, 3488, 3489, 3490, 3491, 3492, 3493, 3494, 3495, 3500, 3501,
+    3502, 3503, 3504, 3505, 3506, 3507, 3508, 3509, 3510, 3511, 3512, 3513, 3514, 3515, 3516, 3517,
+    3518, 3519, 3520, 3521, 3522, 3523, 3524, 3525, 3526, 3527, 3528, 3529, 3530, 3531, 3550, 3551,
+    3552, 3553, 3554, 3555, 3556, 3557, 3558, 3559, 3560, 3561, 3562, 3563, 3564, 3565, 3566, 3567,
+    3568, 3569, 3570, 3571, 3600, 5042, 5082, 6020, 6071, 6201, 6202, 6204, 6205, 6206, 6207, 6208,
+    6209, 6210, 6211, 6212, 6213, 6215, 6216, 6217, 6218, 6219, 6220, 6221,
+];
 
 impl FormatProbe for DexProbe {
     fn file_type(&self) -> FileType {
@@ -86,8 +103,11 @@ impl FormatProbe for JavaClassProbe {
     }
 
     fn probe(&self, view: &ByteView<'_>) -> Result<Option<ProbeOutcome>, ProbeError> {
-        // Java class needs at least 8 bytes: 4 magic + 2 minor_version + 2 major_version.
-        if view.len() < 8 {
+        // Upstream XJavaClass::isValid: size >= 24, CAFEBABE magic, and the
+        // big-endian u32 at offset 4 (minor<<16 | major) must exceed 10.
+        // The >10 check is what separates class files from Mach-O FAT
+        // binaries whose nfat_arch count at offset 4 stays small.
+        if view.len() < 24 {
             return Ok(None);
         }
         let magic = view.read_u32_be(0).map_err(|cause| ProbeError::Truncated {
@@ -97,14 +117,11 @@ impl FormatProbe for JavaClassProbe {
         if magic != JAVA_CLASS_MAGIC {
             return Ok(None);
         }
-        // Read major version to validate. Java class major versions range
-        // from 45 (Java 1) upward. FAT binaries have a different structure
-        // after the magic (nfat_arch count), so this helps distinguish.
-        let major = view.read_u16_be(6).map_err(|cause| ProbeError::Truncated {
+        let version = view.read_u32_be(4).map_err(|cause| ProbeError::Truncated {
             file_type: FileType::new("Java Class"),
             cause,
         })?;
-        if major >= 45 {
+        if version > 10 {
             Ok(Some(ProbeOutcome {
                 candidate: strong_deferred("Java Class"),
             }))
@@ -120,40 +137,25 @@ impl FormatProbe for PycProbe {
     }
 
     fn probe(&self, view: &ByteView<'_>) -> Result<Option<ProbeOutcome>, ProbeError> {
-        // PYC needs at least 4 bytes for the magic number.
-        if view.len() < 4 {
+        // Upstream XPYC::isValid: size >= 12, the LE u16 marker at offset 2
+        // must be 0x0A0D (bytes 0x0D 0x0A), and the LE u16 magic at offset 0
+        // must be a known CPython magic value.
+        if view.len() < 12 {
             return Ok(None);
         }
-        // CPython PYC magic: 2-byte version-specific magic + 0x0D 0x0A (\r\n).
-        // This pattern is shared by all CPython 2.0+ PYC formats.
-        let m0 = view.read_u8(0).map_err(|cause| ProbeError::Truncated {
-            file_type: FileType::new("PYC"),
-            cause,
-        })?;
-        let m1 = view.read_u8(1).map_err(|cause| ProbeError::Truncated {
-            file_type: FileType::new("PYC"),
-            cause,
-        })?;
-        let m2 = view.read_u8(2).map_err(|cause| ProbeError::Truncated {
-            file_type: FileType::new("PYC"),
-            cause,
-        })?;
-        let m3 = view.read_u8(3).map_err(|cause| ProbeError::Truncated {
-            file_type: FileType::new("PYC"),
-            cause,
-        })?;
-        // Check for \r\n at bytes 2-3.
-        if m2 == 0x0D && m3 == 0x0A {
-            // The first two bytes are a version-specific magic. We accept
-            // any non-zero value as a weak heuristic. A more precise check
-            // would enumerate known magic numbers, but that is deferred.
-            if m0 != 0 || m1 != 0 {
-                Ok(Some(ProbeOutcome {
-                    candidate: strong_deferred("PYC"),
-                }))
-            } else {
-                Ok(None)
-            }
+        let Ok(marker) = view.read_u16_le(2) else {
+            return Ok(None);
+        };
+        if marker != 0x0A0D {
+            return Ok(None);
+        }
+        let Ok(magic) = view.read_u16_le(0) else {
+            return Ok(None);
+        };
+        if PYC_KNOWN_MAGICS.binary_search(&magic).is_ok() {
+            Ok(Some(ProbeOutcome {
+                candidate: strong_deferred("PYC"),
+            }))
         } else {
             Ok(None)
         }
@@ -214,12 +216,20 @@ mod tests {
         assert!(probe.probe(&view).unwrap().is_none());
     }
 
+    /// Build a 24-byte class header with the given minor/major versions.
+    fn build_class(minor: u16, major: u16) -> Vec<u8> {
+        let mut data = 0xCAFEBABEu32.to_be_bytes().to_vec();
+        data.extend_from_slice(&minor.to_be_bytes());
+        data.extend_from_slice(&major.to_be_bytes());
+        data.resize(24, 0);
+        data
+    }
+
     #[test]
     fn java_class_matches() {
-        // magic + minor_version(0) + major_version(52 = Java 8)
-        let mut data = 0xCAFEBABEu32.to_be_bytes().to_vec();
-        data.extend_from_slice(&0u16.to_be_bytes()); // minor
-        data.extend_from_slice(&52u16.to_be_bytes()); // major
+        // minor=0, major=52 (Java 8): upstream requires size>=24 and the
+        // BE u32 version field > 10.
+        let data = build_class(0, 52);
         let src = MemorySource::new(&data);
         let view = view_of(&src);
         let probe = JavaClassProbe;
@@ -229,10 +239,33 @@ mod tests {
     }
 
     #[test]
-    fn java_class_too_low_major_does_not_match() {
+    fn java_class_low_major_still_matches() {
+        // Upstream accepts any version word > 10, so major=44 (below the
+        // classic 45 minimum) is still a Java Class.
+        let data = build_class(0, 44);
+        let src = MemorySource::new(&data);
+        let view = view_of(&src);
+        let probe = JavaClassProbe;
+        assert!(probe.probe(&view).unwrap().is_some());
+    }
+
+    #[test]
+    fn java_class_tiny_version_does_not_match() {
+        // Mach-O FAT disambiguation: version word <= 10 (e.g. nfat_arch=2).
+        let data = build_class(0, 2);
+        let src = MemorySource::new(&data);
+        let view = view_of(&src);
+        let probe = JavaClassProbe;
+        assert!(probe.probe(&view).unwrap().is_none());
+    }
+
+    #[test]
+    fn java_class_under_24_bytes_does_not_match() {
+        // Upstream requires at least 24 bytes even though the magic check
+        // only reads 8.
         let mut data = 0xCAFEBABEu32.to_be_bytes().to_vec();
         data.extend_from_slice(&0u16.to_be_bytes());
-        data.extend_from_slice(&44u16.to_be_bytes()); // major < 45
+        data.extend_from_slice(&52u16.to_be_bytes());
         let src = MemorySource::new(&data);
         let view = view_of(&src);
         let probe = JavaClassProbe;
@@ -250,10 +283,11 @@ mod tests {
 
     #[test]
     fn pyc_matches() {
-        // Python 3.8 PYC magic: 0x550D 0x0A -> bytes [0x55, 0x0D, 0x0D, 0x0A]
-        // Actually the magic is [0x55, 0x0D, 0x0D, 0x0A] but the \r\n is at
-        // bytes 2-3. Let's use a known magic: 0x420D 0x0A = [0x42, 0x0D, 0x0D, 0x0A]
-        let data = [0x42u8, 0x0D, 0x0D, 0x0A, 0x00, 0x00, 0x00, 0x00];
+        // Python 3.7b5 magic 3394 = 0x0D42 -> LE bytes [0x42, 0x0D],
+        // marker [0x0D, 0x0A]; upstream requires >= 12 bytes.
+        let data = [
+            0x42u8, 0x0D, 0x0D, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
         let src = MemorySource::new(&data);
         let view = view_of(&src);
         let probe = PycProbe;
@@ -265,6 +299,32 @@ mod tests {
     #[test]
     fn pyc_no_crlf_does_not_match() {
         let data = [0x42u8, 0x0D, 0x0A, 0x0D];
+        let src = MemorySource::new(&data);
+        let view = view_of(&src);
+        let probe = PycProbe;
+        assert!(probe.probe(&view).unwrap().is_none());
+    }
+
+    #[test]
+    fn pyc_unknown_magic_does_not_match() {
+        // bytes [0x00, 0x01, 0x0D, 0x0A]: marker ok but magic 0x0100 is not
+        // in the known CPython table (upstream XPYC::_isMagicKnown).
+        let data = [
+            0x00u8, 0x01, 0x0D, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        let src = MemorySource::new(&data);
+        let view = view_of(&src);
+        let probe = PycProbe;
+        assert!(probe.probe(&view).unwrap().is_none());
+    }
+
+    #[test]
+    fn pyc_pcapng_does_not_match() {
+        // PCAPNG section header [0x0A 0x0D 0x0D 0x0A]: marker at offset 2 is
+        // 0x0D0D not 0x0A0D, so upstream rejects it as PYC.
+        let data = [
+            0x0Au8, 0x0D, 0x0D, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
         let src = MemorySource::new(&data);
         let view = view_of(&src);
         let probe = PycProbe;

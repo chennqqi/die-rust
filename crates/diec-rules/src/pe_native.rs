@@ -432,13 +432,39 @@ pub fn get_manifest(data: &[u8]) -> String {
     String::new()
 }
 
+/// Whether the COR20 CLI header at the given RVA is valid per upstream
+/// `XCLIAssembly::getCliInfo`: `cb == 0x48` and a non-empty MetaData
+/// directory. This is the second half of upstream's
+/// `m_bIsNETPresent = isNETPresent() && cliInfo.bValid`.
+fn cli_header_valid(data: &[u8], clr_rva: u64) -> bool {
+    let clr_offset = match rva_to_file_offset(data, clr_rva) {
+        o if o >= 0 => o as usize,
+        _ => return false,
+    };
+    let cb = read_u32_le(data, clr_offset);
+    let md_va = read_u32_le(data, clr_offset + 8);
+    let md_size = read_u32_le(data, clr_offset + 12);
+    cb == 0x48 && md_va != 0 && md_size != 0
+}
+
 /// Check if the PE has a .NET CLR header (data directory index 14).
+///
+/// Mirrors upstream `PE_Script::m_bIsNETPresent`: the COM descriptor data
+/// directory must be present AND the COR20 header it points to must
+/// validate (`cb == 0x48`, MetaData VA/Size non-zero). Packed or malformed
+/// files that merely set the directory entry do not count.
 pub fn is_net(data: &[u8]) -> bool {
     if let Some(file) = pe64_from_bytes(data) {
-        return file.data_directory().get(14).is_some_and(|d| d.Size != 0);
+        return match file.data_directory().get(14) {
+            Some(d) if d.VirtualAddress != 0 => cli_header_valid(data, u64::from(d.VirtualAddress)),
+            _ => false,
+        };
     }
     if let Some(file) = pe32_from_bytes(data) {
-        return file.data_directory().get(14).is_some_and(|d| d.Size != 0);
+        return match file.data_directory().get(14) {
+            Some(d) if d.VirtualAddress != 0 => cli_header_valid(data, u64::from(d.VirtualAddress)),
+            _ => false,
+        };
     }
     false
 }
@@ -455,17 +481,24 @@ pub fn is_net(data: &[u8]) -> bool {
 pub fn get_net_version(data: &[u8]) -> String {
     let clr_rva = if let Some(file) = pe64_from_bytes(data) {
         match file.data_directory().get(14) {
-            Some(d) if d.Size != 0 => d.VirtualAddress as u64,
+            Some(d) if d.VirtualAddress != 0 => d.VirtualAddress as u64,
             _ => return String::new(),
         }
     } else if let Some(file) = pe32_from_bytes(data) {
         match file.data_directory().get(14) {
-            Some(d) if d.Size != 0 => d.VirtualAddress as u64,
+            Some(d) if d.VirtualAddress != 0 => d.VirtualAddress as u64,
             _ => return String::new(),
         }
     } else {
         return String::new();
     };
+
+    // Upstream only reads the metadata when the COR20 header validates
+    // (cb == 0x48, MetaData VA/Size non-zero); otherwise the fields are
+    // garbage on packed/malformed files.
+    if !cli_header_valid(data, clr_rva) {
+        return String::new();
+    }
 
     let clr_offset = match rva_to_file_offset(data, clr_rva) {
         o if o >= 0 => o as usize,
@@ -529,12 +562,12 @@ pub fn get_net_strings(data: &[u8]) -> (Vec<String>, Vec<String>) {
     // Get CLR header RVA from data directory entry 14.
     let clr_rva = if let Some(file) = pe64_from_bytes(data) {
         match file.data_directory().get(14) {
-            Some(d) if d.Size != 0 => d.VirtualAddress as u64,
+            Some(d) if d.VirtualAddress != 0 => d.VirtualAddress as u64,
             _ => return (Vec::new(), Vec::new()),
         }
     } else if let Some(file) = pe32_from_bytes(data) {
         match file.data_directory().get(14) {
-            Some(d) if d.Size != 0 => d.VirtualAddress as u64,
+            Some(d) if d.VirtualAddress != 0 => d.VirtualAddress as u64,
             _ => return (Vec::new(), Vec::new()),
         }
     } else {
@@ -735,10 +768,13 @@ pub struct PeBatchInfo {
     pub is_signed: bool,
     /// PE manifest XML string from resources.
     pub manifest: String,
-    /// File version string from VS_FIXEDFILEINFO.
+    /// File version string from the StringFileInfo "FileVersion" record.
     pub file_version: String,
-    /// Product version string from VS_FIXEDFILEINFO.
+    /// Product version string from the StringFileInfo "ProductVersion" record.
     pub product_version: String,
+    /// Numeric file version MS part formatted as "<major>.<minor>"
+    /// (upstream `get_uint32_version(dwFileVersionMS)`).
+    pub file_version_ms: String,
     /// Total number of resource data entries.
     pub number_of_resources: usize,
     /// .NET CLR runtime version string (e.g., "v4.0.30319"), empty if not .NET.
@@ -791,9 +827,13 @@ pub fn parse_batch(data: &[u8]) -> Option<PeBatchInfo> {
     // Parse .NET version and strings once (used for both PE32 and PE64 paths).
     let net_version = get_net_version(data);
     let (net_unicode_strings, net_ansi_strings) = get_net_strings(data);
+    // Upstream m_bIsNETPresent additionally validates the COR20 header
+    // (cliInfo.bValid), so compute it once against the raw buffer.
+    let is_net = is_net(data);
     // Try PE64 first.
     if let Some(file) = pe64_from_bytes(data) {
         let mut info = parse_batch_pe64(file);
+        info.is_net = is_net;
         info.net_version = net_version;
         info.net_unicode_strings = net_unicode_strings;
         info.net_ansi_strings = net_ansi_strings;
@@ -802,6 +842,7 @@ pub fn parse_batch(data: &[u8]) -> Option<PeBatchInfo> {
     // Try PE32.
     if let Some(file) = pe32_from_bytes(data) {
         let mut info = parse_batch_pe32(file);
+        info.is_net = is_net;
         info.net_version = net_version;
         info.net_unicode_strings = net_unicode_strings;
         info.net_ansi_strings = net_ansi_strings;
@@ -865,13 +906,15 @@ fn parse_batch_pe64(file: pelite::pe64::PeFile<'_>) -> PeBatchInfo {
         }
     }
 
-    let is_net = file.data_directory().get(14).is_some_and(|d| d.Size != 0);
+    // is_net is set by the caller (parse_batch), which validates the COR20
+    // header beyond the mere data-directory presence.
+    let is_net = false;
     let is_signed = file
         .data_directory()
         .get(4)
         .is_some_and(|d| d.VirtualAddress != 0);
 
-    let (manifest, file_version, product_version, number_of_resources) =
+    let (manifest, file_version, product_version, file_version_ms, number_of_resources) =
         parse_resource_info_pe64(&file);
     let resource_entries = parse_resource_entries_pe64(&file);
     let import_position_hashes = compute_import_position_hashes(&imports);
@@ -886,6 +929,7 @@ fn parse_batch_pe64(file: pelite::pe64::PeFile<'_>) -> PeBatchInfo {
         manifest,
         file_version,
         product_version,
+        file_version_ms,
         number_of_resources,
         net_version: String::new(),
         resource_entries,
@@ -1091,13 +1135,15 @@ fn parse_batch_pe32(file: pelite::pe32::PeFile<'_>) -> PeBatchInfo {
         }
     }
 
-    let is_net = file.data_directory().get(14).is_some_and(|d| d.Size != 0);
+    // is_net is set by the caller (parse_batch), which validates the COR20
+    // header beyond the mere data-directory presence.
+    let is_net = false;
     let is_signed = file
         .data_directory()
         .get(4)
         .is_some_and(|d| d.VirtualAddress != 0);
 
-    let (manifest, file_version, product_version, number_of_resources) =
+    let (manifest, file_version, product_version, file_version_ms, number_of_resources) =
         parse_resource_info_pe32(&file);
     let resource_entries = parse_resource_entries_pe32(&file);
     let import_position_hashes = compute_import_position_hashes(&imports);
@@ -1112,6 +1158,7 @@ fn parse_batch_pe32(file: pelite::pe32::PeFile<'_>) -> PeBatchInfo {
         manifest,
         file_version,
         product_version,
+        file_version_ms,
         number_of_resources,
         net_version: String::new(),
         resource_entries,
@@ -1270,63 +1317,90 @@ fn parse_import_thunks_pe32(
 }
 
 /// Extract resource info (manifest, version, resource count) from a PE file.
-fn parse_resource_info_pe64(file: &pelite::pe64::PeFile<'_>) -> (String, String, String, usize) {
+fn parse_resource_info_pe64(
+    file: &pelite::pe64::PeFile<'_>,
+) -> (String, String, String, String, usize) {
     let Ok(res) = file.resources() else {
-        return (String::new(), String::new(), String::new(), 0);
+        return (
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            0,
+        );
     };
     let manifest = res.manifest().map(String::from).unwrap_or_default();
-    let (file_version, product_version) = if let Ok(vi) = res.version_info() {
-        let fv = vi
+    let (file_version, product_version, file_version_ms) = if let Ok(vi) = res.version_info() {
+        // Upstream getFileVersion returns the StringFileInfo "FileVersion"
+        // record (first match across all translation blocks); getFileVersionMS
+        // formats dwFileVersionMS as "<hi16>.<lo16>".
+        let fv = first_version_string(vi, "FileVersion");
+        let pv = first_version_string(vi, "ProductVersion");
+        let fvm = vi
             .fixed()
-            .map(|f| format_version(&f.dwFileVersion))
+            .map(|f| format!("{}.{}", f.dwFileVersion.Major, f.dwFileVersion.Minor))
             .unwrap_or_default();
-        let pv = vi
-            .fixed()
-            .map(|f| format_version(&f.dwProductVersion))
-            .unwrap_or_default();
-        (fv, pv)
+        (fv, pv, fvm)
     } else {
-        (String::new(), String::new())
+        (String::new(), String::new(), String::new())
     };
     let number_of_resources = if let Ok(root) = res.root() {
         let count = std::cell::Cell::new(0usize);
         let visit = CountResources(&count);
-        count_resources_dir(&root, &visit);
+        count_resources_dir(&root, &visit, 0);
         count.get()
     } else {
         0
     };
-    (manifest, file_version, product_version, number_of_resources)
+    (
+        manifest,
+        file_version,
+        product_version,
+        file_version_ms,
+        number_of_resources,
+    )
 }
 
 /// Extract resource info from a PE32 file.
-fn parse_resource_info_pe32(file: &pelite::pe32::PeFile<'_>) -> (String, String, String, usize) {
+fn parse_resource_info_pe32(
+    file: &pelite::pe32::PeFile<'_>,
+) -> (String, String, String, String, usize) {
     let Ok(res) = file.resources() else {
-        return (String::new(), String::new(), String::new(), 0);
+        return (
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            0,
+        );
     };
     let manifest = res.manifest().map(String::from).unwrap_or_default();
-    let (file_version, product_version) = if let Ok(vi) = res.version_info() {
-        let fv = vi
+    let (file_version, product_version, file_version_ms) = if let Ok(vi) = res.version_info() {
+        let fv = first_version_string(vi, "FileVersion");
+        let pv = first_version_string(vi, "ProductVersion");
+        let fvm = vi
             .fixed()
-            .map(|f| format_version(&f.dwFileVersion))
+            .map(|f| format!("{}.{}", f.dwFileVersion.Major, f.dwFileVersion.Minor))
             .unwrap_or_default();
-        let pv = vi
-            .fixed()
-            .map(|f| format_version(&f.dwProductVersion))
-            .unwrap_or_default();
-        (fv, pv)
+        (fv, pv, fvm)
     } else {
-        (String::new(), String::new())
+        (String::new(), String::new(), String::new())
     };
     let number_of_resources = if let Ok(root) = res.root() {
         let count = std::cell::Cell::new(0usize);
         let visit = CountResources(&count);
-        count_resources_dir(&root, &visit);
+        count_resources_dir(&root, &visit, 0);
         count.get()
     } else {
         0
     };
-    (manifest, file_version, product_version, number_of_resources)
+    (
+        manifest,
+        file_version,
+        product_version,
+        file_version_ms,
+        number_of_resources,
+    )
 }
 
 /// Extract resource entries (name_or_id, type_id, file_offset, size) from a PE64 file.
@@ -1339,18 +1413,35 @@ fn parse_resource_entries_pe64(file: &pelite::pe64::PeFile<'_>) -> Vec<(String, 
     let Ok(root) = res.root() else {
         return Vec::new();
     };
+    if !valid_resource_dir(&root) {
+        return Vec::new();
+    }
     let mut entries = Vec::new();
     for type_entry in root.entries() {
         let type_id = match type_entry.name() {
             Ok(pelite::resources::Name::Id(id)) => id,
             _ => 0,
         };
-        if let Ok(pelite::resources::Entry::Directory(type_dir)) = type_entry.entry() {
-            collect_resource_entries_pe64(file, &type_dir, type_id, &None, &mut entries);
+        match type_entry.entry() {
+            Ok(pelite::resources::Entry::Directory(type_dir)) => {
+                if !valid_resource_dir(&type_dir) {
+                    break;
+                }
+                collect_resource_entries_pe64(file, &type_dir, type_id, &None, &mut entries, 1);
+            }
+            // Upstream breaks the level-0 loop when OffsetToDirectory == 0.
+            Ok(pelite::resources::Entry::DataEntry(_)) => break,
+            _ => {}
         }
     }
     entries
 }
+
+/// Maximum resource directory nesting depth. Upstream `XPE::getResources`
+/// only records leaves at three directory levels (type/name/lang), so
+/// deeper recursion cannot produce observable records; the cap also stops
+/// cyclic directory pointers from overflowing the stack.
+const MAX_RESOURCE_DEPTH: u32 = 6;
 
 /// Recursively collect resource data entries from a PE64 resource directory.
 /// `inherited_name` carries the name from the second level (name directory)
@@ -1363,7 +1454,11 @@ fn collect_resource_entries_pe64(
     type_id: u32,
     inherited_name: &Option<String>,
     entries: &mut Vec<(String, u32, u32, u32)>,
+    depth: u32,
 ) {
+    if depth >= MAX_RESOURCE_DEPTH {
+        return;
+    }
     for res_entry in dir.entries() {
         let entry_name = match res_entry.name() {
             Ok(pelite::resources::Name::Id(id)) => format!("#{}", id),
@@ -1380,13 +1475,23 @@ fn collect_resource_entries_pe64(
                 entries.push((name, type_id, file_off, data.image().Size));
             }
             Ok(pelite::resources::Entry::Directory(sub_dir)) => {
+                if !valid_resource_dir(&sub_dir) {
+                    break;
+                }
                 // Pass this level's name down to children.
                 let pass_name = if inherited_name.is_some() {
                     inherited_name.clone()
                 } else {
                     Some(entry_name.clone())
                 };
-                collect_resource_entries_pe64(file, &sub_dir, type_id, &pass_name, entries);
+                collect_resource_entries_pe64(
+                    file,
+                    &sub_dir,
+                    type_id,
+                    &pass_name,
+                    entries,
+                    depth + 1,
+                );
             }
             _ => {}
         }
@@ -1403,14 +1508,24 @@ fn parse_resource_entries_pe32(file: &pelite::pe32::PeFile<'_>) -> Vec<(String, 
     let Ok(root) = res.root() else {
         return Vec::new();
     };
+    if !valid_resource_dir(&root) {
+        return Vec::new();
+    }
     let mut entries = Vec::new();
     for type_entry in root.entries() {
         let type_id = match type_entry.name() {
             Ok(pelite::resources::Name::Id(id)) => id,
             _ => 0,
         };
-        if let Ok(pelite::resources::Entry::Directory(type_dir)) = type_entry.entry() {
-            collect_resource_entries_pe32(file, &type_dir, type_id, &None, &mut entries);
+        match type_entry.entry() {
+            Ok(pelite::resources::Entry::Directory(type_dir)) => {
+                if !valid_resource_dir(&type_dir) {
+                    break;
+                }
+                collect_resource_entries_pe32(file, &type_dir, type_id, &None, &mut entries, 1);
+            }
+            Ok(pelite::resources::Entry::DataEntry(_)) => break,
+            _ => {}
         }
     }
     entries
@@ -1427,7 +1542,11 @@ fn collect_resource_entries_pe32(
     type_id: u32,
     inherited_name: &Option<String>,
     entries: &mut Vec<(String, u32, u32, u32)>,
+    depth: u32,
 ) {
+    if depth >= MAX_RESOURCE_DEPTH {
+        return;
+    }
     for res_entry in dir.entries() {
         let entry_name = match res_entry.name() {
             Ok(pelite::resources::Name::Id(id)) => format!("#{}", id),
@@ -1444,13 +1563,23 @@ fn collect_resource_entries_pe32(
                 entries.push((name, type_id, file_off, data.image().Size));
             }
             Ok(pelite::resources::Entry::Directory(sub_dir)) => {
+                if !valid_resource_dir(&sub_dir) {
+                    break;
+                }
                 // Pass this level's name down to children.
                 let pass_name = if inherited_name.is_some() {
                     inherited_name.clone()
                 } else {
                     Some(entry_name.clone())
                 };
-                collect_resource_entries_pe32(file, &sub_dir, type_id, &pass_name, entries);
+                collect_resource_entries_pe32(
+                    file,
+                    &sub_dir,
+                    type_id,
+                    &pass_name,
+                    entries,
+                    depth + 1,
+                );
             }
             _ => {}
         }
@@ -1575,10 +1704,16 @@ pub fn get_export_names(data: &[u8]) -> Vec<String> {
 /// Check if the PE has an export table.
 pub fn is_export_present(data: &[u8]) -> bool {
     if let Some(file) = pe64_from_bytes(data) {
-        return file.data_directory().first().is_some_and(|d| d.Size != 0);
+        return file
+            .data_directory()
+            .first()
+            .is_some_and(|d| d.VirtualAddress != 0);
     }
     if let Some(file) = pe32_from_bytes(data) {
-        return file.data_directory().first().is_some_and(|d| d.Size != 0);
+        return file
+            .data_directory()
+            .first()
+            .is_some_and(|d| d.VirtualAddress != 0);
     }
     false
 }
@@ -1586,10 +1721,16 @@ pub fn is_export_present(data: &[u8]) -> bool {
 /// Check if the PE has an import table.
 pub fn is_import_present(data: &[u8]) -> bool {
     if let Some(file) = pe64_from_bytes(data) {
-        return file.data_directory().get(1).is_some_and(|d| d.Size != 0);
+        return file
+            .data_directory()
+            .get(1)
+            .is_some_and(|d| d.VirtualAddress != 0);
     }
     if let Some(file) = pe32_from_bytes(data) {
-        return file.data_directory().get(1).is_some_and(|d| d.Size != 0);
+        return file
+            .data_directory()
+            .get(1)
+            .is_some_and(|d| d.VirtualAddress != 0);
     }
     false
 }
@@ -1597,10 +1738,16 @@ pub fn is_import_present(data: &[u8]) -> bool {
 /// Check if the PE has a resource directory.
 pub fn is_resources_present(data: &[u8]) -> bool {
     if let Some(file) = pe64_from_bytes(data) {
-        return file.data_directory().get(2).is_some_and(|d| d.Size != 0);
+        return file
+            .data_directory()
+            .get(2)
+            .is_some_and(|d| d.VirtualAddress != 0);
     }
     if let Some(file) = pe32_from_bytes(data) {
-        return file.data_directory().get(2).is_some_and(|d| d.Size != 0);
+        return file
+            .data_directory()
+            .get(2)
+            .is_some_and(|d| d.VirtualAddress != 0);
     }
     false
 }
@@ -1608,10 +1755,16 @@ pub fn is_resources_present(data: &[u8]) -> bool {
 /// Check if the PE has a TLS directory.
 pub fn is_tls_present(data: &[u8]) -> bool {
     if let Some(file) = pe64_from_bytes(data) {
-        return file.data_directory().get(9).is_some_and(|d| d.Size != 0);
+        return file
+            .data_directory()
+            .get(9)
+            .is_some_and(|d| d.VirtualAddress != 0);
     }
     if let Some(file) = pe32_from_bytes(data) {
-        return file.data_directory().get(9).is_some_and(|d| d.Size != 0);
+        return file
+            .data_directory()
+            .get(9)
+            .is_some_and(|d| d.VirtualAddress != 0);
     }
     false
 }
@@ -1619,10 +1772,16 @@ pub fn is_tls_present(data: &[u8]) -> bool {
 /// Check if the PE has an Authenticode signature (security directory, index 4).
 pub fn is_signed(data: &[u8]) -> bool {
     if let Some(file) = pe64_from_bytes(data) {
-        return file.data_directory().get(4).is_some_and(|d| d.Size != 0);
+        return file
+            .data_directory()
+            .get(4)
+            .is_some_and(|d| d.VirtualAddress != 0);
     }
     if let Some(file) = pe32_from_bytes(data) {
-        return file.data_directory().get(4).is_some_and(|d| d.Size != 0);
+        return file
+            .data_directory()
+            .get(4)
+            .is_some_and(|d| d.VirtualAddress != 0);
     }
     false
 }
@@ -1784,12 +1943,18 @@ fn version_info_from_bytes(
 ) -> Option<pelite::resources::version_info::VersionInfo<'_>> {
     if let Some(file) = pe64_from_bytes(data)
         && let Ok(res) = file.resources()
+        && let Ok(root) = res.root()
+        // Upstream only enumerates version records through directories that
+        // pass the Characteristics/entry-count check in `getResources`.
+        && valid_resource_dir(&root)
         && let Ok(vi) = res.version_info()
     {
         return Some(vi);
     }
     if let Some(file) = pe32_from_bytes(data)
         && let Ok(res) = file.resources()
+        && let Ok(root) = res.root()
+        && valid_resource_dir(&root)
         && let Ok(vi) = res.version_info()
     {
         return Some(vi);
@@ -1797,36 +1962,98 @@ fn version_info_from_bytes(
     None
 }
 
-/// Format a VS_VERSION as "Major.Minor.Build.Patch".
-fn format_version(v: &pelite::image::VS_VERSION) -> String {
-    format!("{}.{}.{}.{}", v.Major, v.Minor, v.Build, v.Patch)
-}
-
-/// Get the PE file version string (from VS_FIXEDFILEINFO).
+/// Get the PE file version string from the StringFileInfo table.
 ///
-/// Returns empty string if not a valid PE or no version info.
+/// Upstream `XPE::getFileVersion` returns `getResourcesVersionValue` with
+/// the "FileVersion" key, i.e. the string-table value, not the numeric
+/// VS_FIXEDFILEINFO fields. The synthetic FIXEDFILEINFO fallback exists
+/// only in the metadata view, not in `getResourcesVersionValue`.
+///
+/// Returns empty string if not a valid PE or the key is absent.
 pub fn get_file_version(data: &[u8]) -> String {
+    get_version_string(data, "FileVersion")
+}
+
+/// Get the PE product version string from the StringFileInfo table.
+///
+/// Returns empty string if not a valid PE or the key is absent.
+pub fn get_product_version(data: &[u8]) -> String {
+    get_version_string(data, "ProductVersion")
+}
+
+/// Get the high part of the numeric file version as "major.minor".
+///
+/// Upstream `XPE::getFileVersionMS` formats `dwFileVersionMS` through
+/// `XBinary::get_uint32_version` as "<hi16>.<lo16>", which equals the
+/// Major.Minor fields of the version resource.
+///
+/// Returns empty string if not a valid PE or no fixed file info exists.
+pub fn get_file_version_ms(data: &[u8]) -> String {
     if let Some(vi) = version_info_from_bytes(data)
         && let Some(fixed) = vi.fixed()
     {
-        return format_version(&fixed.dwFileVersion);
+        return format!(
+            "{}.{}",
+            fixed.dwFileVersion.Major, fixed.dwFileVersion.Minor
+        );
     }
     String::new()
 }
 
-/// Get the PE product version string (from VS_FIXEDFILEINFO).
+/// Find the first version string record whose key matches, across all
+/// StringFileInfo tables.
 ///
-/// Returns empty string if not a valid PE or no version info.
-pub fn get_product_version(data: &[u8]) -> String {
-    if let Some(vi) = version_info_from_bytes(data)
-        && let Some(fixed) = vi.fixed()
-    {
-        return format_version(&fixed.dwProductVersion);
+/// Upstream `XPE::getResourcesVersion` collects every depth-3 record under
+/// `StringFileInfo` and `getResourcesVersionValue` returns the first match,
+/// so lookup must not depend on `VarFileInfo\Translation` existing.
+struct FirstVersionString<'a> {
+    /// The key to look up (e.g. "FileVersion").
+    key: &'a str,
+    /// Whether the visitor is inside a StringFileInfo block.
+    in_string_file_info: bool,
+    /// The first matching value found.
+    value: Option<String>,
+}
+
+impl<'a> pelite::resources::version_info::Visit<'a> for FirstVersionString<'a> {
+    fn file_info(&mut self, key: &'a [u16]) -> bool {
+        // StringFileInfo (not VarFileInfo) contains the string tables.
+        self.in_string_file_info = Iterator::eq(
+            "StringFileInfo".chars().map(Ok),
+            std::char::decode_utf16(key.iter().cloned()),
+        );
+        self.in_string_file_info
     }
-    String::new()
+    fn string(&mut self, key: &'a [u16], value: &'a [u16]) {
+        if !self.in_string_file_info || self.value.is_some() {
+            return;
+        }
+        let matches = Iterator::eq(
+            self.key.chars().map(Ok),
+            std::char::decode_utf16(key.iter().cloned()),
+        );
+        if matches {
+            self.value = Some(String::from_utf16_lossy(value));
+        }
+    }
+}
+
+/// Get the first StringFileInfo record matching `key` from a version info.
+fn first_version_string(vi: pelite::resources::version_info::VersionInfo<'_>, key: &str) -> String {
+    let mut visit = FirstVersionString {
+        key,
+        in_string_file_info: false,
+        value: None,
+    };
+    vi.visit(&mut visit);
+    visit.value.unwrap_or_default()
 }
 
 /// Get a string value from the PE version info's StringFileInfo table.
+///
+/// Upstream `XPE::getResourcesVersionValue` iterates all translation
+/// blocks and returns the first matching record, so every language is
+/// scanned here rather than only the first translation.
 ///
 /// Common keys: CompanyName, FileDescription, FileVersion, InternalName,
 /// LegalCopyright, OriginalFilename, ProductName, ProductVersion, Comments.
@@ -1836,13 +2063,7 @@ pub fn get_version_string(data: &[u8], key: &str) -> String {
     let Some(vi) = version_info_from_bytes(data) else {
         return String::new();
     };
-    // Get the first translation language.
-    let translations = vi.translation();
-    if translations.is_empty() {
-        return String::new();
-    }
-    let lang = translations[0];
-    vi.value(lang, key).unwrap_or_default()
+    first_version_string(vi, key)
 }
 
 /// Get the CompanyName from the PE version info.
@@ -1890,23 +2111,29 @@ pub fn get_number_of_resources(data: &[u8]) -> usize {
         if let Ok(res) = file.resources()
             && let Ok(root) = res.root()
         {
-            count_resources_dir(&root, &visit);
+            count_resources_dir(&root, &visit, 0);
         }
     } else if let Some(file) = pe32_from_bytes(data)
         && let Ok(res) = file.resources()
         && let Ok(root) = res.root()
     {
-        count_resources_dir(&root, &visit);
+        count_resources_dir(&root, &visit, 0);
     }
     count.get()
 }
 
 /// Recursively count data entries in a resource directory.
-fn count_resources_dir(dir: &pelite::resources::Directory<'_>, visit: &CountResources) {
+fn count_resources_dir(dir: &pelite::resources::Directory<'_>, visit: &CountResources, depth: u32) {
+    if depth >= MAX_RESOURCE_DEPTH || !valid_resource_dir(dir) {
+        return;
+    }
     for entry in dir.entries() {
         if let Ok(e) = entry.entry() {
             if let Some(subdir) = e.dir() {
-                count_resources_dir(&subdir, visit);
+                if !valid_resource_dir(&subdir) {
+                    break;
+                }
+                count_resources_dir(&subdir, visit, depth + 1);
             } else if e.data().is_some() {
                 visit.0.set(visit.0.get() + 1);
             }
@@ -1954,7 +2181,7 @@ fn collect_resource_data_pe64(file: &pelite::pe64::PeFile<'_>) -> Vec<ResourceDa
     let Ok(root) = res.root() else {
         return entries;
     };
-    collect_resource_data_dir(&root, "", &mut entries);
+    collect_resource_data_dir(&root, "", &mut entries, 0);
     entries
 }
 
@@ -1967,7 +2194,7 @@ fn collect_resource_data_pe32(file: &pelite::pe32::PeFile<'_>) -> Vec<ResourceDa
     let Ok(root) = res.root() else {
         return entries;
     };
-    collect_resource_data_dir(&root, "", &mut entries);
+    collect_resource_data_dir(&root, "", &mut entries, 0);
     entries
 }
 
@@ -1985,7 +2212,11 @@ fn collect_resource_data_dir(
     dir: &pelite::resources::Directory<'_>,
     parent_type: &str,
     entries: &mut Vec<ResourceData>,
+    depth: u32,
 ) {
+    if depth >= MAX_RESOURCE_DEPTH || !valid_resource_dir(dir) {
+        return;
+    }
     for entry in dir.entries() {
         let Ok(e) = entry.entry() else {
             continue;
@@ -2001,7 +2232,10 @@ fn collect_resource_data_dir(
             format!("{parent_type}/{type_name}")
         };
         if let Some(subdir) = e.dir() {
-            collect_resource_data_dir(&subdir, &full_type, entries);
+            if !valid_resource_dir(&subdir) {
+                break;
+            }
+            collect_resource_data_dir(&subdir, &full_type, entries, depth + 1);
         } else if let Some(data) = e.data() {
             // Extract the actual resource bytes.
             if let Ok(bytes) = data.bytes() {
@@ -2014,7 +2248,86 @@ fn collect_resource_data_dir(
     }
 }
 
+/// Check a resource directory level the way upstream `XPE::getResources`
+/// does: `Characteristics` must be zero and the combined entry count must
+/// not exceed 1000. Upstream treats a failed check as a hard stop for the
+/// enclosing level (`break`, not `continue`).
+fn valid_resource_dir(dir: &pelite::resources::Directory<'_>) -> bool {
+    let image = dir.image();
+    image.Characteristics == 0
+        && u32::from(image.NumberOfNamedEntries) + u32::from(image.NumberOfIdEntries) <= 1000
+}
+
+/// Check whether a type-level resource directory yields at least one
+/// leaf data record under upstream `XPE::getResources` semantics: the
+/// directory and its name-level children must be valid, and a valid
+/// language-level directory must contain a data entry.
+fn resource_dir_has_leaf(dir: &pelite::resources::Directory<'_>) -> bool {
+    if !valid_resource_dir(dir) {
+        return false;
+    }
+    for entry in dir.entries() {
+        match entry.entry() {
+            Ok(pelite::resources::Entry::Directory(lang_dir)) => {
+                if !valid_resource_dir(&lang_dir) {
+                    break;
+                }
+                if lang_dir
+                    .entries()
+                    .any(|e| matches!(e.entry(), Ok(pelite::resources::Entry::DataEntry(_))))
+                {
+                    return true;
+                }
+            }
+            Ok(pelite::resources::Entry::DataEntry(_)) => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Check whether any name-level resource directory entry matches `name`.
+///
+/// Upstream `XPE::isResourceNamePresent` compares `irin[1].sName`, i.e.
+/// the second level of the resource tree (root -> type -> name -> lang),
+/// where `sName` is empty for ID-named entries. `dir` must be a type-level
+/// directory whose entries are the name level.
+fn resource_name_dir_matches(dir: &pelite::resources::Directory<'_>, name: &str) -> bool {
+    for entry in dir.entries() {
+        // Upstream only matches name-level ids that lead to a leaf record:
+        // the entry must point to a valid language directory holding at
+        // least one data entry.
+        let Ok(pelite::resources::Entry::Directory(lang_dir)) = entry.entry() else {
+            continue;
+        };
+        if !valid_resource_dir(&lang_dir) {
+            break;
+        }
+        if !lang_dir
+            .entries()
+            .any(|e| matches!(e.entry(), Ok(pelite::resources::Entry::DataEntry(_))))
+        {
+            continue;
+        }
+        match entry.name() {
+            Ok(pelite::resources::Name::Wide(ws)) => {
+                if String::from_utf16_lossy(ws) == name {
+                    return true;
+                }
+            }
+            Ok(pelite::resources::Name::Id(_)) if name.is_empty() => {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
 /// Check if a resource name is present in the resource directory.
+///
+/// Matches upstream `XPE::isResourceNamePresent`: the lookup happens at
+/// the name level (`irin[1]`), below the type-level root entries.
 ///
 /// Returns false if not a valid PE or resource not found.
 pub fn is_resource_name_present(data: &[u8], name: &str) -> bool {
@@ -2022,11 +2335,23 @@ pub fn is_resource_name_present(data: &[u8], name: &str) -> bool {
         if let Ok(res) = file.resources()
             && let Ok(root) = res.root()
         {
+            if !valid_resource_dir(&root) {
+                return false;
+            }
             for entry in root.entries() {
-                if let Ok(n) = entry.name()
-                    && n == *name
-                {
-                    return true;
+                match entry.entry() {
+                    Ok(pelite::resources::Entry::Directory(dir)) => {
+                        if !valid_resource_dir(&dir) {
+                            break;
+                        }
+                        if resource_name_dir_matches(&dir, name) {
+                            return true;
+                        }
+                    }
+                    // Upstream breaks the level-0 loop when
+                    // OffsetToDirectory == 0 (a data entry at type level).
+                    Ok(pelite::resources::Entry::DataEntry(_)) => break,
+                    _ => {}
                 }
             }
         }
@@ -2036,11 +2361,21 @@ pub fn is_resource_name_present(data: &[u8], name: &str) -> bool {
         && let Ok(res) = file.resources()
         && let Ok(root) = res.root()
     {
+        if !valid_resource_dir(&root) {
+            return false;
+        }
         for entry in root.entries() {
-            if let Ok(n) = entry.name()
-                && n == *name
-            {
-                return true;
+            match entry.entry() {
+                Ok(pelite::resources::Entry::Directory(dir)) => {
+                    if !valid_resource_dir(&dir) {
+                        break;
+                    }
+                    if resource_name_dir_matches(&dir, name) {
+                        return true;
+                    }
+                }
+                Ok(pelite::resources::Entry::DataEntry(_)) => break,
+                _ => {}
             }
         }
     }
@@ -2058,11 +2393,24 @@ pub fn is_resource_group_name_present(data: &[u8], group_name: &str) -> bool {
         if let Ok(res) = file.resources()
             && let Ok(root) = res.root()
         {
+            if !valid_resource_dir(&root) {
+                return false;
+            }
             for entry in root.entries() {
-                if let Ok(n) = entry.name()
-                    && format_resource_name(&n) == group_name
-                {
-                    return true;
+                match entry.entry() {
+                    Ok(pelite::resources::Entry::Directory(dir)) => {
+                        if !valid_resource_dir(&dir) {
+                            break;
+                        }
+                        if let Ok(n) = entry.name()
+                            && format_resource_name(&n) == group_name
+                            && resource_dir_has_leaf(&dir)
+                        {
+                            return true;
+                        }
+                    }
+                    Ok(pelite::resources::Entry::DataEntry(_)) => break,
+                    _ => {}
                 }
             }
         }
@@ -2072,11 +2420,24 @@ pub fn is_resource_group_name_present(data: &[u8], group_name: &str) -> bool {
         && let Ok(res) = file.resources()
         && let Ok(root) = res.root()
     {
+        if !valid_resource_dir(&root) {
+            return false;
+        }
         for entry in root.entries() {
-            if let Ok(n) = entry.name()
-                && format_resource_name(&n) == group_name
-            {
-                return true;
+            match entry.entry() {
+                Ok(pelite::resources::Entry::Directory(dir)) => {
+                    if !valid_resource_dir(&dir) {
+                        break;
+                    }
+                    if let Ok(n) = entry.name()
+                        && format_resource_name(&n) == group_name
+                        && resource_dir_has_leaf(&dir)
+                    {
+                        return true;
+                    }
+                }
+                Ok(pelite::resources::Entry::DataEntry(_)) => break,
+                _ => {}
             }
         }
     }
@@ -2096,9 +2457,21 @@ pub fn is_resource_group_id_present(data: &[u8], group_id: u32) -> bool {
         if let Ok(res) = file.resources()
             && let Ok(root) = res.root()
         {
+            if !valid_resource_dir(&root) {
+                return false;
+            }
             for entry in root.entries() {
-                if entry.image().Name == group_id {
-                    return true;
+                match entry.entry() {
+                    Ok(pelite::resources::Entry::Directory(dir)) => {
+                        if !valid_resource_dir(&dir) {
+                            break;
+                        }
+                        if entry.image().Name == group_id && resource_dir_has_leaf(&dir) {
+                            return true;
+                        }
+                    }
+                    Ok(pelite::resources::Entry::DataEntry(_)) => break,
+                    _ => {}
                 }
             }
         }
@@ -2108,9 +2481,21 @@ pub fn is_resource_group_id_present(data: &[u8], group_id: u32) -> bool {
         && let Ok(res) = file.resources()
         && let Ok(root) = res.root()
     {
+        if !valid_resource_dir(&root) {
+            return false;
+        }
         for entry in root.entries() {
-            if entry.image().Name == group_id {
-                return true;
+            match entry.entry() {
+                Ok(pelite::resources::Entry::Directory(dir)) => {
+                    if !valid_resource_dir(&dir) {
+                        break;
+                    }
+                    if entry.image().Name == group_id && resource_dir_has_leaf(&dir) {
+                        return true;
+                    }
+                }
+                Ok(pelite::resources::Entry::DataEntry(_)) => break,
+                _ => {}
             }
         }
     }
@@ -2181,5 +2566,237 @@ mod tests {
         // Ensure module compiles and links.
         let _ = is_pe;
         let _ = get_image_base;
+    }
+
+    /// Build a PE32 with a resource tree containing:
+    ///   RCDATA(#10): name-level entries "DVCLAL" and "PACKAGEINFO"
+    ///   RT_VERSION(#16): VS_VERSION_INFO with a StringFileInfo
+    ///   "FileVersion" distinct from the numeric FIXEDFILEINFO.
+    ///
+    /// `root_characteristics` controls the root directory's
+    /// Characteristics field (upstream rejects non-zero values).
+    fn build_pe_with_resources(root_characteristics: u32) -> Vec<u8> {
+        const RSRC_FILE: usize = 0x400;
+        const RSRC_RVA: u32 = 0x2000;
+
+        let mut data = vec![0u8; RSRC_FILE + 0x400];
+        data[0] = b'M';
+        data[1] = b'Z';
+        let pe_off = 0x80usize;
+        data[0x3C..0x40].copy_from_slice(&(pe_off as u32).to_le_bytes());
+        data[pe_off..pe_off + 4].copy_from_slice(b"PE\0\0");
+        let coff = pe_off + 4;
+        data[coff..coff + 2].copy_from_slice(&0x014Cu16.to_le_bytes()); // i386
+        data[coff + 2..coff + 4].copy_from_slice(&2u16.to_le_bytes()); // 2 sections
+        data[coff + 16..coff + 18].copy_from_slice(&224u16.to_le_bytes());
+        let opt = coff + 20;
+        data[opt..opt + 2].copy_from_slice(&0x010Bu16.to_le_bytes()); // PE32
+        data[opt + 16..opt + 20].copy_from_slice(&0x1000u32.to_le_bytes()); // EP
+        data[opt + 28..opt + 32].copy_from_slice(&0x400000u32.to_le_bytes()); // base
+        data[opt + 32..opt + 36].copy_from_slice(&0x1000u32.to_le_bytes()); // sect align
+        data[opt + 36..opt + 40].copy_from_slice(&0x200u32.to_le_bytes()); // file align
+        // NumberOfRvaAndSizes at opt+92; data directories start at opt+96.
+        data[opt + 92..opt + 96].copy_from_slice(&16u32.to_le_bytes());
+        // IMAGE_DIRECTORY_ENTRY_RESOURCE (index 2): RVA + size.
+        data[opt + 96 + 16..opt + 96 + 20].copy_from_slice(&RSRC_RVA.to_le_bytes());
+        data[opt + 96 + 20..opt + 96 + 24].copy_from_slice(&0x400u32.to_le_bytes());
+        // Section headers at opt + 224.
+        let sh = opt + 224;
+        // .text: VA 0x1000, raw 0x200 @ 0x200
+        data[sh..sh + 8].copy_from_slice(b".text\0\0\0");
+        data[sh + 8..sh + 12].copy_from_slice(&0x200u32.to_le_bytes());
+        data[sh + 12..sh + 16].copy_from_slice(&0x1000u32.to_le_bytes());
+        data[sh + 16..sh + 20].copy_from_slice(&0x200u32.to_le_bytes());
+        data[sh + 20..sh + 24].copy_from_slice(&0x200u32.to_le_bytes());
+        // .rsrc: VA 0x2000, raw 0x400 @ 0x400
+        let sh2 = sh + 40;
+        data[sh2..sh2 + 8].copy_from_slice(b".rsrc\0\0\0");
+        data[sh2 + 8..sh2 + 12].copy_from_slice(&0x400u32.to_le_bytes());
+        data[sh2 + 12..sh2 + 16].copy_from_slice(&0x2000u32.to_le_bytes());
+        data[sh2 + 16..sh2 + 20].copy_from_slice(&0x400u32.to_le_bytes());
+        data[sh2 + 20..sh2 + 24].copy_from_slice(&0x400u32.to_le_bytes());
+
+        // --- Resource tree (offsets relative to RSRC_FILE) ---
+        let mut r = vec![0u8; 0x400];
+        let dir = |r: &mut [u8], off: usize, charact: u32, named: u16, ids: u16| {
+            r[off..off + 4].copy_from_slice(&charact.to_le_bytes());
+            r[off + 12..off + 14].copy_from_slice(&named.to_le_bytes());
+            r[off + 14..off + 16].copy_from_slice(&ids.to_le_bytes());
+        };
+        let entry = |r: &mut [u8], off: usize, name: u32, target: u32| {
+            r[off..off + 4].copy_from_slice(&name.to_le_bytes());
+            r[off + 4..off + 8].copy_from_slice(&target.to_le_bytes());
+        };
+
+        // root: 2 id entries -> type #10 (RCDATA) dir @0x20, type #16 dir @0x70
+        dir(&mut r, 0x00, root_characteristics, 0, 2);
+        entry(&mut r, 0x10, 10, 0x8000_0020);
+        entry(&mut r, 0x18, 16, 0x8000_0070);
+
+        // type #10 dir @0x20: 2 named entries -> lang dirs
+        dir(&mut r, 0x20, 0, 2, 0);
+        entry(&mut r, 0x30, 0x8000_00d0, 0x8000_0040); // "PACKAGEINFO" -> @0x40
+        entry(&mut r, 0x38, 0x8000_00e8, 0x8000_0058); // "DVCLAL" -> @0x58
+
+        // lang dir for PACKAGEINFO @0x40: 1 id entry -> data entry @0xa0
+        dir(&mut r, 0x40, 0, 0, 1);
+        entry(&mut r, 0x50, 0, 0xa0);
+        // lang dir for DVCLAL @0x58: 1 id entry -> data entry @0xb0
+        dir(&mut r, 0x58, 0, 0, 1);
+        entry(&mut r, 0x68, 0, 0xb0);
+
+        // type #16 dir @0x70: 1 id entry (#1) -> lang dir @0x80
+        dir(&mut r, 0x70, 0, 0, 1);
+        entry(&mut r, 0x80, 1, 0x8000_0088);
+        // lang dir @0x88: 1 id entry -> data entry @0xc0
+        dir(&mut r, 0x88, 0, 0, 1);
+        entry(&mut r, 0x98, 0, 0xc0);
+
+        // IMAGE_RESOURCE_DATA_ENTRY records
+        let data_entry = |r: &mut [u8], off: usize, rva: u32, size: u32| {
+            r[off..off + 4].copy_from_slice(&rva.to_le_bytes());
+            r[off + 4..off + 8].copy_from_slice(&size.to_le_bytes());
+        };
+        data_entry(&mut r, 0xa0, RSRC_RVA + 0x300, 4); // PACKAGEINFO data
+        data_entry(&mut r, 0xb0, RSRC_RVA + 0x304, 16); // DVCLAL data
+        data_entry(&mut r, 0xc0, RSRC_RVA + 0x140, 0); // VERSION data (len set below)
+
+        // Name strings (length-prefixed UTF-16LE).
+        let put_name = |r: &mut [u8], off: usize, s: &str| {
+            let w: Vec<u16> = s.encode_utf16().collect();
+            r[off..off + 2].copy_from_slice(&(w.len() as u16).to_le_bytes());
+            for (i, c) in w.iter().enumerate() {
+                r[off + 2 + i * 2..off + 4 + i * 2].copy_from_slice(&c.to_le_bytes());
+            }
+        };
+        put_name(&mut r, 0xd0, "PACKAGEINFO");
+        put_name(&mut r, 0xe8, "DVCLAL");
+
+        // VS_VERSION_INFO blob at rel 0x140.
+        let version_string = "11.00.19041.1 (WinBuild.160101.0800)";
+        let vi = build_version_info(version_string);
+        r[0x140..0x140 + vi.len()].copy_from_slice(&vi);
+        r[0xc0 + 4..0xc0 + 8].copy_from_slice(&(vi.len() as u32).to_le_bytes());
+
+        // Payloads for PACKAGEINFO/DVCLAL.
+        r[0x300..0x304].copy_from_slice(b"PKG!");
+        r[0x304..0x314].copy_from_slice(b"DVCLAL0123456789");
+
+        data[RSRC_FILE..RSRC_FILE + 0x400].copy_from_slice(&r);
+        data
+    }
+
+    /// Build a minimal VS_VERSION_INFO containing a StringFileInfo
+    /// "FileVersion" plus a FIXEDFILEINFO with a different numeric version.
+    fn build_version_info(file_version: &str) -> Vec<u8> {
+        fn push_u16(v: &mut Vec<u8>, x: u16) {
+            v.extend_from_slice(&x.to_le_bytes());
+        }
+        fn push_u32(v: &mut Vec<u8>, x: u32) {
+            v.extend_from_slice(&x.to_le_bytes());
+        }
+        fn push_wstr(v: &mut Vec<u8>, s: &str) {
+            for c in s.encode_utf16() {
+                push_u16(v, c);
+            }
+        }
+        fn align4(v: &mut Vec<u8>) {
+            while !v.len().is_multiple_of(4) {
+                v.push(0);
+            }
+        }
+
+        // String leaf: "FileVersion" -> value.
+        let mut string = Vec::new();
+        let value_chars = file_version.encode_utf16().count() as u16 + 1;
+        push_u16(&mut string, 0); // wLength placeholder
+        push_u16(&mut string, value_chars);
+        push_u16(&mut string, 1); // wType = text
+        push_wstr(&mut string, "FileVersion\0");
+        align4(&mut string);
+        push_wstr(&mut string, file_version);
+        push_u16(&mut string, 0);
+        align4(&mut string);
+        let sl = string.len() as u16;
+        string[0..2].copy_from_slice(&sl.to_le_bytes());
+
+        // StringTable "040904b0".
+        let mut table = Vec::new();
+        push_u16(&mut table, 0);
+        push_u16(&mut table, 0);
+        push_u16(&mut table, 1);
+        push_wstr(&mut table, "040904b0\0");
+        align4(&mut table);
+        table.extend_from_slice(&string);
+        let tl = table.len() as u16;
+        table[0..2].copy_from_slice(&tl.to_le_bytes());
+
+        // StringFileInfo root child.
+        let mut sfi = Vec::new();
+        push_u16(&mut sfi, 0);
+        push_u16(&mut sfi, 0);
+        push_u16(&mut sfi, 1);
+        push_wstr(&mut sfi, "StringFileInfo\0");
+        align4(&mut sfi);
+        sfi.extend_from_slice(&table);
+        let sl2 = sfi.len() as u16;
+        sfi[0..2].copy_from_slice(&sl2.to_le_bytes());
+
+        // VS_VERSION_INFO root.
+        let mut vi = Vec::new();
+        push_u16(&mut vi, 0); // wLength placeholder
+        push_u16(&mut vi, 52); // wValueLength = sizeof(VS_FIXEDFILEINFO)
+        push_u16(&mut vi, 0); // wType = binary
+        push_wstr(&mut vi, "VS_VERSION_INFO\0");
+        align4(&mut vi);
+        // VS_FIXEDFILEINFO: signature + struc + MS/LS versions.
+        push_u32(&mut vi, 0xFEEF04BD);
+        push_u32(&mut vi, 0x0001_0000);
+        push_u32(&mut vi, 0x000B_0000); // dwFileVersionMS: 11.0
+        push_u32(&mut vi, 0x4A61_0001); // dwFileVersionLS: 19041.1
+        push_u32(&mut vi, 0x000B_0000); // dwProductVersionMS
+        push_u32(&mut vi, 0x4A61_0001); // dwProductVersionLS
+        for _ in 0..7 {
+            push_u32(&mut vi, 0);
+        }
+        align4(&mut vi);
+        vi.extend_from_slice(&sfi);
+        let vl = vi.len() as u16;
+        vi[0..2].copy_from_slice(&vl.to_le_bytes());
+        vi
+    }
+
+    #[test]
+    fn file_version_prefers_string_table_over_fixedinfo() {
+        let data = build_pe_with_resources(0);
+        // Upstream getFileVersion returns the StringFileInfo record.
+        assert_eq!(
+            get_file_version(&data),
+            "11.00.19041.1 (WinBuild.160101.0800)"
+        );
+        // getFileVersionMS formats the numeric dwFileVersionMS as hi.lo.
+        assert_eq!(get_file_version_ms(&data), "11.0");
+        assert_eq!(get_product_version(&data), "");
+    }
+
+    #[test]
+    fn resource_name_lookup_uses_name_level() {
+        let data = build_pe_with_resources(0);
+        // "PACKAGEINFO"/"DVCLAL" are name-level entries under type #10.
+        assert!(is_resource_name_present(&data, "PACKAGEINFO"));
+        assert!(is_resource_name_present(&data, "DVCLAL"));
+        assert!(!is_resource_name_present(&data, "SCRIPT"));
+        // Type-level names are not name-level resources.
+        assert!(!is_resource_name_present(&data, "10"));
+    }
+
+    #[test]
+    fn invalid_root_characteristics_disables_resources() {
+        // Upstream getResources rejects a root directory with
+        // Characteristics != 0, so no records exist at all.
+        let data = build_pe_with_resources(1);
+        assert!(!is_resource_name_present(&data, "PACKAGEINFO"));
+        assert_eq!(get_file_version(&data), "");
+        assert_eq!(get_number_of_resources(&data), 0);
     }
 }

@@ -23,8 +23,10 @@ impl FormatProbe for MsdosProbe {
             return Ok(None);
         }
         let magic = view.read_u16_le(0).map_err(ProbeError::Io)?;
-        if magic == 0x5A4D {
-            // "MZ" in little-endian. Weak because PE files also start with MZ.
+        // Upstream XMSDOS::isValid accepts both "MZ" (0x5A4D) and the
+        // byte-swapped "ZM" (0x4D5A) magics.
+        if magic == 0x5A4D || magic == 0x4D5A {
+            // Weak because PE/NE/LE files also start with these magics.
             Ok(Some(ProbeOutcome {
                 candidate: weak("MSDOS"),
             }))
@@ -104,12 +106,13 @@ mod tests {
     }
 
     #[test]
-    fn zm_le_does_not_match() {
-        // ZM (little-endian) is not MZ.
+    fn zm_le_matches() {
+        // Upstream XMSDOS::isValid accepts the byte-swapped "ZM" magic.
         let data = [0x5Au8, 0x4D];
         let src = MemorySource::new(&data);
         let view = view_of(&src);
         let probe = MsdosProbe;
-        assert!(probe.probe(&view).unwrap().is_none());
+        let outcome = probe.probe(&view).unwrap().unwrap();
+        assert_eq!(outcome.candidate.file_type.name, "MSDOS");
     }
 }

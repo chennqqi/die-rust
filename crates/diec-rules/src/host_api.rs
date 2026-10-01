@@ -118,6 +118,14 @@ pub trait HostApi {
         buf.len()
     }
 
+    /// Record a non-fatal scan diagnostic. Upstream `XBinary` funnels
+    /// signature parse failures into the PDSTRUCT error list (`listErrors`)
+    /// and keeps the script running — the `compare`/`findSignature` call
+    /// just returns `false`/`-1`. Implementations that can surface
+    /// diagnostics should buffer the message here; the scanner drains the
+    /// buffer after each rule evaluation.
+    fn note_scan_error(&self, _message: String) {}
+
     // --- Archive record access (Archive_Script subset) ---
 
     /// Names of archive member records (e.g. ZIP central directory file
@@ -238,6 +246,16 @@ pub trait HostApi {
     /// Get the PE file version string (from VS_FIXEDFILEINFO).
     /// Returns empty string if no version info or not a valid PE.
     fn pe_file_version(&self) -> String;
+
+    /// Get the StringFileInfo "FileVersion" of another PE file on disk.
+    ///
+    /// Upstream `PE_Script::getPEFileVersion` opens a `QFile` at the given
+    /// path and parses its version resource, letting rules read sibling
+    /// modules (e.g. a Qt DLL next to the scanned file).
+    /// Returns empty string if the file cannot be read or parsed.
+    fn pe_file_version_at_path(&self, _path: &str) -> String {
+        String::new()
+    }
 
     /// Get the PE product version string (from VS_FIXEDFILEINFO).
     /// Returns empty string if no version info or not a valid PE.

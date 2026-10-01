@@ -174,6 +174,40 @@ case 2:
 
 ---
 
+## Bug 7：上游规则包含非法签名字符串（compare 路径记 "Invalid signature"）
+
+**表现**：以下上游规则的签名字符串无法通过 `getSignatureRecords` 校验，
+上游在 `compare`/`compareEP` 慢路径记入 PDSTRUCT `listErrors`（"Invalid
+signature: <pattern>"）并返回 `false`，**规则继续执行不中止**：
+
+| 规则文件 | 非法模式 | 非法原因 |
+|---------|---------|---------|
+| `db/PE/compiler_Zig.4.sg` | `"...0000'PE'0000"` | 引号外交错出现裸 `PE`（`p` 非 hex 字符） |
+| `db/PE/_linkers.6.sg` | 孤立 `$` | `$` 计数非偶数/非 1·2·4·8 字节宽 |
+| `db/PE/zip.6.sg` | `'PK'0506'` | 未闭合字符串字面量（`convertSignature` 返回空串） |
+| `db/PE/installer_Nullsoft_Scriptable_Install_System.1.sg` | `"8"` | 奇数 hex 半字节 |
+| `db/PE/protector_Private_EXE_Protector.2.sg` | `"...7.009C"` | `.` 通配半字节跑为奇数 |
+| `db_extra/PE/protector_FakeNinja.2.sg` 等 | 若干 | 同上类非法序列 |
+
+**上游语义（源码考古，XBinary @ XScanEngine pinned commit）**：
+- `Binary_Script::compare` 快路径（归一化签名长度 + offset <
+  缓存头部 256 字节，且不含 `$#+%*`）用 `compareSignatureStrings` 做
+  逐半字节比较——非法字符只是不匹配，**静默返回 false，不记错误**。
+- 慢路径 `compareSignature`：`getSignatureRecords` 校验失败或记录列表
+  为空 → 记 "Invalid signature" 到 PDSTRUCT → 返回 `false`。
+- `findSignature`：`isSignatureValid` 失败 → 返回 `-1`；其中仅
+  `_getSignatureBytes` 级失败（非法字符/奇数 hex）记错误，结构级失败
+  （奇数 `.`/`$`/`#` 跑、畸形 `[base]`、`+` 后无模式）静默。
+- `convertSignature` 遇未闭合引号/非 latin1 字符返回**空 `QString`**——
+  不产生错误，后续按空签名处理。
+
+**diec-rust 处理策略**：忠实复现——非法签名不中止规则（曾经错误地映射为
+JS 异常），慢路径 `compare` 记诊断并返回 `false`，`findSignature` 按
+byte_level/structural 区分是否记诊断。诊断经 `note_scan_error` 通道进入
+`ScanResult.diagnostics`（按规则归属），不计入脚本异常。
+
+---
+
 ## 总结
 
 | Bug | 类型 | 影响规则数 | diec-rust 策略 |
@@ -184,6 +218,7 @@ case 2:
 | 4 | 静默忽略异常 | 全局 | 更严格：零异常断言 |
 | 5 | 空签名错误 | 未知 | 不影响检测结果 |
 | 6 | `getEPSignature` 未定义 | 1 | 有意超集实现，CipherWall 可检测 |
+| 7 | 规则非法签名 | ≥6 | 忠实复现：记诊断+返回 false，不中止规则 |
 
 **原则**：diec-rust 的目标是"与上游输出一致"，而非"复制上游 bug"。
 对于影响检测结果的 bug（Bug 1），diec-rust 选择修复而非复制。

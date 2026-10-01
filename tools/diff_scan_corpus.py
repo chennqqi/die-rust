@@ -22,7 +22,10 @@ WORKSPACE = Path(__file__).resolve().parent.parent
 DB_PATH = WORKSPACE / "upstream" / "Detect-It-Easy" / "db"
 EXTRA_DB_PATH = WORKSPACE / "upstream" / "Detect-It-Easy" / "db_extra"
 DIEC_RUST = WORKSPACE / "target" / "release" / "diec"
-UPSTREAM_DIEC = Path(os.environ.get("UPSTREAM_DIEC", "/tmp/die-engine-build/build/src/console/diec"))
+UPSTREAM_DIEC = Path(os.environ.get(
+    "UPSTREAM_DIEC",
+    str(WORKSPACE / "tools" / "upstream" / "bin" / "upstream_diec.sh"),
+))
 
 CORPUS_BASE = Path("/data/virus")
 
@@ -73,7 +76,8 @@ def run_diec_rust(sample_path):
     """Run diec-rust, return parsed JSON list or None."""
     env = dict(os.environ, DIEC_DB_PATH=str(DB_PATH))
     try:
-        cmd = [str(DIEC_RUST), "--json-upstream", str(sample_path)]
+        cmd = [str(DIEC_RUST), "--db", str(DB_PATH), "--extradb",
+               str(EXTRA_DB_PATH), "--json-upstream", str(sample_path)]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=30, env=env)
         if r.returncode != 0 or not r.stdout.strip():
             return None, r.stderr.strip()
@@ -83,10 +87,18 @@ def run_diec_rust(sample_path):
         return None, str(e)
 
 
-# Map upstream filetype variants to canonical form
+# Map upstream filetype display strings (XBinary::fileTypeIdToString) to our
+# canonical rule-dir names.
 FILETYPE_MAP = {
     "PE32": "PE", "PE64": "PE", "PE": "PE",
     "ELF32": "ELF", "ELF64": "ELF", "ELF": "ELF",
+    "Mach-O32": "MACH", "Mach-O64": "MACH", "Mach-O": "MACH",
+    "Mach-O FAT": "MACHOFAT",
+    ".NET": "DOTNET",
+    "PlainText": "PLAINTEXT",
+    "MS-DOS": "MSDOS",
+    "ISO 9660": "ISO9660",
+    "Java Class": "JavaClass",
 }
 
 

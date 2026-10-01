@@ -1362,8 +1362,10 @@ fn is_plain_text_true_for_empty_file() {
 
 #[test]
 fn is_plain_text_false_for_pdf_with_high_bytes() {
-    // PDF files start with %PDF but contain bytes >= 0x80
-    let data = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n".to_vec();
+    // PDF files start with %PDF but a binary-heavy body keeps the extended
+    // ASCII ratio above upstream's 0.50 threshold, so isPlainText() is false.
+    let mut data = b"%PDF-1.4\n".to_vec();
+    data.extend(std::iter::repeat_n(0xE0u8, 24));
 
     let results = run_js_binary(
         r#"if (!Binary.isPlainText()) { bDetected = true; sName = "PDFNotPlain"; }"#,

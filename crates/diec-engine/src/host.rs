@@ -7,8 +7,10 @@
 use diec_core::format::FileType;
 use diec_core::input::{ByteSource, ByteView, OwnedSource};
 use diec_rules::host_api::{HostApi, HostApiError};
-use diec_rules::host_api_bridge::{match_signature, parse_signature};
-use std::sync::Arc;
+use diec_rules::host_api_bridge::{
+    convert_signature, match_signature, nibble_compare, parse_signature_ex,
+};
+use std::sync::{Arc, Mutex};
 
 /// A simple host API backed by an in-memory byte buffer.
 ///
@@ -70,6 +72,10 @@ pub struct BufferHost {
     file_name: String,
     /// Scan flags controlling rule behavior.
     flags: ScanFlags,
+    /// Non-fatal scan diagnostics recorded while rules run (upstream's
+    /// PDSTRUCT error list — e.g. "Invalid signature"). Drained by the
+    /// scanner after each rule evaluation.
+    scan_errors: Mutex<Vec<String>>,
 }
 
 impl BufferHost {
@@ -83,6 +89,7 @@ impl BufferHost {
             source,
             file_name,
             flags: ScanFlags::default(),
+            scan_errors: Mutex::new(Vec::new()),
         }
     }
 
@@ -95,7 +102,24 @@ impl BufferHost {
             source,
             file_name,
             flags: ScanFlags::default(),
+            scan_errors: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Drain the non-fatal scan errors recorded since the last drain.
+    pub fn drain_scan_errors(&self) -> Vec<String> {
+        match self.scan_errors.lock() {
+            Ok(mut errors) => std::mem::take(&mut *errors),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Record the upstream "Invalid signature" scan error and produce the
+    /// upstream return value for a rejected pattern: the rule is not
+    /// aborted, only this call reports a miss.
+    fn invalid_signature<T>(&self, signature: &str, fallback: T) -> T {
+        self.note_scan_error(format!("Invalid signature: {signature}"));
+        fallback
     }
 
     /// Set scan flags on this host.
@@ -127,6 +151,12 @@ fn determine_file_type(name: &str) -> FileType {
 impl HostApi for BufferHost {
     fn file_type(&self) -> &FileType {
         &self.file_type
+    }
+
+    fn note_scan_error(&self, message: String) {
+        if let Ok(mut errors) = self.scan_errors.lock() {
+            errors.push(message);
+        }
     }
 
     fn view(&self) -> &ByteView<'_> {
@@ -356,26 +386,62 @@ impl HostApi for BufferHost {
     }
 
     fn check_signature(&self, offset: u64, signature: &str) -> Result<bool, HostApiError> {
-        let elements =
-            parse_signature(signature).map_err(|detail| HostApiError::InvalidSignature {
-                pattern: signature.into(),
-                detail,
-            })?;
-        Ok(match_signature(self.data(), offset as usize, &elements))
+        // Upstream Binary_Script::compare fast path: when the normalized
+        // pattern carries no jump/search markers and fits inside the
+        // 256-byte cached header signature, upstream compares nibble-wise
+        // via compareSignatureStrings — which, unlike getSignatureRecords,
+        // tolerates odd-length hex runs and non-hex characters (they simply
+        // never match, e.g. the unquoted `PE` in compiler_Zig.4.sg).
+        // The upstream bound `nSignatureSize + nOffset < headerSize` mixes
+        // units (pattern hex chars vs header bytes); reproduced faithfully.
+        // An unterminated literal yields an empty normalized string, which
+        // the fast path silently mismatches when it fits.
+        let normalized = convert_signature(signature);
+        let marker_free = !normalized
+            .chars()
+            .any(|c| matches!(c, '$' | '#' | '+' | '%' | '*'));
+        let header_sig_bytes = self.data().len().min(256);
+        let fits = normalized
+            .len()
+            .checked_add(offset as usize)
+            .is_some_and(|end| end < header_sig_bytes);
+        if marker_free && fits {
+            return Ok(nibble_compare(self.data(), offset as usize, &normalized));
+        }
+        match parse_signature_ex(signature) {
+            Ok(elements) if !elements.is_empty() => {
+                Ok(match_signature(self.data(), offset as usize, &elements))
+            }
+            // Upstream compareSignature records "Invalid signature" for any
+            // rejected or empty record list and returns false.
+            _ => Ok(self.invalid_signature(signature, false)),
+        }
     }
 
     fn find_signature(&self, start: u64, signature: &str) -> Result<Option<u64>, HostApiError> {
-        let elements =
-            parse_signature(signature).map_err(|detail| HostApiError::InvalidSignature {
-                pattern: signature.into(),
-                detail,
-            })?;
+        // Upstream findSignature rejects silently when the normalized
+        // signature is empty (unterminated literal) or exceeds 0x200000.
+        let normalized = convert_signature(signature);
+        if normalized.is_empty() || normalized.len() > 0x200000 {
+            return Ok(None);
+        }
+        let elements = match parse_signature_ex(signature) {
+            Ok(elements) if !elements.is_empty() => elements,
+            // Byte-level failures record "Invalid signature"; structural
+            // failures are silent upstream.
+            Err(err) => {
+                if err.byte_level {
+                    return Ok(self.invalid_signature(signature, None));
+                }
+                return Ok(None);
+            }
+            Ok(_) => return Ok(None),
+        };
         let data = self.data();
         let start = start as usize;
-        if elements.is_empty()
-            || start
-                .checked_add(elements.len())
-                .is_none_or(|end| end > data.len())
+        if start
+            .checked_add(elements.len())
+            .is_none_or(|end| end > data.len())
         {
             return Ok(None);
         }
@@ -393,19 +459,25 @@ impl HostApi for BufferHost {
         end: u64,
         signature: &str,
     ) -> Result<Option<u64>, HostApiError> {
-        let elements =
-            parse_signature(signature).map_err(|detail| HostApiError::InvalidSignature {
-                pattern: signature.into(),
-                detail,
-            })?;
+        // Same rejection semantics as `find_signature`.
+        let normalized = convert_signature(signature);
+        if normalized.is_empty() || normalized.len() > 0x200000 {
+            return Ok(None);
+        }
+        let elements = match parse_signature_ex(signature) {
+            Ok(elements) if !elements.is_empty() => elements,
+            Err(err) => {
+                if err.byte_level {
+                    return Ok(self.invalid_signature(signature, None));
+                }
+                return Ok(None);
+            }
+            Ok(_) => return Ok(None),
+        };
         let data = self.data();
         let start = start as usize;
         let end = (end as usize).min(data.len());
-        if elements.is_empty()
-            || start >= end
-            || end < elements.len()
-            || start > end - elements.len()
-        {
+        if start >= end || end < elements.len() || start > end - elements.len() {
             return Ok(None);
         }
         for i in start..=end - elements.len() {
@@ -581,6 +653,13 @@ impl HostApi for BufferHost {
         diec_rules::pe_native::get_file_version(self.data())
     }
 
+    fn pe_file_version_at_path(&self, path: &str) -> String {
+        let Ok(data) = std::fs::read(path) else {
+            return String::new();
+        };
+        diec_rules::pe_native::get_file_version(&data)
+    }
+
     fn pe_product_version(&self) -> String {
         diec_rules::pe_native::get_product_version(self.data())
     }
@@ -664,5 +743,64 @@ mod tests {
         let hash = host.md5(0, 0).unwrap();
         // MD5 of empty input
         assert_eq!(hash, "d41d8cd98f00b204e9800998ecf8427e");
+    }
+
+    /// Invalid signature in `check_signature` slow path (offset beyond the
+    /// cached header window): upstream records "Invalid signature" to the
+    /// PDSTRUCT error list and returns false; the rule is not aborted.
+    #[test]
+    fn check_signature_invalid_records_error_beyond_header() {
+        let data = vec![0u8; 512];
+        let host = BufferHost::new(data, "test.bin".to_string());
+        // Odd hex run is a byte-level failure; offset 300 bypasses the
+        // 256-byte nibble-compare fast path.
+        assert!(!host.check_signature(300, "ABC").unwrap());
+        let errors = host.drain_scan_errors();
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].starts_with("Invalid signature:"));
+        // Drained buffer is empty afterwards.
+        assert!(host.drain_scan_errors().is_empty());
+    }
+
+    /// Invalid signature inside the cached header window: upstream takes
+    /// the `compareSignatureStrings` fast path, which tolerates malformed
+    /// patterns and simply mismatches — no error is recorded.
+    #[test]
+    fn check_signature_invalid_silent_within_header() {
+        let data = vec![0u8; 512];
+        let host = BufferHost::new(data, "test.bin".to_string());
+        // 'zz' is not hex, but the fast path compares nibble-wise and
+        // just misses — like upstream does for the stray `PE` in
+        // compiler_Zig.4.sg.
+        assert!(!host.check_signature(0, "zz").unwrap());
+        assert!(host.drain_scan_errors().is_empty());
+    }
+
+    /// Unterminated string literal: upstream convertSignature yields an
+    /// empty normalized pattern — the fast path silently mismatches.
+    #[test]
+    fn check_signature_unterminated_quote_is_silent_miss() {
+        let data = vec![0u8; 512];
+        let host = BufferHost::new(data, "test.bin".to_string());
+        assert!(!host.check_signature(0, "'PK'0506'").unwrap());
+        assert!(host.drain_scan_errors().is_empty());
+    }
+
+    /// `find_signature` with a byte-level parse failure records the error;
+    /// a structural failure (odd wildcard run) is silent, matching upstream
+    /// `getSignatureRecords` / `isSignatureValid` behavior.
+    #[test]
+    fn find_signature_error_recording_matches_upstream() {
+        let data = vec![0u8; 512];
+        let host = BufferHost::new(data, "test.bin".to_string());
+        // Byte-level failure: non-hex character -> "Invalid signature".
+        assert_eq!(host.find_signature(0, "zz").unwrap(), None);
+        assert_eq!(host.drain_scan_errors().len(), 1);
+        // Structural failure: odd `.` run -> silent miss upstream.
+        assert_eq!(host.find_signature(0, "AA.AA").unwrap(), None);
+        assert!(host.drain_scan_errors().is_empty());
+        // Unterminated literal -> empty normalized pattern -> silent miss.
+        assert_eq!(host.find_signature(0, "'PK'0506'").unwrap(), None);
+        assert!(host.drain_scan_errors().is_empty());
     }
 }

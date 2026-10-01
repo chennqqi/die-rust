@@ -2131,24 +2131,68 @@ mod tests {
         assert_eq!(detect_format(data), "PDF");
     }
 
+    /// Build a minimal structurally valid PNG (IHDR + IDAT + IEND) using
+    /// the CRC32 variant required by the format (init 0xFFFFFFFF, final XOR).
+    fn minimal_png() -> Vec<u8> {
+        fn crc32_update(mut crc: u32, data: &[u8]) -> u32 {
+            for &b in data {
+                crc ^= u32::from(b);
+                for _ in 0..8 {
+                    crc = if crc & 1 != 0 {
+                        (crc >> 1) ^ 0xEDB8_8320
+                    } else {
+                        crc >> 1
+                    };
+                }
+            }
+            crc
+        }
+        let mut d = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        let chunk = |d: &mut Vec<u8>, name: &[u8; 4], data: &[u8]| {
+            d.extend_from_slice(&(data.len() as u32).to_be_bytes());
+            d.extend_from_slice(name);
+            d.extend_from_slice(data);
+            let crc = !{
+                let c = crc32_update(0xFFFF_FFFF, name);
+                crc32_update(c, data)
+            };
+            d.extend_from_slice(&crc.to_be_bytes());
+        };
+        // IHDR: 1x1, 8-bit truecolor, deflate, no filter, no interlace.
+        chunk(&mut d, b"IHDR", &[0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
+        chunk(&mut d, b"IDAT", &[0x00]);
+        chunk(&mut d, b"IEND", &[]);
+        d
+    }
+
     #[test]
     fn test_detect_format_png() {
-        // PNG magic: 89 50 4E 47 0D 0A 1A 0A
-        let data = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        // The PNG probe requires a valid IHDR + CRC-checked chunk chain
+        // (upstream XPNG::isValid semantics), so the fixture must be a
+        // structurally valid minimal PNG, not just the 8-byte magic.
+        let data = minimal_png();
         assert_eq!(detect_format(&data), "PNG");
     }
 
     #[test]
     fn test_detect_format_jpeg() {
-        // JPEG magic: FF D8 FF
-        let data = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        // Structurally valid JPEG (SOI + JFIF APP0 + EOI): upstream
+        // XJpeg::isValid requires the marker chain to reach EOI, so a bare
+        // FF D8 FF magic is not enough.
+        let mut data = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        data.extend_from_slice(b"JFIF\0");
+        data.extend_from_slice(&[0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00]);
+        data.extend_from_slice(&[0xFF, 0xD9]);
         assert_eq!(detect_format(&data), "JPEG");
     }
 
     #[test]
     fn test_detect_format_zip() {
-        // ZIP magic: PK 03 04
-        let data = [0x50, 0x4B, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00];
+        // Minimal structurally valid ZIP: end-of-central-directory record.
+        // A bare PK\x03\x04 magic is not enough for the probe (upstream
+        // XZip::isValid requires EOCD or a parseable central directory).
+        let mut data = vec![0x50, 0x4B, 0x05, 0x06];
+        data.extend_from_slice(&[0u8; 18]);
         assert_eq!(detect_format(&data), "ZIP");
     }
 
@@ -2161,13 +2205,18 @@ mod tests {
 
     #[test]
     fn test_detect_format_iso9660() {
-        // ISO9660 magic: "CD001" at offset 0x8001 (32769)
-        let mut data = vec![0u8; 0x8006];
-        data[0x8001] = b'C';
-        data[0x8002] = b'D';
-        data[0x8003] = b'0';
-        data[0x8004] = b'0';
-        data[0x8005] = b'1';
+        // ISO9660 probe requires a valid descriptor chain (mirroring
+        // upstream XISO9660::isValid): a primary volume descriptor at
+        // sector 16 followed by a type-255 terminator.
+        let mut data = vec![0u8; 0x8000 + 2 * 0x800];
+        // Sector 16: primary volume descriptor (type 1, "CD001", version 1).
+        data[0x8000] = 0x01;
+        data[0x8001..0x8006].copy_from_slice(b"CD001");
+        data[0x8006] = 0x01;
+        // Sector 17: volume descriptor set terminator (type 255).
+        data[0x8800] = 0xFF;
+        data[0x8801..0x8806].copy_from_slice(b"CD001");
+        data[0x8806] = 0x01;
         assert_eq!(detect_format(&data), "ISO9660");
     }
 

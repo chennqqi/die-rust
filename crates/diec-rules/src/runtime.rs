@@ -49,6 +49,10 @@ pub struct DetectionResult {
     pub is_a_heuristic: Option<bool>,
     /// Optional original name for archive/container entries.
     pub original_name: Option<String>,
+    /// Path of the rule that produced this result. Populated when results
+    /// accumulate across a rule group (upstream `m_pListScanStructs`
+    /// semantics); empty for single-rule evaluations that did not stamp it.
+    pub rule_path: String,
 }
 
 /// A loaded rule ready for execution.
@@ -309,6 +313,7 @@ mod tests {
             is_heuristic: None,
             is_a_heuristic: None,
             original_name: None,
+            rule_path: String::new(),
         };
         assert_eq!(r.type_name, "packer");
         assert_eq!(r.name, "UPX");

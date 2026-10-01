@@ -15,20 +15,38 @@ use crate::host_api::HostApi;
 use rquickjs::{Context, Ctx};
 
 /// A parsed signature element.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SigElement {
     /// Exact byte match.
     Byte(u8),
-    /// Wildcard: matches any single byte (`.` or `?` in signature).
+    /// Wildcard: matches any single byte (`..` nibble pair or `?` in signature).
     Any,
+    /// Non-null byte: `**` pair matches any byte != 0x00.
+    NotNull,
+    /// ANSI character: matches any printable ASCII byte (0x20-0x7E).
+    /// `%%` in signature.
+    Ansi,
+    /// ANSI alphanumeric: `%&` matches 0-9, A-Z, a-z.
+    AnsiNum,
+    /// Non-ANSI byte: `!%` matches any byte outside 0x20-0x7E.
+    NotAnsi,
+    /// Non-ANSI non-null byte: `_%` matches byte outside 0x20-0x7E and != 0x00.
+    NotAnsiNotNull,
     /// Relative offset jump: read N bytes as signed integer,
     /// compute target = current_offset + value + N, then continue
     /// matching at the target offset. Used for x86 call/jmp instructions.
     /// The target offset is resolved via RVA→file-offset conversion.
     RelOffset(usize),
-    /// ANSI character: matches any printable ASCII byte (0x20-0x7E).
-    /// `%%` in signature.
-    Ansi,
+    /// Forward byte search: `+` run (N times) followed by a byte pattern
+    /// searches the pattern within the next `32 * N` bytes and continues
+    /// matching right after the first hit (upstream ST_FINDBYTES).
+    /// `+` operator: find `pattern` bytes within `delta` bytes ahead.
+    FindBytes {
+        /// Byte pattern to locate.
+        pattern: Vec<u8>,
+        /// Search window size in bytes (upstream: `32 * count`).
+        delta: u64,
+    },
 }
 
 /// Parse a DIE signature string into a sequence of signature elements.
@@ -97,6 +115,8 @@ fn format_pe_batch_json(info: &crate::pe_native::PeBatchInfo) -> String {
     push_json_string(&mut s, &info.manifest);
     s.push_str(",\"fileVersion\":");
     push_json_string(&mut s, &info.file_version);
+    s.push_str(",\"fileVersionMs\":");
+    push_json_string(&mut s, &info.file_version_ms);
     s.push_str(",\"productVersion\":");
     push_json_string(&mut s, &info.product_version);
     s.push_str(",\"numberOfResources\":");
@@ -193,6 +213,154 @@ fn pdf_bytes(host: &dyn HostApi) -> Vec<u8> {
     buf
 }
 
+/// Read up to `cap` bytes from the start of `host` for text classification.
+fn head_bytes(host: &dyn HostApi, cap: usize) -> Vec<u8> {
+    let size = usize::try_from(host.file_size()).unwrap_or(0);
+    let n = size.min(cap);
+    if n == 0 {
+        return Vec::new();
+    }
+    let mut buf = vec![0u8; n];
+    let got = host.read_bytes(0, &mut buf);
+    buf.truncate(got);
+    buf
+}
+
+/// ANSI/plain text classification per upstream XBinary::isPlainTextType
+/// (Formats/xbinary.cpp @ DIE-engine 23fec32): NUL or UTF-8/UTF-16 BOM
+/// rejects outright; otherwise printable+extended >= 0.85, control <= 0.05,
+/// extended <= 0.50 of the sampled bytes.
+fn is_plain_text_data(data: &[u8]) -> bool {
+    if data.is_empty() {
+        return false;
+    }
+    if data.len() >= 3 && data[..3] == [0xEF, 0xBB, 0xBF] {
+        return false;
+    }
+    if data.len() >= 2 && (data[..2] == [0xFF, 0xFE] || data[..2] == [0xFE, 0xFF]) {
+        return false;
+    }
+    let mut n_control = 0usize;
+    let mut n_printable = 0usize;
+    let mut n_extended = 0usize;
+    for &b in data {
+        match b {
+            0x00 => return false,
+            0x09 | 0x0A | 0x0D | 0x20..=0x7E => n_printable += 1,
+            0x80..=0xFF => n_extended += 1,
+            _ => n_control += 1,
+        }
+    }
+    let n = data.len() as f64;
+    (n_printable + n_extended) as f64 / n >= 0.85
+        && n_control as f64 / n <= 0.05
+        && n_extended as f64 / n <= 0.50
+}
+
+/// UTF-8 text classification per upstream XBinary::isUTF8TextType:
+/// strict UTF-8 validation (NUL, overlong and out-of-range sequences
+/// rejected), then BOM presence or multi-byte ratio > 0.05 with printable
+/// ratio >= 0.70.
+fn is_utf8_text_data(data: &[u8]) -> bool {
+    if data.is_empty() {
+        return false;
+    }
+    let (has_bom, mut i) = if data.len() >= 3 && data[..3] == [0xEF, 0xBB, 0xBF] {
+        (true, 3usize)
+    } else {
+        (false, 0usize)
+    };
+    let n = data.len();
+    let mut n_valid = 0usize;
+    let mut n_multi = 0usize;
+    let mut n_printable = 0usize;
+    while i < n {
+        let b = data[i];
+        if b == 0 {
+            return false;
+        } else if b < 0x80 {
+            if b >= 0x20 || b == 0x09 || b == 0x0A || b == 0x0D {
+                n_printable += 1;
+            }
+            n_valid += 1;
+            i += 1;
+        } else if b & 0xE0 == 0xC0 {
+            if i + 1 >= n || data[i + 1] & 0xC0 != 0x80 || b < 0xC2 {
+                return false;
+            }
+            n_multi += 1;
+            n_valid += 1;
+            i += 2;
+        } else if b & 0xF0 == 0xE0 {
+            if i + 2 >= n
+                || data[i + 1] & 0xC0 != 0x80
+                || data[i + 2] & 0xC0 != 0x80
+                || (b == 0xE0 && data[i + 1] < 0xA0)
+            {
+                return false;
+            }
+            n_multi += 1;
+            n_valid += 1;
+            i += 3;
+        } else if b & 0xF8 == 0xF0 {
+            if i + 3 >= n
+                || data[i + 1] & 0xC0 != 0x80
+                || data[i + 2] & 0xC0 != 0x80
+                || data[i + 3] & 0xC0 != 0x80
+                || (b == 0xF0 && data[i + 1] < 0x90)
+                || b > 0xF4
+                || (b == 0xF4 && data[i + 1] > 0x8F)
+            {
+                return false;
+            }
+            n_multi += 1;
+            n_valid += 1;
+            i += 4;
+        } else {
+            return false;
+        }
+    }
+    if has_bom {
+        return n_valid > 0;
+    }
+    if n_valid == 0 {
+        return false;
+    }
+    let vf = n_valid as f64;
+    n_multi as f64 / vf > 0.05 && n_printable as f64 / vf >= 0.70
+}
+
+/// UTF-16 text classification per upstream XBinary::getUnicodeType:
+/// BOM first (LE 0xFEFF / BE 0xFFFE in the file's byte order), else require
+/// nullRatio >= 0.30 and printableRatio >= 0.30 over the sample.
+fn is_unicode_text_data(data: &[u8]) -> bool {
+    let n = data.len();
+    if n >= 2 {
+        let w = u16::from_le_bytes([data[0], data[1]]);
+        if w == 0xFFFE || w == 0xFEFF {
+            return true;
+        }
+    }
+    if n < 4 {
+        return false;
+    }
+    let sample = data[..n.min(512)].len();
+    let mut n_null = 0usize;
+    let mut n_printable = 0usize;
+    for &b in &data[..sample] {
+        if b == 0 {
+            n_null += 1;
+        } else if (0x20..=0x7E).contains(&b) {
+            n_printable += 1;
+        }
+    }
+    if n_null == 0 || sample <= 4 {
+        return false;
+    }
+    let sf = sample as f64;
+    n_null as f64 / sf >= 0.30 && n_printable as f64 / sf >= 0.30
+}
+
 fn push_json_string(buf: &mut String, s: &str) {
     buf.push('"');
     for c in s.chars() {
@@ -211,8 +379,50 @@ fn push_json_string(buf: &mut String, s: &str) {
     buf.push('"');
 }
 
+/// A signature parse failure. `byte_level` mirrors whether upstream
+/// `XBinary::_getSignatureBytes`/`convertSignature` would reject the
+/// token — those failures make upstream record an "Invalid signature"
+/// scan error. Structural failures that upstream's record validator
+/// rejects silently (odd `.`/`$`/`#` runs, malformed `[base]`, a `+`
+/// with no byte pattern) are flagged `byte_level == false`.
+#[derive(Debug, Clone)]
+pub struct SignatureError {
+    /// Human-readable parse failure detail.
+    pub detail: String,
+    /// Whether upstream records "Invalid signature" for this failure class.
+    pub byte_level: bool,
+}
+
+impl SignatureError {
+    fn byte_level(detail: impl Into<String>) -> Self {
+        Self {
+            detail: detail.into(),
+            byte_level: true,
+        }
+    }
+
+    fn structural(detail: impl Into<String>) -> Self {
+        Self {
+            detail: detail.into(),
+            byte_level: false,
+        }
+    }
+}
+
 /// Returns `Err` if the signature is malformed.
 pub fn parse_signature(signature: &str) -> Result<Vec<SigElement>, String> {
+    parse_signature_ex(signature).map_err(|e| e.detail)
+}
+
+/// Parse a signature into match elements, distinguishing byte-level
+/// failures (upstream records "Invalid signature") from structural
+/// failures (upstream rejects silently).
+///
+/// Mirrors `XBinary::getSignatureRecords` validity rules: hex runs and
+/// `.`/`?` runs must consume an even number of nibbles; `$`/`#` runs must
+/// produce a 1/2/4/8-byte address; lone `!`/`_`/`%` fall through to the
+/// byte tokenizer and fail there; any other character is invalid.
+pub fn parse_signature_ex(signature: &str) -> Result<Vec<SigElement>, SignatureError> {
     let mut elements = Vec::new();
     let chars: Vec<char> = signature.chars().collect();
     let mut i = 0;
@@ -226,66 +436,25 @@ pub fn parse_signature(signature: &str) -> Result<Vec<SigElement>, String> {
         }
 
         if c == '\'' {
-            // String literal: read until closing quote.
-            // Supports escape sequences: \r \n \t \0 \\ \xHH
+            // String literal: upstream convertSignature expands every
+            // latin1 char into hex — no escape processing at this layer
+            // (JS string literals were already unescaped when the rule
+            // source was parsed). Chars > 0xFF invalidate the signature.
             i += 1;
             while i < chars.len() && chars[i] != '\'' {
-                if chars[i] == '\\' && i + 1 < chars.len() {
-                    let next = chars[i + 1];
-                    match next {
-                        'r' => {
-                            elements.push(SigElement::Byte(0x0D));
-                            i += 2;
-                        }
-                        'n' => {
-                            elements.push(SigElement::Byte(0x0A));
-                            i += 2;
-                        }
-                        't' => {
-                            elements.push(SigElement::Byte(0x09));
-                            i += 2;
-                        }
-                        '0' => {
-                            elements.push(SigElement::Byte(0x00));
-                            i += 2;
-                        }
-                        '\\' => {
-                            elements.push(SigElement::Byte(0x5C));
-                            i += 2;
-                        }
-                        '\'' => {
-                            elements.push(SigElement::Byte(0x27));
-                            i += 2;
-                        }
-                        '"' => {
-                            elements.push(SigElement::Byte(0x22));
-                            i += 2;
-                        }
-                        'x' if i + 3 < chars.len() => {
-                            let h1 = chars[i + 2].to_digit(16);
-                            let h2 = chars[i + 3].to_digit(16);
-                            if let (Some(h1), Some(h2)) = (h1, h2) {
-                                elements.push(SigElement::Byte((h1 * 16 + h2) as u8));
-                                i += 4;
-                            } else {
-                                elements.push(SigElement::Byte(b'\\'));
-                                i += 1;
-                            }
-                        }
-                        _ => {
-                            elements.push(SigElement::Byte(b'\\'));
-                            i += 1;
-                        }
-                    }
-                } else {
-                    for b in chars[i].to_string().as_bytes() {
-                        elements.push(SigElement::Byte(*b));
-                    }
-                    i += 1;
+                let ch = chars[i];
+                if (ch as u32) > 0xFF {
+                    return Err(SignatureError::byte_level(
+                        "non-latin1 character in string literal",
+                    ));
                 }
+                elements.push(SigElement::Byte(ch as u8));
+                i += 1;
             }
             if i >= chars.len() {
-                return Err("unterminated string literal in signature".into());
+                return Err(SignatureError::byte_level(
+                    "unterminated string literal in signature",
+                ));
             }
             i += 1; // skip closing quote
             continue;
@@ -295,202 +464,411 @@ pub fn parse_signature(signature: &str) -> Result<Vec<SigElement>, String> {
             // Relative offset jump marker: read consecutive $ characters.
             // N pairs of $ = N-byte signed relative offset.
             // e.g. $$$$ = 2-byte rel offset, $$$$$$$$ = 4-byte rel offset.
-            let mut count = 0;
+            let mut count = 0usize;
             while i < chars.len() && chars[i] == '$' {
                 count += 1;
                 i += 1;
             }
             let addr_size = count / 2;
-            if count % 2 != 0
+            if !count.is_multiple_of(2)
                 || (addr_size != 1 && addr_size != 2 && addr_size != 4 && addr_size != 8)
             {
-                return Err(format!("invalid $ count ({count}) in signature"));
+                return Err(SignatureError::structural(format!(
+                    "invalid $ count ({count}) in signature"
+                )));
             }
             elements.push(SigElement::RelOffset(addr_size));
             continue;
         }
 
         if c == '#' {
-            // Address marker: treat as wildcard for now.
-            // TODO: implement proper address resolution like upstream.
-            elements.push(SigElement::Any);
-            i += 1;
+            // ST_ADDRESS: `#` run of N -> reads N/2-byte address and jumps.
+            // Count must be even and produce a 1/2/4/8-byte address;
+            // approximate the address resolution as a wildcard for now.
+            let mut count = 0usize;
+            while i < chars.len() && chars[i] == '#' {
+                count += 1;
+                i += 1;
+            }
+            // Optional [hexbase] suffix — consume it for syntax parity.
+            // Upstream rejects a malformed base silently (no record is
+            // appended and the validator fails the record-count check).
+            if i < chars.len() && chars[i] == '[' {
+                let mut j = i + 1;
+                let mut valid_base = true;
+                while j < chars.len() && chars[j] != ']' {
+                    if !chars[j].is_ascii_hexdigit() {
+                        valid_base = false;
+                    }
+                    j += 1;
+                }
+                if j >= chars.len() || j == i + 1 || !valid_base {
+                    return Err(SignatureError::structural(
+                        "invalid # base address in signature",
+                    ));
+                }
+                i = j + 1;
+            }
+            let addr_size = count / 2;
+            if !count.is_multiple_of(2)
+                || (addr_size != 1 && addr_size != 2 && addr_size != 4 && addr_size != 8)
+            {
+                return Err(SignatureError::structural(format!(
+                    "invalid # count ({count}) in signature"
+                )));
+            }
+            for _ in 0..addr_size {
+                elements.push(SigElement::Any);
+            }
             continue;
         }
 
+        if c == '!' {
+            // `!%` pair: not-ANSI byte (outside 0x20-0x7E). Any other
+            // sequence falls through to the byte tokenizer upstream and
+            // fails as a non-hex character (byte-level error).
+            if i + 1 < chars.len() && chars[i + 1] == '%' {
+                elements.push(SigElement::NotAnsi);
+                i += 2;
+                continue;
+            }
+            return Err(SignatureError::byte_level(
+                "invalid ! sequence in signature",
+            ));
+        }
+
+        if c == '_' {
+            // `_%` pair: not-ANSI and not-null byte.
+            if i + 1 < chars.len() && chars[i + 1] == '%' {
+                elements.push(SigElement::NotAnsiNotNull);
+                i += 2;
+                continue;
+            }
+            return Err(SignatureError::byte_level(
+                "invalid _ sequence in signature",
+            ));
+        }
+
         if c == '%' {
-            // %% = ANSI character (printable ASCII 0x20-0x7E)
-            // %& = ANSI alphanumeric (0-9, A-Z, a-z)
-            // !% = not ANSI
-            // _% = not ANSI and not null
+            // `%%` = ANSI printable byte; `%&` = ANSI alphanumeric byte.
             if i + 1 < chars.len() && chars[i + 1] == '%' {
                 elements.push(SigElement::Ansi);
                 i += 2;
                 continue;
-            } else if i + 1 < chars.len() && chars[i + 1] == '&' {
-                // ANSI alphanumeric — treat as Ansi for now (approximation)
-                elements.push(SigElement::Ansi);
-                i += 2;
-                continue;
-            } else if i + 1 < chars.len() && chars[i + 1] == '!' {
-                // !% = not ANSI — treat as Any (approximation)
-                elements.push(SigElement::Any);
-                i += 2;
-                continue;
-            } else if i + 1 < chars.len() && chars[i + 1] == '_' {
-                // _% = not ANSI and not null — treat as Any (approximation)
-                elements.push(SigElement::Any);
-                i += 2;
-                continue;
-            } else {
-                return Err("invalid % sequence in signature".into());
             }
+            if i + 1 < chars.len() && chars[i + 1] == '&' {
+                elements.push(SigElement::AnsiNum);
+                i += 2;
+                continue;
+            }
+            return Err(SignatureError::byte_level(
+                "invalid % sequence in signature",
+            ));
+        }
+
+        if c == '+' {
+            // ST_FINDBYTES: `+` run of N then a hex byte pattern — search
+            // the pattern within the next 32*N bytes. Upstream delegates
+            // the pattern to the byte tokenizer, so non-hex characters or
+            // an odd hex run are byte-level errors; a `+` run followed by
+            // nothing or another marker is a silent structural failure.
+            let mut count = 0u64;
+            while i < chars.len() && chars[i] == '+' {
+                count += 1;
+                i += 1;
+            }
+            let mut pattern = Vec::new();
+            while i + 1 < chars.len()
+                && chars[i].is_ascii_hexdigit()
+                && chars[i + 1].is_ascii_hexdigit()
+            {
+                let h1 = chars[i].to_digit(16).unwrap_or(0) as u8;
+                let h2 = chars[i + 1].to_digit(16).unwrap_or(0) as u8;
+                pattern.push(h1 * 16 + h2);
+                i += 2;
+            }
+            if i < chars.len() && chars[i].is_ascii_hexdigit() {
+                return Err(SignatureError::byte_level(
+                    "odd number of hex digits after +",
+                ));
+            }
+            if pattern.is_empty() {
+                if i < chars.len()
+                    && !matches!(chars[i], '.' | '$' | '#' | '*' | '!' | '_' | '%' | '+')
+                {
+                    return Err(SignatureError::byte_level(format!(
+                        "invalid character '{}' after + in signature",
+                        chars[i]
+                    )));
+                }
+                return Err(SignatureError::structural("missing byte pattern after +"));
+            }
+            elements.push(SigElement::FindBytes {
+                pattern,
+                delta: 32 * count,
+            });
+            continue;
+        }
+
+        if c == '*' {
+            // ST_NOTNULL: `*` run of N -> N/2 bytes must all be non-null.
+            let mut count = 0usize;
+            while i < chars.len() && chars[i] == '*' {
+                count += 1;
+                i += 1;
+            }
+            if !count.is_multiple_of(2) {
+                return Err(SignatureError::structural("odd number of * in signature"));
+            }
+            for _ in 0..(count / 2) {
+                elements.push(SigElement::NotNull);
+            }
+            continue;
         }
 
         if c == '.' || c == '?' {
-            // Wildcard nibble: need two for a full byte.
-            let mut nibbles = 0u8;
-            let mut byte_val = 0u8;
+            // ST_SKIP: `.`/`?` run of N -> skip N/2 bytes. Odd runs are
+            // rejected silently by upstream's record validator.
+            let mut count = 0usize;
             while i < chars.len() && (chars[i] == '.' || chars[i] == '?') {
-                nibbles += 1;
-                byte_val <<= 4;
+                count += 1;
                 i += 1;
             }
-            if nibbles == 1 {
-                // Single wildcard nibble + hex nibble
-                if i < chars.len() {
-                    let h = chars[i].to_digit(16);
-                    if let Some(h) = h {
-                        byte_val |= h as u8;
-                        elements.push(SigElement::Byte(byte_val));
-                        i += 1;
-                    } else {
-                        return Err("invalid hex after wildcard".into());
-                    }
-                } else {
-                    return Err("dangling wildcard nibble".into());
-                }
-            } else if nibbles == 2 {
+            if !count.is_multiple_of(2) {
+                return Err(SignatureError::structural(
+                    "odd number of wildcard nibbles in signature",
+                ));
+            }
+            for _ in 0..(count / 2) {
                 elements.push(SigElement::Any);
-            } else if nibbles > 2 {
-                // Multiple bytes of wildcards
-                for _ in 0..(nibbles / 2) {
-                    elements.push(SigElement::Any);
-                }
-                if nibbles % 2 == 1 {
-                    // Odd nibble: combine with next hex digit if available
-                    if i < chars.len() {
-                        let h = chars[i].to_digit(16);
-                        if let Some(h) = h {
-                            elements.push(SigElement::Byte(h as u8));
-                            i += 1;
-                        }
-                    }
-                }
-            } else {
-                // Shouldn't happen since we enter the loop with at least one
-                return Err("invalid wildcard".into());
             }
             continue;
         }
 
         if c.is_ascii_hexdigit() {
-            // Hex byte: read two hex digits.
-            if i + 1 >= chars.len() {
-                return Err("odd number of hex digits".into());
-            }
-            let h1 = chars[i].to_digit(16).ok_or("invalid hex digit")?;
-            let h2 = chars[i + 1].to_digit(16).ok_or("invalid hex digit")?;
-            // Check if next is also a hex digit (not a wildcard or string)
-            if chars[i + 1].is_ascii_hexdigit() {
-                elements.push(SigElement::Byte((h1 * 16 + h2) as u8));
-                i += 2;
-            } else if chars[i + 1] == '.' || chars[i + 1] == '?' {
-                // Hex nibble + wildcard nibble
-                elements.push(SigElement::Byte((h1 * 16) as u8)); // partial nibble: high nibble known, low nibble wildcard
+            // ST_COMPAREBYTES: contiguous hex run, must be an even number of
+            // nibbles — upstream marks odd runs invalid (`nConsumed & 1`).
+            let start = i;
+            while i < chars.len() && chars[i].is_ascii_hexdigit() {
                 i += 1;
-            } else {
-                return Err("invalid hex digit pair".into());
+            }
+            let run = &chars[start..i];
+            if !run.len().is_multiple_of(2) {
+                return Err(SignatureError::byte_level("odd number of hex digits"));
+            }
+            for pair in run.chunks_exact(2) {
+                let h1 = pair[0].to_digit(16).unwrap_or(0) as u8;
+                let h2 = pair[1].to_digit(16).unwrap_or(0) as u8;
+                elements.push(SigElement::Byte(h1 * 16 + h2));
             }
             continue;
         }
 
-        return Err(format!("unexpected character '{c}' in signature"));
+        return Err(SignatureError::byte_level(format!(
+            "unexpected character '{c}' in signature"
+        )));
     }
 
     Ok(elements)
 }
 
+/// Normalize a signature string the way upstream `XBinary::convertSignature`
+/// does: `'literal'` runs become lowercase hex (latin1 chars only), `?`
+/// becomes `.`, spaces outside quotes are dropped, and everything else is
+/// lowercased. Marker characters are preserved.
+///
+/// Upstream never reports an error here: an unterminated literal or a
+/// non-latin1 char inside quotes makes it return an empty `QString`, which
+/// callers then treat as an empty normalized signature (silent fast-path
+/// miss in `compare`, silent `-1` in `findSignature`). Reproduced by
+/// returning an empty `String`.
+pub fn convert_signature(signature: &str) -> String {
+    let mut out = String::with_capacity(signature.len());
+    let mut in_ansi = false;
+    for c in signature.chars() {
+        if c == '\'' {
+            in_ansi = !in_ansi;
+            continue;
+        }
+        if in_ansi {
+            if (c as u32) > 0xFF {
+                return String::new();
+            }
+            out.push_str(&format!("{:02x}", c as u32));
+            continue;
+        }
+        if c == ' ' {
+            continue;
+        }
+        if c == '?' {
+            out.push('.');
+            continue;
+        }
+        out.push(c.to_ascii_lowercase());
+    }
+    if in_ansi {
+        return String::new();
+    }
+    out
+}
+
+/// Nibble-level comparison against `data` starting at `offset`, matching
+/// upstream `compareSignatureStrings` semantics on the normalized pattern:
+/// `.` is a wildcard nibble, hex digits compare exact nibbles, any other
+/// character can never equal a file hex nibble and fails the match.
+/// Odd pattern lengths are legal — a trailing nibble compares against the
+/// high nibble of the next byte.
+pub fn nibble_compare(data: &[u8], offset: usize, normalized: &str) -> bool {
+    let chars: Vec<char> = normalized.chars().collect();
+    let n = chars.len();
+    if n == 0 || offset > data.len() {
+        return false;
+    }
+    let avail = (data.len() - offset).saturating_mul(2);
+    if avail < n {
+        return false;
+    }
+    for (i, c) in chars.iter().enumerate() {
+        if *c == '.' {
+            continue;
+        }
+        let Some(v) = c.to_digit(16) else {
+            return false;
+        };
+        let byte = data[offset + i / 2];
+        let nib = if i % 2 == 0 { byte >> 4 } else { byte & 0x0F };
+        if nib != v as u8 {
+            return false;
+        }
+    }
+    true
+}
+
+/// Return true when `byte` satisfies a fixed-width signature element.
+fn element_matches_byte(elem: &SigElement, b: u8) -> bool {
+    match elem {
+        SigElement::Byte(v) => b == *v,
+        SigElement::Any => true,
+        SigElement::NotNull => b != 0,
+        SigElement::Ansi => (0x20..=0x7E).contains(&b),
+        SigElement::AnsiNum => b.is_ascii_alphanumeric(),
+        SigElement::NotAnsi => !(0x20..=0x7E).contains(&b),
+        SigElement::NotAnsiNotNull => !(0x20..=0x7E).contains(&b) && b != 0,
+        // Variable-width elements are handled by the cursor matcher.
+        SigElement::RelOffset(_) | SigElement::FindBytes { .. } => true,
+    }
+}
+
+/// Return true when the element consumes a fixed number of bytes.
+fn element_is_fixed(elem: &SigElement) -> bool {
+    !matches!(
+        elem,
+        SigElement::RelOffset(_) | SigElement::FindBytes { .. }
+    )
+}
+
+/// Map a signature host-call result to the JS-facing value.
+///
+/// Upstream does not abort the script when a pattern fails to parse:
+/// `compareSignature` records "Invalid signature" to the PDSTRUCT error
+/// list and `compare`/`findSignature` return `false`/`-1`, so the host is
+/// expected to have recorded the diagnostic itself (`note_scan_error`).
+/// A host that still reports `InvalidSignature` here degrades to the same
+/// JS-visible miss value. Other host failures degrade to `fallback`.
+fn sig_result<T>(
+    result: Result<T, crate::host_api::HostApiError>,
+    fallback: T,
+) -> rquickjs::Result<T> {
+    match result {
+        Ok(v) => Ok(v),
+        Err(crate::host_api::HostApiError::InvalidSignature { .. }) => Ok(fallback),
+        Err(_) => Ok(fallback),
+    }
+}
+
+/// Advance `pos` past `pattern` found within `delta` bytes (ST_FINDBYTES).
+/// Mirrors upstream: the search window is `delta + pattern.len()` bytes;
+/// returns the position right after the first hit, or None.
+fn match_find_bytes(data: &[u8], pos: usize, pattern: &[u8], delta: u64) -> Option<usize> {
+    let limit = (delta as usize).saturating_add(pattern.len());
+    if pos > data.len() || limit > data.len().saturating_sub(pos) {
+        return None;
+    }
+    let end = pos + limit;
+    data[pos..end]
+        .windows(pattern.len())
+        .position(|w| w == pattern)
+        .map(|k| pos + k + pattern.len())
+}
+
+/// Read an `n`-byte little-endian signed integer at `pos` (n in 1/2/4/8).
+fn read_le_signed(data: &[u8], pos: usize, n: usize) -> Option<i64> {
+    if pos.checked_add(n).is_none_or(|end| end > data.len()) {
+        return None;
+    }
+    match n {
+        1 => Some(data[pos] as i8 as i64),
+        2 => Some(i16::from_le_bytes([data[pos], data[pos + 1]]) as i64),
+        4 => Some(i32::from_le_bytes(data[pos..pos + 4].try_into().ok()?) as i64),
+        8 => Some(i64::from_le_bytes(data[pos..pos + 8].try_into().ok()?)),
+        _ => None,
+    }
+}
+
 /// Match a parsed signature against data at the given offset.
-/// This version does NOT support RelOffset elements (used by find_signature
-/// and other non-PE contexts). If a RelOffset element is encountered, it
-/// is treated as a wildcard.
+/// `RelOffset` elements follow the upstream flat-file semantics: read the
+/// N-byte signed displacement at the current position and continue matching
+/// at `pos + value + N` (for non-PE files the file offset is the address).
+/// `FindBytes` searches forward per upstream ST_FINDBYTES semantics.
 pub fn match_signature(data: &[u8], offset: usize, elements: &[SigElement]) -> bool {
-    // For simple signatures (no RelOffset), use direct byte comparison.
-    let has_reloffset = elements
-        .iter()
-        .any(|e| matches!(e, SigElement::RelOffset(_)));
-    if !has_reloffset {
+    // An empty element list is not a valid signature upstream.
+    if elements.is_empty() {
+        return false;
+    }
+    // Fast path when every element is a fixed single byte.
+    if elements.iter().all(element_is_fixed) {
         if offset
             .checked_add(elements.len())
             .is_none_or(|end| end > data.len())
         {
             return false;
         }
-        for (i, elem) in elements.iter().enumerate() {
-            match elem {
-                SigElement::Byte(b) => {
-                    if data[offset + i] != *b {
-                        return false;
-                    }
-                }
-                SigElement::Any => {}
-                SigElement::Ansi => {
-                    // ANSI: printable ASCII 0x20-0x7E
-                    let b = data[offset + i];
-                    if !(0x20..=0x7E).contains(&b) {
-                        return false;
-                    }
-                }
-                SigElement::RelOffset(_) => {} // handled by has_reloffset check above
-            }
-        }
-        return true;
-    }
-    // For signatures with RelOffset, fall back to treating them as wildcards.
-    // This is only hit if match_signature is called directly (not via the
-    // PE-aware match_signature_pe). find_signature uses this path.
-    if offset
-        .checked_add(elements.len())
-        .is_none_or(|end| end > data.len())
-    {
-        return false;
+        return elements
+            .iter()
+            .enumerate()
+            .all(|(i, elem)| element_matches_byte(elem, data[offset + i]));
     }
     let mut pos = offset;
     for elem in elements.iter() {
         match elem {
-            SigElement::Byte(b) => {
-                if pos >= data.len() || data[pos] != *b {
-                    return false;
+            SigElement::FindBytes { pattern, delta } => {
+                match match_find_bytes(data, pos, pattern, *delta) {
+                    Some(next) => pos = next,
+                    None => return false,
                 }
-                pos += 1;
-            }
-            SigElement::Any => {
-                pos += 1;
-            }
-            SigElement::Ansi => {
-                if pos >= data.len() {
-                    return false;
-                }
-                let b = data[pos];
-                if !(0x20..=0x7E).contains(&b) {
-                    return false;
-                }
-                pos += 1;
             }
             SigElement::RelOffset(n) => {
-                // Without memory map info, treat as skip N bytes.
-                pos += n;
+                // Flat-file jump: read N-byte signed displacement and land at
+                // pos + value + N (upstream `ST_RELOFFSET` for raw buffers).
+                let Some(value) = read_le_signed(data, pos, *n) else {
+                    return false;
+                };
+                let Ok(delta) = isize::try_from(value) else {
+                    return false;
+                };
+                let Some(target) = pos
+                    .checked_add_signed(delta)
+                    .and_then(|t| t.checked_add(*n))
+                else {
+                    return false;
+                };
+                pos = target;
+            }
+            _ => {
+                if pos >= data.len() || !element_matches_byte(elem, data[pos]) {
+                    return false;
+                }
+                pos += 1;
             }
         }
     }
@@ -510,27 +888,11 @@ pub fn match_signature_pe(
     let mut pos = offset;
     for elem in elements.iter() {
         match elem {
-            SigElement::Byte(b) => {
-                if pos >= data.len() || data[pos] != *b {
-                    return false;
+            SigElement::FindBytes { pattern, delta } => {
+                match match_find_bytes(data, pos, pattern, *delta) {
+                    Some(next) => pos = next,
+                    None => return false,
                 }
-                pos += 1;
-            }
-            SigElement::Any => {
-                if pos >= data.len() {
-                    return false;
-                }
-                pos += 1;
-            }
-            SigElement::Ansi => {
-                if pos >= data.len() {
-                    return false;
-                }
-                let b = data[pos];
-                if !(0x20..=0x7E).contains(&b) {
-                    return false;
-                }
-                pos += 1;
             }
             SigElement::RelOffset(addr_size) => {
                 // Read N-byte signed integer at current position (little-endian).
@@ -570,6 +932,12 @@ pub fn match_signature_pe(
                     }
                     None => return false,
                 }
+            }
+            _ => {
+                if pos >= data.len() || !element_matches_byte(elem, data[pos]) {
+                    return false;
+                }
+                pos += 1;
             }
         }
     }
@@ -1153,48 +1521,8 @@ impl HostApiBridge {
                 detail: format!("adler32 set: {e}"),
             })?;
 
-            // isUTF8Text(offset, size) -> bool
-            let h = host.clone();
-            let is_utf8_fn = rquickjs::Function::new(ctx.clone(), move |offset: i32, size: i32| {
-                let start = offset as u64;
-                let len = if size > 0 { size as u64 } else { 1024 };
-                let mut bytes = Vec::new();
-                for i in 0..len {
-                    match h.read_u8(start + i) {
-                        Ok(b) => bytes.push(b),
-                        Err(_) => break,
-                    }
-                }
-                // Check if valid UTF-8 with no null bytes.
-                bytes.iter().all(|&b| b != 0) && std::str::from_utf8(&bytes).is_ok()
-            })
-            .map_err(|e| RuleError::Backend { detail: format!("isUTF8Text: {e}") })?;
-            binary.set("isUTF8Text", is_utf8_fn).map_err(|e| RuleError::Backend {
-                detail: format!("isUTF8Text set: {e}"),
-            })?;
-
-            // isUnicodeText(offset, size) -> bool (UTF-16LE with no null high bytes)
-            let h = host.clone();
-            let is_unicode_fn = rquickjs::Function::new(ctx.clone(), move |offset: i32, size: i32| {
-                let start = offset as u64;
-                let len = if size > 0 { size as u64 } else { 1024 };
-                let mut has_ascii = false;
-                let mut has_high = false;
-                for i in 0..len {
-                    match h.read_u8(start + i) {
-                        Ok(b) => {
-                            if (0x20..0x7F).contains(&b) { has_ascii = true; }
-                            if b >= 0x80 { has_high = true; }
-                        }
-                        Err(_) => break,
-                    }
-                }
-                has_ascii && !has_high
-            })
-            .map_err(|e| RuleError::Backend { detail: format!("isUnicodeText: {e}") })?;
-            binary.set("isUnicodeText", is_unicode_fn).map_err(|e| RuleError::Backend {
-                detail: format!("isUnicodeText set: {e}"),
-            })?;
+            // NOTE: isUTF8Text/isUnicodeText are registered later (no-arg,
+            // upstream XBinary::isUTF8TextType/getUnicodeType semantics).
 
             // --- Scan mode flags (continued) ---
 
@@ -1403,16 +1731,16 @@ impl HostApiBridge {
             // -> offset or -1. The upstream API accepts both 2-arg and 3-arg forms.
             // We register a 2-arg native and add a JS wrapper for the 3-arg form.
             let h = host.clone();
-            let find_sig_fn =
-                rquickjs::Function::new(ctx.clone(), move |start: i32, signature: String| match h
-                    .find_signature(start as u64, &signature)
-                {
-                    Ok(Some(offset)) => offset as f64,
-                    _ => -1.0,
-                })
-                .map_err(|e| RuleError::Backend {
-                    detail: format!("findSignature: {e}"),
-                })?;
+            let find_sig_fn = rquickjs::Function::new(
+                ctx.clone(),
+                move |_ctx: Ctx, start: i32, signature: String| {
+                    sig_result(h.find_signature(start as u64, &signature), None)
+                        .map(|found| found.map_or(-1.0, |offset| offset as f64))
+                },
+            )
+            .map_err(|e| RuleError::Backend {
+                detail: format!("findSignature: {e}"),
+            })?;
             binary
                 .set("__findSignature", find_sig_fn)
                 .map_err(|e| RuleError::Backend {
@@ -1424,11 +1752,12 @@ impl HostApiBridge {
             let h = host.clone();
             let find_sig_range_fn = rquickjs::Function::new(
                 ctx.clone(),
-                move |start: i32, end: i32, signature: String| match h
-                    .find_signature_in_range(start as u64, end as u64, &signature)
-                {
-                    Ok(Some(offset)) => offset as f64,
-                    _ => -1.0,
+                move |start: i32, end: i32, signature: String| {
+                    sig_result(
+                        h.find_signature_in_range(start as u64, end as u64, &signature),
+                        None,
+                    )
+                    .map(|found| found.map_or(-1.0, |offset| offset as f64))
                 },
             )
             .map_err(|e| RuleError::Backend {
@@ -1713,24 +2042,39 @@ impl HostApiBridge {
                     detail: format!("__peIsSigned set: {e}"),
                 })?;
 
+            // Read the StringFileInfo FileVersion of another PE file on disk.
+            // Upstream PE_Script::getPEFileVersion opens a QFile at the given
+            // path (typically a sibling DLL or the scanned file itself).
+            let h = host.clone();
+            let pe_file_version_at_path_fn =
+                rquickjs::Function::new(ctx.clone(), move |path: String| {
+                    h.pe_file_version_at_path(&path)
+                })
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("peFileVersionAtPath: {e}"),
+                })?;
+            binary
+                .set("__peFileVersionAtPath", pe_file_version_at_path_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__peFileVersionAtPath set: {e}"),
+                })?;
+
             // isSignaturePresent(offset, size, signature) -> bool
             // Upstream: bool isSignaturePresent(qint64 nOffset, qint64 nSize, const QString &sSignature)
             // Searches for signature within [offset, offset+size) range.
+            // A non-positive size exits upstream findSignature before any
+            // signature validation — silent -1, not an error.
             let h = host.clone();
             let is_sig_present_fn = rquickjs::Function::new(
                 ctx.clone(),
                 move |offset: i32, size: i32, signature: String| {
                     if size <= 0 || offset < 0 {
-                        h.check_signature(offset as u64, &signature)
-                            .unwrap_or(false)
-                    } else {
-                        let start = offset as u64;
-                        let end = start.saturating_add(size as u64);
-                        h.find_signature_in_range(start, end, &signature)
-                            .ok()
-                            .flatten()
-                            .is_some()
+                        return Ok(false);
                     }
+                    let start = offset as u64;
+                    let end = start.saturating_add(size as u64);
+                    sig_result(h.find_signature_in_range(start, end, &signature), None)
+                        .map(|found| found.is_some())
                 },
             )
             .map_err(|e| RuleError::Backend {
@@ -1746,18 +2090,37 @@ impl HostApiBridge {
             // Upstream signature: bool compare(const QString &sSignature, qint64 nOffset = 0)
             // We register a 2-arg native and a JS wrapper that defaults offset to 0.
             let h = host.clone();
-            let compare_fn =
-                rquickjs::Function::new(ctx.clone(), move |signature: String, offset: i32| {
-                    h.check_signature(offset as u64, &signature)
-                        .unwrap_or(false)
-                })
-                .map_err(|e| RuleError::Backend {
-                    detail: format!("compare: {e}"),
-                })?;
+            let compare_fn = rquickjs::Function::new(
+                ctx.clone(),
+                move |_ctx: Ctx, signature: String, offset: i32| {
+                    sig_result(h.check_signature(offset as u64, &signature), false)
+                },
+            )
+            .map_err(|e| RuleError::Backend {
+                detail: format!("compare: {e}"),
+            })?;
             binary
                 .set("__compare", compare_fn)
                 .map_err(|e| RuleError::Backend {
                     detail: format!("compare set: {e}"),
+                })?;
+
+            // __sigError(signature): record a non-fatal "Invalid signature"
+            // scan error (upstream PDSTRUCT error list semantics). Used by
+            // JS-side signature matchers that cannot route through the
+            // HostApi result channel.
+            let h = host.clone();
+            let sig_error_fn =
+                rquickjs::Function::new(ctx.clone(), move |signature: String| {
+                    h.note_scan_error(format!("Invalid signature: {signature}"));
+                })
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__sigError: {e}"),
+                })?;
+            binary
+                .set("__sigError", sig_error_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__sigError set: {e}"),
                 })?;
 
             // --- Scan mode flags ---
@@ -1982,14 +2345,49 @@ impl HostApiBridge {
                 })?;
 
             // --- File name/path ---
+            //
+            // Upstream Binary_Script exposes QFileInfo-derived values:
+            //   getFileDirectory      -> QFileInfo::absolutePath()
+            //   getFileBaseName       -> QFileInfo::baseName()  (up to first '.')
+            //   getFileCompleteSuffix -> QFileInfo::completeSuffix()
+            //   getFileSuffix         -> QFileInfo::suffix()    (after last '.')
+            // There is no getFileName in the upstream API.
+
+            let h = host.clone();
+            let get_file_dir_fn = rquickjs::Function::new(ctx.clone(), move || {
+                let name = h.file_name();
+                let path = std::path::Path::new(name);
+                let abs = if path.is_absolute() {
+                    path.to_path_buf()
+                } else {
+                    std::env::current_dir()
+                        .map(|d| d.join(path))
+                        .unwrap_or_else(|_| path.to_path_buf())
+                };
+                abs.parent()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("getFileDirectory: {e}"),
+            })?;
+            binary
+                .set("getFileDirectory", get_file_dir_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("getFileDirectory set: {e}"),
+                })?;
 
             let h = host.clone();
             let get_file_base_name_fn = rquickjs::Function::new(ctx.clone(), move || {
-                // Return base name: file name without extension.
-                let name = h.file_name();
-                match name.rfind('.') {
+                // QFileInfo::baseName(): file name component up to the first
+                // '.' (unlike Rust's file_stem, which splits at the last dot).
+                let name = std::path::Path::new(h.file_name())
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                match name.find('.') {
                     Some(pos) => name[..pos].to_string(),
-                    None => name.to_string(),
+                    None => name,
                 }
             })
             .map_err(|e| RuleError::Backend {
@@ -1999,6 +2397,51 @@ impl HostApiBridge {
                 .set("getFileBaseName", get_file_base_name_fn)
                 .map_err(|e| RuleError::Backend {
                     detail: format!("getFileBaseName set: {e}"),
+                })?;
+
+            let h = host.clone();
+            let get_file_complete_suffix_fn =
+                rquickjs::Function::new(ctx.clone(), move || {
+                    // QFileInfo::completeSuffix(): everything after the first
+                    // '.' in the file name component.
+                    let name = std::path::Path::new(h.file_name())
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    match name.find('.') {
+                        Some(pos) => name[pos + 1..].to_string(),
+                        None => String::new(),
+                    }
+                })
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("getFileCompleteSuffix: {e}"),
+                })?;
+            binary
+                .set("getFileCompleteSuffix", get_file_complete_suffix_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("getFileCompleteSuffix set: {e}"),
+                })?;
+
+            let h = host.clone();
+            let get_file_suffix_fn = rquickjs::Function::new(ctx.clone(), move || {
+                // QFileInfo::suffix(): everything after the last '.' in the
+                // file name component.
+                let name = std::path::Path::new(h.file_name())
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                match name.rfind('.') {
+                    Some(pos) => name[pos + 1..].to_string(),
+                    None => String::new(),
+                }
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("getFileSuffix: {e}"),
+            })?;
+            binary
+                .set("getFileSuffix", get_file_suffix_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("getFileSuffix set: {e}"),
                 })?;
 
             // --- Short aliases (Sz, c, SA, SC, fStr, fSig, BA) ---
@@ -2015,14 +2458,15 @@ impl HostApiBridge {
 
             // c(signature, offset) -> bool (alias for compare, but args reversed)
             let h = host.clone();
-            let c_fn =
-                rquickjs::Function::new(ctx.clone(), move |signature: String, offset: i32| {
-                    h.check_signature(offset as u64, &signature)
-                        .unwrap_or(false)
-                })
-                .map_err(|e| RuleError::Backend {
-                    detail: format!("c: {e}"),
-                })?;
+            let c_fn = rquickjs::Function::new(
+                ctx.clone(),
+                move |_ctx: Ctx, signature: String, offset: i32| {
+                    sig_result(h.check_signature(offset as u64, &signature), false)
+                },
+            )
+            .map_err(|e| RuleError::Backend {
+                detail: format!("c: {e}"),
+            })?;
             binary.set("c", c_fn).map_err(|e| RuleError::Backend {
                 detail: format!("c set: {e}"),
             })?;
@@ -2092,16 +2536,14 @@ impl HostApiBridge {
             let h = host.clone();
             let fsig_fn = rquickjs::Function::new(
                 ctx.clone(),
-                move |offset: i32, size: i32, signature: String| {
+                move |_ctx: Ctx, offset: i32, size: i32, signature: String| {
                     if size <= 0 || offset < 0 {
-                        return -1.0;
+                        return Ok(-1.0);
                     }
                     let start = offset as u64;
                     let end = start.saturating_add(size as u64);
-                    match h.find_signature_in_range(start, end, &signature) {
-                        Ok(Some(off)) => off as f64,
-                        _ => -1.0,
-                    }
+                    sig_result(h.find_signature_in_range(start, end, &signature), None)
+                        .map(|found| found.map_or(-1.0, |off| off as f64))
                 },
             )
             .map_err(|e| RuleError::Backend {
@@ -2179,32 +2621,12 @@ impl HostApiBridge {
                 detail: format!("isResource set: {e}"),
             })?;
 
-            // isPlainText() -> check if file content is all printable ASCII
+            // isPlainText() -> ratio-based ANSI text detection.
+            // Delegates to is_plain_text_data (upstream XBinary::
+            // isPlainTextType, samples up to 0x8000 bytes).
             let h = host.clone();
             let is_plain_fn = rquickjs::Function::new(ctx.clone(), move || {
-                let size = h.file_size() as usize;
-                if size == 0 {
-                    return false;
-                }
-                // Check up to 4096 bytes (match upstream behavior)
-                let check_len = size.min(4096);
-                for i in 0..check_len {
-                    match h.read_u8(i as u64) {
-                        Ok(b) => {
-                            // Allow printable ASCII (0x20-0x7E), tab (0x09),
-                            // LF (0x0A), CR (0x0D)
-                            let is_printable = (0x20..=0x7E).contains(&b)
-                                || b == 0x09
-                                || b == 0x0A
-                                || b == 0x0D;
-                            if !is_printable {
-                                return false;
-                            }
-                        }
-                        _ => return false,
-                    }
-                }
-                true
+                is_plain_text_data(&head_bytes(&*h, 0x8000))
             })
             .map_err(|e| RuleError::Backend {
                 detail: format!("isPlainText: {e}"),
@@ -2213,29 +2635,44 @@ impl HostApiBridge {
                 detail: format!("isPlainText set: {e}"),
             })?;
 
+            // isUTF8Text() -> strict UTF-8 validation per upstream
+            // XBinary::isUTF8TextType (Formats/xbinary.cpp @ 23fec32).
+            let h = host.clone();
+            let is_utf8_fn = rquickjs::Function::new(ctx.clone(), move || {
+                is_utf8_text_data(&head_bytes(&*h, 0x8000))
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("isUTF8Text: {e}"),
+            })?;
+            binary.set("isUTF8Text", is_utf8_fn).map_err(|e| RuleError::Backend {
+                detail: format!("isUTF8Text set: {e}"),
+            })?;
+
+            // isUnicodeText() -> UTF-16 detection per upstream
+            // XBinary::getUnicodeType != UNICODE_TYPE_NONE.
+            let h = host.clone();
+            let is_unicode_fn = rquickjs::Function::new(ctx.clone(), move || {
+                is_unicode_text_data(&head_bytes(&*h, 0x1000))
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("isUnicodeText: {e}"),
+            })?;
+            binary
+                .set("isUnicodeText", is_unicode_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("isUnicodeText set: {e}"),
+                })?;
+
             // isText() -> isPlainText || isUTF8Text || isUnicodeText
+            // (upstream Binary_Script::isText ORs the three cached flags;
+            // unicode uses a 0x1000 sample, the others 0x8000).
             let h = host.clone();
             let is_text_fn = rquickjs::Function::new(ctx.clone(), move || {
-                let size = h.file_size() as usize;
-                if size == 0 {
-                    return false;
+                if is_unicode_text_data(&head_bytes(&*h, 0x1000)) {
+                    return true;
                 }
-                let check_len = size.min(4096);
-                for i in 0..check_len {
-                    match h.read_u8(i as u64) {
-                        Ok(b) => {
-                            let is_printable = (0x20..=0x7E).contains(&b)
-                                || b == 0x09
-                                || b == 0x0A
-                                || b == 0x0D;
-                            if !is_printable {
-                                return false;
-                            }
-                        }
-                        _ => return false,
-                    }
-                }
-                true
+                let data = head_bytes(&*h, 0x8000);
+                is_plain_text_data(&data) || is_utf8_text_data(&data)
             })
             .map_err(|e| RuleError::Backend {
                 detail: format!("isText: {e}"),
@@ -2289,14 +2726,8 @@ impl HostApiBridge {
                 detail: format!("getScanID set: {e}"),
             })?;
 
-            // getFileSuffix() -> empty string
-            let get_suffix_fn = rquickjs::Function::new(ctx.clone(), String::new)
-                .map_err(|e| RuleError::Backend {
-                    detail: format!("getFileSuffix: {e}"),
-                })?;
-            binary.set("getFileSuffix", get_suffix_fn).map_err(|e| RuleError::Backend {
-                detail: format!("getFileSuffix set: {e}"),
-            })?;
+            // getFileSuffix is registered natively above (QFileInfo::suffix
+            // semantics); no stub here.
 
             // readByte(offset) -> u8 or -1 on out-of-bounds
             let h = host.clone();
@@ -2372,8 +2803,9 @@ impl HostApiBridge {
 
             // read_unicodeString(offset, maxSize) -> string (UTF-16LE)
             let h = host.clone();
-            let read_unicode_fn =
-                rquickjs::Function::new(ctx.clone(), move |offset: i32, max_size: i32| {
+            let read_unicode_fn = rquickjs::Function::new(
+                ctx.clone(),
+                move |offset: i32, max_size: i32, be: Option<bool>| {
                     let file_size = h.file_size() as usize;
                     let start = offset as usize;
                     if start >= file_size {
@@ -2385,6 +2817,7 @@ impl HostApiBridge {
                         file_size.saturating_sub(start)
                     };
                     let end = start.saturating_add(len).min(file_size);
+                    let is_be = be.unwrap_or(false);
                     let mut result = String::new();
                     let mut i = start;
                     while i + 1 < end {
@@ -2399,12 +2832,17 @@ impl HostApiBridge {
                         if lo == 0 && hi == 0 {
                             break;
                         }
-                        let code = u16::from_le_bytes([lo, hi]);
+                        let code = if is_be {
+                            u16::from_be_bytes([lo, hi])
+                        } else {
+                            u16::from_le_bytes([lo, hi])
+                        };
                         result.push(char::from_u32(code as u32).unwrap_or('\u{FFFD}'));
                         i += 2;
                     }
                     result
-                })
+                },
+            )
                 .map_err(|e| RuleError::Backend {
                     detail: format!("read_unicodeString: {e}"),
                 })?;
@@ -2587,14 +3025,7 @@ impl HostApiBridge {
                 detail: format!("cleanString set: {e}"),
             })?;
 
-            // getHeaderString() -> empty string
-            let get_header_fn = rquickjs::Function::new(ctx.clone(), String::new)
-                .map_err(|e| RuleError::Backend {
-                    detail: format!("getHeaderString: {e}"),
-                })?;
-            binary.set("getHeaderString", get_header_fn).map_err(|e| RuleError::Backend {
-                detail: format!("getHeaderString set: {e}"),
-            })?;
+
 
             // crc16(offset, size) -> u16 CRC-16 (CCITT)
             let h = host.clone();
@@ -2758,12 +3189,13 @@ impl HostApiBridge {
 
             // fSig(offset, size, signature) -> findSignature (offset or -1)
             let h = host.clone();
-            let fsig_fn =
-                rquickjs::Function::new(ctx.clone(), move |offset: i32, size: i32, signature: String| {
+            let fsig_fn = rquickjs::Function::new(
+                ctx.clone(),
+                move |_ctx: Ctx, offset: i32, size: i32, signature: String| -> rquickjs::Result<i32> {
                     let file_size = h.file_size() as usize;
                     let start = offset as usize;
                     if start >= file_size {
-                        return -1i32;
+                        return Ok(-1i32);
                     }
                     let end = if size > 0 {
                         (start.saturating_add(size as usize)).min(file_size)
@@ -2771,14 +3203,14 @@ impl HostApiBridge {
                         file_size
                     };
                     // Parse the signature and search for it.
-                    match parse_signature(&signature) {
+                    match parse_signature_ex(&signature) {
                         Ok(elements) => {
                             if elements.is_empty() {
-                                return offset;
+                                return Ok(offset);
                             }
                             let needle_len = elements.len();
                             if start + needle_len > end {
-                                return -1;
+                                return Ok(-1);
                             }
                             // Read a window of bytes and match against elements.
                             for i in start..=end.saturating_sub(needle_len) {
@@ -2795,17 +3227,26 @@ impl HostApiBridge {
                                     }
                                 }
                                 if matched {
-                                    return i as i32;
+                                    return Ok(i as i32);
                                 }
                             }
-                            -1
+                            Ok(-1)
                         }
-                        Err(_) => -1,
+                        // Upstream findSignature returns -1 for rejected
+                        // patterns; byte-level failures also record an
+                        // "Invalid signature" scan error.
+                        Err(err) => {
+                            if err.byte_level {
+                                h.note_scan_error(format!("Invalid signature: {signature}"));
+                            }
+                            Ok(-1)
+                        }
                     }
-                })
-                .map_err(|e| RuleError::Backend {
-                    detail: format!("fSig: {e}"),
-                })?;
+                },
+            )
+            .map_err(|e| RuleError::Backend {
+                detail: format!("fSig: {e}"),
+            })?;
             binary.set("fSig", fsig_fn).map_err(|e| RuleError::Backend {
                 detail: format!("fSig set: {e}"),
             })?;
@@ -2850,6 +3291,78 @@ impl HostApiBridge {
                 .set("__pdfGetPermissions", pdf_get_permissions_fn)
                 .map_err(|e| RuleError::Backend {
                     detail: format!("__pdfGetPermissions set: {e}"),
+                })?;
+
+            // Upstream PDF_Script::getStringValuesByKey
+            // (XPDF::getValuesByKey filtered to VT_STRING).
+            let h_pdf = host.clone();
+            let pdf_strings_fn =
+                rquickjs::Function::new(ctx.clone(), move |key: String| -> Vec<String> {
+                    crate::pdf_encrypt::get_string_values_by_key(&pdf_bytes(&*h_pdf), &key)
+                })
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__pdfGetStringValuesByKey: {e}"),
+                })?;
+            binary
+                .set("__pdfGetStringValuesByKey", pdf_strings_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__pdfGetStringValuesByKey set: {e}"),
+                })?;
+
+            // JPEG helpers backing Jpeg_Script methods (upstream XJpeg @
+            // pinned baseline): chunk presence, COM comment, DQT MD5 and
+            // EXIF camera name.
+            let h_jpeg = host.clone();
+            let jpeg_chunk_fn =
+                rquickjs::Function::new(ctx.clone(), move |id: i64| -> bool {
+                    crate::jpeg_native::is_chunk_present(&pdf_bytes(&*h_jpeg), id as u8)
+                })
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__jpegIsChunkPresent: {e}"),
+                })?;
+            binary
+                .set("__jpegIsChunkPresent", jpeg_chunk_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__jpegIsChunkPresent set: {e}"),
+                })?;
+
+            let h_jpeg = host.clone();
+            let jpeg_comment_fn = rquickjs::Function::new(ctx.clone(), move || {
+                crate::jpeg_native::get_comment(&pdf_bytes(&*h_jpeg))
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("__jpegGetComment: {e}"),
+            })?;
+            binary
+                .set("__jpegGetComment", jpeg_comment_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__jpegGetComment set: {e}"),
+                })?;
+
+            let h_jpeg = host.clone();
+            let jpeg_dqt_fn = rquickjs::Function::new(ctx.clone(), move || {
+                crate::jpeg_native::get_dqt_md5(&pdf_bytes(&*h_jpeg))
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("__jpegGetDqtMd5: {e}"),
+            })?;
+            binary
+                .set("__jpegGetDqtMd5", jpeg_dqt_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__jpegGetDqtMd5 set: {e}"),
+                })?;
+
+            let h_jpeg = host.clone();
+            let jpeg_exif_fn = rquickjs::Function::new(ctx.clone(), move || {
+                crate::jpeg_native::get_exif_camera_name(&pdf_bytes(&*h_jpeg))
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("__jpegGetExifCameraName: {e}"),
+            })?;
+            binary
+                .set("__jpegGetExifCameraName", jpeg_exif_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__jpegGetExifCameraName set: {e}"),
                 })?;
 
             // Archive member access backing Archive_Script-style methods
@@ -3160,10 +3673,10 @@ impl HostApiBridge {
                         return _B.read_uint32_le(_peOptHdrOff() + 8);
                     };
                     PE.getFileVersionMS = function() {
-                        // File version MS from version resource (upstream parses
-                        // VS_VERSIONINFO). Approximate from optional header.
+                        // Upstream returns dwFileVersionMS formatted as
+                        // "<hi16>.<lo16>" via get_uint32_version.
                         if (!_peIsPE()) return "";
-                        return _peGetBatch().fileVersion || "";
+                        return _peGetBatch().fileVersionMs || "";
                     };
                     PE.getImageFileHeader = function(field) {
                         // Return COFF header field by name.
@@ -3249,6 +3762,14 @@ impl HostApiBridge {
                         return _B.__compare(sig, fileOff + offset);
                     };
 
+                    // Upstream records "Invalid signature" to the PDSTRUCT
+                    // error list and returns false for malformed patterns;
+                    // the running rule is not aborted.
+                    function _peSigInvalid(sig) {
+                        if (_B.__sigError) _B.__sigError(sig);
+                        return false;
+                    }
+
                     // PE-aware signature comparison with $ (relative offset) support.
                     // Parses the signature, matching hex bytes and wildcards directly,
                     // and resolving $ markers as relative jumps.
@@ -3265,8 +3786,12 @@ impl HostApiBridge {
                                 var count = 0;
                                 while (i < len && sig.charAt(i) === '$') { count++; i++; }
                                 var addrSize = count >> 1;
-                                if (count & 1) return false;
-                                if (addrSize !== 1 && addrSize !== 2 && addrSize !== 4 && addrSize !== 8) return false;
+                                // Upstream records "Invalid signature" and
+                                // returns false for malformed $ runs; only
+                                // match failures and out-of-bounds jumps are
+                                // plain misses.
+                                if (count & 1) return _peSigInvalid(sig);
+                                if (addrSize !== 1 && addrSize !== 2 && addrSize !== 4 && addrSize !== 8) return _peSigInvalid(sig);
                                 if (pos + addrSize > totalSize) return false;
                                 // Read signed integer (little-endian).
                                 var value = 0;
@@ -3304,10 +3829,10 @@ impl HostApiBridge {
                                     pos++; // Skip one byte.
                                 } else if (nibbles === 1) {
                                     // Single wildcard nibble + hex digit.
-                                    if (i >= len) return false;
+                                    if (i >= len) return _peSigInvalid(sig);
                                     var h = sig.charAt(i);
                                     var hv = parseInt(h, 16);
-                                    if (isNaN(hv)) return false;
+                                    if (isNaN(hv)) return _peSigInvalid(sig);
                                     // High nibble wildcard, low nibble known.
                                     var actual = _B.read_uint8(pos);
                                     if ((actual & 0x0F) !== hv) return false;
@@ -3339,11 +3864,11 @@ impl HostApiBridge {
                                 if (i < len) i++; // Skip closing quote.
                             } else {
                                 // Hex byte: two hex digits.
-                                if (i + 1 >= len) return false;
+                                if (i + 1 >= len) return _peSigInvalid(sig);
                                 var h1 = sig.charAt(i);
                                 var h2 = sig.charAt(i + 1);
                                 var v = parseInt(h1 + h2, 16);
-                                if (isNaN(v)) return false;
+                                if (isNaN(v)) return _peSigInvalid(sig);
                                 if (pos >= totalSize) return false;
                                 if (_B.read_uint8(pos) !== v) return false;
                                 pos++;
@@ -3387,10 +3912,10 @@ impl HostApiBridge {
                         if (off < 0) return 0;
                         return _B.getSize() - off;
                     };
-                    PE.compareOverlay = function(sig) {
+                    PE.compareOverlay = function(sig, nOffset) {
                         var off = PE.getOverlayOffset();
                         if (off < 0) return false;
-                        return _B.__compare(sig, off);
+                        return _B.__compare(sig, off + (nOffset || 0));
                     };
 
                     // isSignaturePresent: search for signature in [offset, offset+size).
@@ -3614,28 +4139,28 @@ impl HostApiBridge {
                     // Authenticode signature: native pelite-backed security directory check.
                     PE.isSignedFile = function() { return _peGetBatch().isSigned; };
                     // PE.isSigned() maps to XPE::isSigned() which checks
-                    // getSignOffsetSize().nSize > 0. The sign offset size is
-                    // valid only if the security directory's VirtualAddress
-                    // (file offset for security dir) and Size are within file
-                    // bounds (checkOffsetSize). This is NOT the same as
-                    // isSignedFile() which only checks if the data directory
-                    // entry is present (VirtualAddress != 0).
+                    // getSignOffsetSize().nSize > 0. getSignOffsetSize applies
+                    // XBinary::checkOffsetSize to the security directory:
+                    // offset >= 0 && size > 0 && offset < fileSize &&
+                    // offset + size <= fileSize. The VirtualAddress field is
+                    // a raw file offset (not RVA) and zero is legal upstream.
                     PE.isSigned = function() {
                         if (!_peIsPE()) return false;
                         var dbgDirOff = _peDataDirOff(4); // Security dir = index 4
                         var secOff = _B.read_uint32_le(dbgDirOff);
                         var secSize = _B.read_uint32_le(dbgDirOff + 4);
-                        if (secOff === 0 || secSize === 0) return false;
-                        // Security dir VirtualAddress is a file offset, not RVA.
-                        // Check it's within file bounds.
-                        return (secOff + secSize <= _B.getSize());
+                        var total = _B.getSize();
+                        return secSize > 0 && secOff < total && secSize <= total - secOff;
                     };
                     PE.getGeneralOptionsEx = function() { return ""; };
 
                     // File info: native pelite-backed version info parsing.
+                    // getPEFileVersion opens the file at the given path on
+                    // disk and returns its StringFileInfo FileVersion value
+                    // (upstream PE_Script::getPEFileVersion uses QFile).
                     PE.getPEFileVersion = function(s) {
-                        if (!s) return _peGetBatch().fileVersion;
-                        return _B.__peVersionString(s);
+                        if (!s) return "";
+                        return _B.__peFileVersionAtPath(s);
                     };
                     PE.getVersionStringInfo = function(s) { return _B.__peVersionString(s); };
                     PE.getFileVersion = function() { return _peGetBatch().fileVersion; };
@@ -3722,16 +4247,18 @@ impl HostApiBridge {
                         return PE.getDosStubSize() > 0;
                     };
 
-                    // Rich signature: search for "Rich" in DOS stub.
-                    // The Rich signature is at a variable offset in the DOS stub.
-                    // The XOR key is the 4 bytes after "Rich".
+                    // Rich signature: upstream XMSDOS::isRichSignaturePresent
+                    // reads baStub = read_array(sizeof(IMAGE_DOS_HEADER)=0x1C,
+                    // lfanew - 0x1C) only when 0 < nSize <= 0x400, then checks
+                    // baStub.contains("Rich") — a plain substring test (no
+                    // trailing-key requirement, stub past 0x400 is ignored).
                     PE.isRichSignaturePresent = function() {
                         if (!_peIsPE()) return false;
-                        var stubSize = PE.getDosStubSize();
-                        if (stubSize < 8) return false;
-                        // Search for "Rich" (0x52 0x69 0x63 0x68) in DOS stub.
-                        // "Rich" + key = 8 bytes, so search up to stubSize - 8.
-                        for (var i = 64; i <= 64 + stubSize - 8; i++) {
+                        var stubEnd = _peLfanew();
+                        var nSize = stubEnd - 0x1C;
+                        if (nSize <= 0 || nSize > 0x400) return false;
+                        var last = stubEnd - 4;
+                        for (var i = 0x1C; i <= last; i++) {
                             if (_B.read_uint8(i) === 0x52 &&
                                 _B.read_uint8(i + 1) === 0x69 &&
                                 _B.read_uint8(i + 2) === 0x63 &&
@@ -3770,14 +4297,17 @@ impl HostApiBridge {
                         // XORed with key. Search backwards from richOff.
                         var dansVal = 0x536E6144; // "DanS" LE
                         var startOff = -1;
-                        for (var j = richOff - 8; j >= 64; j -= 8) {
+                        // Upstream scans DWORDs backwards in 4-byte steps from
+                        // richOff - 4 down to (but excluding) getDosStubOffset().
+                        // If no DanS marker is found, the record list is empty.
+                        for (var j = richOff - 4; j > 64; j -= 4) {
                             var val = _B.read_uint32_le(j) ^ key;
                             if (val === dansVal) {
                                 startOff = j + 16; // Skip DanS + 3 padding DWORDs (match upstream)
                                 break;
                             }
                         }
-                        if (startOff < 0) startOff = 64;
+                        if (startOff < 0) return _peRichData;
                         // Parse entries from startOff to richOff.
                         // Match upstream XMSDOS::getRichSignatureRecords:
                         //   nId      = (DWORD1 >> 16) & 0xFFFF  (high 16 bits)
@@ -4266,9 +4796,12 @@ impl HostApiBridge {
                     };
 
                     // File path stubs.
-                    PE.getFileDirectory = function() { return ""; };
-                    PE.getFileBaseName = function() { return ""; };
-                    PE.getFileCompleteSuffix = function() { return ""; };
+                    // PE_Script inherits Binary_Script upstream, so the file
+                    // path methods share the QFileInfo-based implementations.
+                    PE.getFileDirectory = Binary.getFileDirectory;
+                    PE.getFileBaseName = Binary.getFileBaseName;
+                    PE.getFileCompleteSuffix = Binary.getFileCompleteSuffix;
+                    PE.getFileSuffix = Binary.getFileSuffix;
 
                     // Debug data: parse PE debug directory (data directory index 6).
                     // Each IMAGE_DEBUG_DIRECTORY_ENTRY is 28 bytes:
@@ -5226,7 +5759,16 @@ impl HostApiBridge {
                     var _machLibsCache = null;
                     function _machLibraries() {
                         if (_machLibsCache !== null) return _machLibsCache;
-                        _machLibsCache = _B.__machoImportLibraries();
+                        // Upstream XMACH::_readLibraryRecord stores
+                        // sName = sFullName.section("/", -1) — the basename.
+                        var full = _B.__machoImportLibraries();
+                        var names = [];
+                        for (var i = 0; i < full.length; i++) {
+                            var s = full[i];
+                            var slash = s.lastIndexOf("/");
+                            names.push(slash >= 0 ? s.substring(slash + 1) : s);
+                        }
+                        _machLibsCache = names;
                         return _machLibsCache;
                     }
 
@@ -5347,7 +5889,11 @@ impl HostApiBridge {
                                     if (b === 0) break;
                                     libName += String.fromCharCode(b);
                                 }
-                                if (libName === name) {
+                                // Upstream compares the basename
+                                // (LIBRARY_RECORD.sName), not the full path.
+                                var slash = libName.lastIndexOf("/");
+                                var base = slash >= 0 ? libName.substring(slash + 1) : libName;
+                                if (base === name) {
                                     return _machReadU32(off + 16);
                                 }
                             }
@@ -5747,21 +6293,23 @@ impl HostApiBridge {
 
                     // JavaClass-specific: parse version from class file header.
                     // Class file: magic (4 bytes, 0xCAFEBABE) + minor (2 bytes, BE) +
-                    // major (2 bytes, BE). Map major version to Java SE string.
+                    // major (2 bytes, BE). Mirrors upstream
+                    // XJavaClass::_getJDKVersion: a major-version lookup table
+                    // ("JDK 1.1".."JDK 1.4", "Java SE 5.0".."Java SE 30") with
+                    // ".{minor}" appended when the minor version is nonzero.
                     JavaClass.getFileFormatVersion = function() {
                         if (Binary.getSize() < 8) return "";
                         // Verify CAFEBABE magic.
                         if (Binary.read_uint8(0) !== 0xCA || Binary.read_uint8(1) !== 0xFE ||
                             Binary.read_uint8(2) !== 0xBA || Binary.read_uint8(3) !== 0xBE) return "";
-                        // Major version at offset 6-7 (big-endian).
+                        var minor = Binary.read_uint8(4) * 256 + Binary.read_uint8(5);
                         var major = Binary.read_uint8(6) * 256 + Binary.read_uint8(7);
-                        // Map major version to Java SE version string.
                         var versionMap = {
-                            45: "Java SE 1.1",
-                            46: "Java SE 2",
-                            47: "Java SE 3",
-                            48: "Java SE 4",
-                            49: "Java SE 5",
+                            45: "JDK 1.1",
+                            46: "JDK 1.2",
+                            47: "JDK 1.3",
+                            48: "JDK 1.4",
+                            49: "Java SE 5.0",
                             50: "Java SE 6",
                             51: "Java SE 7",
                             52: "Java SE 8",
@@ -5778,8 +6326,21 @@ impl HostApiBridge {
                             63: "Java SE 19",
                             64: "Java SE 20",
                             65: "Java SE 21",
+                            66: "Java SE 22",
+                            67: "Java SE 23",
+                            68: "Java SE 24",
+                            69: "Java SE 25",
+                            70: "Java SE 26",
+                            71: "Java SE 27",
+                            72: "Java SE 28",
+                            73: "Java SE 29",
+                            74: "Java SE 30",
                         };
-                        return versionMap[major] || "";
+                        var result = versionMap[major] || "";
+                        if (result !== "" && minor !== 0) {
+                            result += "." + minor;
+                        }
+                        return result;
                     };
 
                     // CFBF-specific: parse version from header.
@@ -5915,46 +6476,93 @@ impl HostApiBridge {
                         return s.trim();
                     }
                     PDF.getFileFormatVersion = function() {
-                        // PDF header: "%PDF-X.Y" at offset 0, version at offset 5.
-                        if (Binary.getSize() < 8) return "";
-                        if (Binary.read_uint8(0) !== 0x25 || Binary.read_uint8(1) !== 0x50) return "";
-                        // Read version string from offset 5 (e.g. "1.4").
-                        var major = Binary.read_uint8(5);
-                        var dot = Binary.read_uint8(6);
-                        var minor = Binary.read_uint8(7);
-                        if (major >= 0x30 && major <= 0x39 && dot === 0x2E && minor >= 0x30 && minor <= 0x39) {
-                            return String.fromCharCode(major) + "." + String.fromCharCode(minor);
+                        // Upstream XPDF::getVersion (@ 23fec32): locate the
+                        // "%PDF-" header (offset 0 fast path, else scan the
+                        // first 1024 bytes), fall back to 0, then read 3 bytes
+                        // at header+5 stopping at NUL/LF/CR (_readPDFString).
+                        var size = Binary.getSize();
+                        var header = -1;
+                        if (size > 4 && Binary.read_uint8(0) === 0x25 &&
+                            Binary.read_uint8(1) === 0x50 &&
+                            Binary.read_uint8(2) === 0x44 &&
+                            Binary.read_uint8(3) === 0x46) {
+                            header = 0;
+                        } else {
+                            var scan = Math.min(size, 1024 + 5);
+                            var off = Binary.find_ansiString(0, scan, "%PDF-");
+                            if (off >= 0 && off <= 1024) header = off;
                         }
-                        return "";
+                        if (header < 0) header = 0;
+                        var start = header + 5;
+                        var end = Math.min(start + 3, size);
+                        var s = "";
+                        for (var i = start; i < end; i++) {
+                            var c = Binary.read_uint8(i);
+                            if (c === 0 || c === 0x0A || c === 0x0D) break;
+                            s += String.fromCharCode(c);
+                        }
+                        return s;
                     };
                     PDF.getHeaderCommentAsHex = function() {
-                        // PDF header comment is the second line starting with '%'
-                        // after the "%PDF-X.Y" first line. It is typically
-                        // "%âãÏÓ" (high bytes indicating binary PDF).
-                        // Return the hex encoding of the comment bytes (without
-                        // the leading '%' and trailing newline).
-                        if (Binary.getSize() < 10) return "";
-                        // Find the first newline after "%PDF-X.Y".
-                        var nl = -1;
-                        for (var i = 5; i < Binary.getSize() && i < 100; i++) {
-                            if (Binary.read_uint8(i) === 0x0A) { nl = i; break; }
+                        // Upstream XPDF::getHeaderCommentAsHex: read the
+                        // first line from the header offset via
+                        // _readPDFString (100-byte cap, terminator set
+                        // {NUL, CR, LF}), then require '%' and hex-encode
+                        // up to 40 bytes until the next terminator.
+                        var size = Binary.getSize();
+                        if (size < 10) return "";
+                        // Header offset: offset-0 fast path else first
+                        // "%PDF-" within the first 1024 bytes.
+                        var header = -1;
+                        if (size > 4 && Binary.read_uint8(0) === 0x25 &&
+                            Binary.read_uint8(1) === 0x50 &&
+                            Binary.read_uint8(2) === 0x44 &&
+                            Binary.read_uint8(3) === 0x46) {
+                            header = 0;
+                        } else {
+                            var scan = Math.min(size, 1029);
+                            var off = Binary.find_ansiString(0, scan, "%PDF-");
+                            if (off >= 0 && off <= 1024) header = off;
                         }
-                        if (nl < 0 || nl + 1 >= Binary.getSize()) return "";
-                        // Second line starts at nl+1, should start with '%'.
-                        var start = nl + 1;
-                        if (Binary.read_uint8(start) !== 0x25) return "";
-                        // Read until next newline or EOF, up to 20 bytes.
+                        if (header < 0) header = 0;
+                        // Skip the first line (string + line ending).
+                        var pos = header;
+                        var lineEnd = Math.min(header + 100, size);
+                        while (pos < lineEnd) {
+                            var c = Binary.read_uint8(pos);
+                            if (c === 0 || c === 0x0A || c === 0x0D) break;
+                            pos++;
+                        }
+                        // skipPDFEnding: consume ALL consecutive line
+                        // endings (LF, or CR with optional LF). Upstream
+                        // loops over them; NUL is not an ending.
+                        while (pos < size) {
+                            var e = Binary.read_uint8(pos);
+                            if (e === 0x0D) {
+                                pos++;
+                                if (pos < size && Binary.read_uint8(pos) === 0x0A) pos++;
+                            } else if (e === 0x0A) {
+                                pos++;
+                            } else {
+                                break;
+                            }
+                        }
+                        if (pos >= size || Binary.read_uint8(pos) !== 0x25) return "";
+                        pos++;
+                        var maxRead = Math.min(40, size - pos);
                         var hex = "";
-                        for (var j = start + 1; j < Binary.getSize() && j < start + 21; j++) {
-                            var b = Binary.read_uint8(j);
-                            if (b === 0x0A || b === 0x0D) break;
+                        for (var j = 0; j < maxRead; j++) {
+                            var b = Binary.read_uint8(pos + j);
+                            if (b === 0 || b === 0x0A || b === 0x0D) break;
                             var h = b.toString(16);
                             if (h.length < 2) h = "0" + h;
                             hex += h;
                         }
                         return hex;
                     };
-                    PDF.getStringValuesByKey = function(key) { return []; };
+                    PDF.getStringValuesByKey = function(key) {
+                        return Binary.__pdfGetStringValuesByKey(key);
+                    };
                     // PDF encryption support (upstream XPDF::isEncrypted /
                     // getEncryption / getPermissions @ XPDF 8ef2a804).
                     // Backed by native __pdf* helpers registered on Binary.
@@ -5983,10 +6591,14 @@ impl HostApiBridge {
                     Jpeg.isVerbose = function() { return false; };
                     Jpeg.isDeepScan = function() { return false; };
                     Jpeg.isHeuristicScan = function() { return false; };
-                    Jpeg.isChunkPresent = function(chunkId) { return false; };
-                    Jpeg.getComment = function() { return ""; };
-                    Jpeg.getDqtMD5 = function(n) { return ""; };
-                    Jpeg.getExifCameraName = function() { return ""; };
+                    Jpeg.isChunkPresent = function(chunkId) {
+                        return Binary.__jpegIsChunkPresent(chunkId);
+                    };
+                    Jpeg.getComment = function() { return Binary.__jpegGetComment(); };
+                    Jpeg.getDqtMD5 = function(n) { return Binary.__jpegGetDqtMd5(); };
+                    Jpeg.getExifCameraName = function() {
+                        return Binary.__jpegGetExifCameraName();
+                    };
                 })();
                 "#,
             )
@@ -6116,6 +6728,31 @@ impl HostApiBridge {
                     };
                     X.c = Binary.c;
                     File.c = Binary.c;
+
+                    // getHeaderString: upstream Binary_Script caches
+                    // m_sHeaderString at init — UTF-16 (skip 2-byte BOM) >
+                    // UTF-8 (offset 3 unconditionally, BOM assumed) > ANSI
+                    // plain text; empty string for binary input.
+                    Binary.getHeaderString = function() {
+                        var maxSize = Math.min(Binary.getSize(), 0x1000);
+                        if (maxSize <= 0) return "";
+                        var b0 = Binary.read_uint8(0), b1 = Binary.read_uint8(1);
+                        if (b0 === 0xFF && b1 === 0xFE) {
+                            return Binary.read_unicodeString(2, maxSize, false);
+                        }
+                        if (b0 === 0xFE && b1 === 0xFF) {
+                            return Binary.read_unicodeString(2, maxSize, true);
+                        }
+                        if (Binary.isUTF8Text()) {
+                            return Binary.read_utf8String(3, maxSize);
+                        }
+                        if (Binary.isPlainText()) {
+                            return Binary.read_ansiString(0, maxSize);
+                        }
+                        return "";
+                    };
+                    X.getHeaderString = Binary.getHeaderString;
+                    File.getHeaderString = Binary.getHeaderString;
 
                     // readBytes wrapper: readBytes(offset, size, replaceZeroWithSpace?)
                     var _orig_rb = Binary.__readBytes;
@@ -6327,18 +6964,9 @@ impl HostApiBridge {
                         }
                         return true;
                     };
-                    // File path methods.
-                    Binary.getFileDirectory = function() {
-                        var name = Binary.getFileName();
-                        var idx = name.lastIndexOf('/');
-                        if (idx < 0) idx = name.lastIndexOf('\\');
-                        return idx >= 0 ? name.substring(0, idx) : "";
-                    };
-                    Binary.getFileCompleteSuffix = function() {
-                        var name = Binary.getFileName();
-                        var idx = name.lastIndexOf('.');
-                        return idx >= 0 ? name.substring(idx) : "";
-                    };
+                    // File path methods are native implementations
+                    // (getFileDirectory/getFileBaseName/getFileCompleteSuffix/
+                    // getFileSuffix follow QFileInfo semantics).
                     // Address conversion: PE-specific via lfanew, generic 0 otherwise.
                     Binary.getImageBase = function() {
                         // PE: ImageBase from Optional Header.
@@ -7175,7 +7803,33 @@ fn disasm_at_va(
 
         let insn = insns.iter().next().unwrap();
         if return_next {
-            let next = insn.address() + insn.bytes().len() as u64;
+            // Upstream Capstone_Bridge::_disasm: for relative branch/call
+            // instructions (CS_GRP_BRANCH_RELATIVE with an immediate
+            // operand) nNextAddress is the branch target, not the
+            // sequential address — the rule engine follows control flow.
+            let mut next = insn.address() + insn.bytes().len() as u64;
+            if let Ok(detail) = cs.insn_detail(insn) {
+                const CS_GRP_BRANCH_RELATIVE: capstone::InsnGroupIdInt = 7;
+                let is_branch = detail
+                    .groups()
+                    .iter()
+                    .any(|g| g.0 == CS_GRP_BRANCH_RELATIVE);
+                if is_branch {
+                    use capstone::arch::DetailsArchInsn;
+                    use capstone::arch::x86::{X86Operand, X86OperandType};
+                    let arch = detail.arch_detail();
+                    let operands: Vec<X86Operand> = arch
+                        .x86()
+                        .map(|x| x.operands().collect())
+                        .unwrap_or_default();
+                    for op in operands {
+                        if let X86OperandType::Imm(target) = op.op_type {
+                            next = target as u64;
+                            break;
+                        }
+                    }
+                }
+            }
             Ok(format!("{}", next))
         } else {
             let mnem = insn.mnemonic().unwrap_or("");

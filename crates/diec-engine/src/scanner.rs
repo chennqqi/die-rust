@@ -36,7 +36,25 @@ use std::sync::Arc;
 /// format-specific and Binary rules are run, because the format-specific
 /// host APIs (Jpeg, Pdf, etc.) are not yet implemented and the Binary
 /// rules provide the actual detection logic using the generic API.
-fn detect_rule_types(data: &[u8]) -> Vec<&'static str> {
+/// Whether the file name ends with a `.COM` suffix, the sole criterion
+/// upstream uses to insert `FT_COM` into the detected type set
+/// (`xformats.cpp::_getFileTypes`: `getDeviceFileSuffix(device) == "COM"`).
+fn has_com_suffix(file_name: &str) -> bool {
+    file_name
+        .rsplit('.')
+        .next()
+        .map(|ext| ext.eq_ignore_ascii_case("com"))
+        .unwrap_or(false)
+        && file_name.contains('.')
+}
+
+/// Upstream `XCOM::isValid`: the whole image must fit in the 16-bit COM
+/// address space (`XCOM_DEF::IMAGESIZE - ADDRESS_BEGIN` = 0xFF00 bytes).
+fn com_image_valid(data_len: usize) -> bool {
+    data_len <= 0xFF00
+}
+
+fn detect_rule_types(data: &[u8], file_name: &str) -> Vec<&'static str> {
     let source = MemorySource::new(data);
     let range = ByteRange::new(0, source.len()).unwrap_or(ByteRange {
         start: 0,
@@ -74,6 +92,19 @@ fn detect_rule_types(data: &[u8]) -> Vec<&'static str> {
     {
         return vec!["MACH"];
     }
+    // MZ subtypes promoted from the signature at e_lfanew, matching the
+    // upstream dispatch order LX -> LE -> NE (xscanengine.cpp: FT_LX,
+    // FT_LE, FT_NE branches all precede FT_MSDOS). They are disjoint in
+    // practice because a file carries exactly one signature at e_lfanew.
+    if detected.contains(&"LX") {
+        return vec!["LX"];
+    }
+    if detected.contains(&"LE") {
+        return vec!["LE"];
+    }
+    if detected.contains(&"NE") {
+        return vec!["NE"];
+    }
     // Java Class must be checked BEFORE Mach-O FAT because CAFEBABE is
     // the magic for both. The JavaClassProbe validates major version >= 45,
     // so a real Java Class file will match both probes, but Java Class is
@@ -92,36 +123,42 @@ fn detect_rule_types(data: &[u8]) -> Vec<&'static str> {
         return vec!["MACHOFAT"];
     }
 
-    // Non-executable formats: run only format-specific rules.
-    // Binary rules are NOT run for recognized formats to avoid duplicate
-    // detections (e.g., Binary/image_png.1.sg and PNG/format_png.1.sg both
-    // detect PNG). This matches upstream behavior where format-specific
-    // rules take precedence once a format is identified.
-    //
-    // Exception: archive formats (ZIP, APK, JAR, RAR, IPA) also run Binary
-    // rules because the archive:Zip/archive:RAR detections come from
-    // Binary/archive_*.1.sg rules, not from the format-specific _*.0.sg
-    // rules (which only output format:ZIP/format:RAR).
+    // Non-executable formats: run only the detected format's rule group.
+    // This mirrors the upstream dispatch chain in XScanEngine::scanProcess
+    // (xscanengine.cpp): once stFT contains a recognized type, only that
+    // type's rules run — Binary rules run only in the trailing fallback.
+    // Upstream quirks reproduced here:
+    // - IPA: the FT_IPA branch is commented out upstream, so IPA files are
+    //   scanned with the Binary group instead.
+    // - Archive subtypes that upstream tracks as FT_ARCHIVE (GZIP, 7z, TAR,
+    //   CAB) fall through to the Binary fallback, matching upstream's
+    //   else-branch which runs COM+Binary.
+    // - ZIP/APK/JAR/RAR/NPM/ISO9660/PNG/JPEG run their own group only; the
+    //   upstream `FT_BINARY` companion call for ZIP is commented out.
     let mut types: Vec<&'static str> = Vec::new();
-    let mut run_binary = false;
 
     if detected.contains(&"MSDOS") {
         types.push("MSDOS");
     }
     if detected.contains(&"APK") {
         types.push("APK");
-        run_binary = true;
+    }
+    if detected.contains(&"IPA") {
+        // Upstream scans IPA with the Binary rule group (the FT_IPA branch
+        // in scanProcess is commented out).
+        types.push("Binary");
     }
     if detected.contains(&"JAR") {
         types.push("JAR");
-        run_binary = true;
     }
     if detected.contains(&"ZIP") {
         types.push("ZIP");
-        run_binary = true;
     }
     if detected.contains(&"DEX") {
         types.push("DEX");
+    }
+    if detected.contains(&"NPM") {
+        types.push("NPM");
     }
     if detected.contains(&"PDF") {
         types.push("PDF");
@@ -131,7 +168,6 @@ fn detect_rule_types(data: &[u8]) -> Vec<&'static str> {
     }
     if detected.contains(&"RAR") {
         types.push("RAR");
-        run_binary = true;
     }
     if detected.iter().any(|&n| n == "ISO 9660" || n == "ISO9660") {
         types.push("ISO9660");
@@ -148,20 +184,28 @@ fn detect_rule_types(data: &[u8]) -> Vec<&'static str> {
     {
         types.push("PYC");
     }
-    if detected.contains(&"NPM") {
-        types.push("NPM");
-    }
-
-    // Archive formats need Binary rules for archive:* detections.
-    if run_binary {
-        types.push("Binary");
-    }
 
     // If no format-specific type was identified, fall back to Binary rules.
     // This handles unrecognized files (plain text, empty, etc.) and any
     // format we don't yet have a specific rule directory for.
     if types.is_empty() {
-        types.push("Binary");
+        // Upstream `XScanEngine::scanProcess`: files that survive to the
+        // COM/archive fallback are first offered to the COM rule group.
+        // With a ".COM" file suffix and a 16-bit-fitting image, FT_COM is
+        // in stFT and the COM group runs as the primary type (Binary only
+        // joins under deep scan, which is off by default). Otherwise the
+        // COM group still runs non-primary — upstream appends its
+        // non-generic records after the Binary results.
+        if com_image_valid(data.len()) && has_com_suffix(file_name) {
+            types.push("COM");
+        } else {
+            if com_image_valid(data.len()) {
+                types.push("Binary");
+                types.push("COM");
+            } else {
+                types.push("Binary");
+            }
+        }
     }
 
     types
@@ -259,27 +303,48 @@ fn dedup_detections(detections: &mut Vec<ScanDetection>) {
 /// positives (e.g., an ELF file matching JPEG/PDF/PNG byte patterns). This
 /// function delegates to `detect_rule_types` for the probe, then appends
 /// the compatible parent types.
-fn alltypes_rule_types(data: &[u8]) -> Vec<&'static str> {
-    let mut types = detect_rule_types(data);
+/// Check whether the probe layer classified the buffer as IPA.
+///
+/// `detect_rule_types` maps IPA to the Binary rule group (the upstream
+/// FT_IPA dispatch branch is commented out), so the IPA membership is no
+/// longer visible in its return value; re-probe cheaply for alltypes.
+fn detected_ipa(data: &[u8]) -> bool {
+    let source = MemorySource::new(data);
+    let Some(range) = ByteRange::new(0, source.len()) else {
+        return false;
+    };
+    let Some(view) = ByteView::new(&source, range) else {
+        return false;
+    };
+    let table = ProbeTable::default_phase2();
+    let (candidates, _errors) = table.probe_all(&view);
+    candidates.iter().any(|c| c.file_type.name == "IPA")
+}
+
+fn alltypes_rule_types(data: &[u8], file_name: &str) -> Vec<&'static str> {
+    let mut types = detect_rule_types(data, file_name);
 
     // Compatible parent types: container/wrapper formats also run their
     // parent format's rules.
     let has_pe = types.contains(&"PE");
     let has_apk = types.contains(&"APK");
+    let has_ipa = detected_ipa(data);
     let has_jar = types.contains(&"JAR");
-    let has_machofat = types.contains(&"MACHOFAT");
 
-    if has_pe {
+    // Upstream runs the MSDOS rule group for every MZ-derived executable
+    // (PE32/PE64/LE/LX/NE), not just PE (xscanengine.cpp prepass).
+    let has_dos_exec =
+        has_pe || types.contains(&"NE") || types.contains(&"LE") || types.contains(&"LX");
+    if has_dos_exec {
         types.push("MSDOS");
     }
-    if has_apk {
+    // Upstream prepass: APK and IPA additionally run the JAR and ZIP
+    // rule groups; a plain JAR additionally runs ZIP rules.
+    if has_apk || has_ipa {
         types.push("JAR");
         types.push("ZIP");
     } else if has_jar {
         types.push("ZIP");
-    }
-    if has_machofat {
-        types.push("MACH");
     }
 
     // Deduplicate while preserving order.
@@ -447,9 +512,9 @@ pub fn scan_bytes(
     let active_types: Vec<&str> = if let Some(ref ft) = flags.file_type {
         vec![ft.as_str()]
     } else if flags.all_types {
-        alltypes_rule_types(&data)
+        alltypes_rule_types(&data, file_name)
     } else {
-        detect_rule_types(&data)
+        detect_rule_types(&data, file_name)
     };
 
     // Group rules by file type, but only for types that match the
@@ -513,26 +578,26 @@ pub fn scan_bytes(
             continue;
         }
 
-        // Evaluate each rule in an isolated scope.
-        // _FixDetects rules are executed inline (not deferred) because
-        // upstream's sort_signature_prio places them before most other rules
-        // (all .sg files have the same priority "sg", then sorted by name,
-        // and "_FixDetects" < "compiler"/"packer"/etc). Since _FixDetects
-        // checks _getNumberOfResults/_isResultPresent, and per-rule isolation
-        // means those always return 0/false, _FixDetects is effectively a
-        // no-op — matching upstream behavior.
+        // Evaluate each rule in an isolated scope over a shared result
+        // list. Upstream sorts signatures ascending by the priority digit in
+        // the file name (`sort_signature_prio`) so post-processing rules like
+        // `_FixDetects.9.sg` run last and observe every result appended to
+        // the shared `m_pListScanStructs` — `_isResultPresent`,
+        // `_getNumberOfResults` and `_removeResult` must see prior rules'
+        // records (e.g. `_Microsoft.6.sg` skips its Rich-derived MSVC record
+        // when an EP-based compiler result already exists).
+        if let Err(e) = runtime.begin_result_group() {
+            diagnostics.push(format!("result group reset error for {file_type}: {e}"));
+            continue;
+        }
         for rule in rules {
             if cancel.is_cancelled() {
                 return Err(ScanError::Cancelled);
             }
 
             let start = std::time::Instant::now();
-            match runtime.evaluate_rule_source(&rule.path, &rule.source, cancel) {
-                Ok(results) => {
-                    for result in results {
-                        detections.push(detection_from_result(&rule.file_type, &rule.path, result));
-                    }
-                }
+            match runtime.evaluate_rule_in_group(&rule.path, &rule.source, cancel) {
+                Ok(()) => {}
                 Err(e) => {
                     let msg = format!("{}: {}", rule.path, e);
                     diagnostics.push(msg.clone());
@@ -544,10 +609,28 @@ pub fn scan_bytes(
                     });
                 }
             }
+            // Non-fatal rule diagnostics (upstream PDSTRUCT error list —
+            // e.g. "Invalid signature" from malformed upstream rules) are
+            // attributed to the rule that produced them.
+            for msg in host.drain_scan_errors() {
+                diagnostics.push(format!("{}: {}", rule.path, msg));
+            }
             profiling.push(SignatureProfile {
                 file: rule.path.clone(),
                 elapsed_ms: start.elapsed().as_millis() as u64,
             });
+        }
+
+        // Emit the group's surviving results once, attributed by the rule
+        // stamp so records removed by `_removeResult` are excluded.
+        match runtime.read_results() {
+            Ok(results) => {
+                for result in results {
+                    let rule_path = result.rule_path.clone();
+                    detections.push(detection_from_result(file_type, &rule_path, result));
+                }
+            }
+            Err(e) => diagnostics.push(format!("read results error for {file_type}: {e}")),
         }
 
         runtime.shutdown();
@@ -794,9 +877,9 @@ impl Scanner {
         let active_types: Vec<&str> = if let Some(ref ft) = flags.file_type {
             vec![ft.as_str()]
         } else if flags.all_types {
-            alltypes_rule_types(&data)
+            alltypes_rule_types(&data, file_name)
         } else {
-            detect_rule_types(&data)
+            detect_rule_types(&data, file_name)
         };
 
         // Group rules by file type.
@@ -853,7 +936,14 @@ impl Scanner {
                 continue;
             }
 
-            // Evaluate each rule in an isolated scope.
+            // Evaluate each rule in an isolated scope over a shared result
+            // list, matching upstream `m_pListScanStructs` semantics so that
+            // `_isResultPresent`/`_removeResult` see prior rules' records.
+            if let Err(e) = cached.runtime.begin_result_group() {
+                diagnostics.push(format!("result group reset error for {file_type}: {e}"));
+                self.cache.remove(*file_type);
+                continue;
+            }
             let mut runtime_error = false;
             for rule in rules {
                 if cancel.is_cancelled() {
@@ -863,17 +953,9 @@ impl Scanner {
                 let start = std::time::Instant::now();
                 match cached
                     .runtime
-                    .evaluate_rule_source(&rule.path, &rule.source, cancel)
+                    .evaluate_rule_in_group(&rule.path, &rule.source, cancel)
                 {
-                    Ok(results) => {
-                        for result in results {
-                            detections.push(detection_from_result(
-                                &rule.file_type,
-                                &rule.path,
-                                result,
-                            ));
-                        }
-                    }
+                    Ok(()) => {}
                     Err(e) => {
                         let msg = format!("{}: {}", rule.path, e);
                         diagnostics.push(msg.clone());
@@ -896,10 +978,27 @@ impl Scanner {
                         }
                     }
                 }
+                // Non-fatal rule diagnostics (upstream PDSTRUCT error list)
+                // are attributed to the rule that produced them.
+                for msg in host.drain_scan_errors() {
+                    diagnostics.push(format!("{}: {}", rule.path, msg));
+                }
                 profiling.push(SignatureProfile {
                     file: rule.path.clone(),
                     elapsed_ms: start.elapsed().as_millis() as u64,
                 });
+            }
+
+            // Emit the group's surviving results once, attributed by the
+            // rule stamp so records removed by `_removeResult` are excluded.
+            match cached.runtime.read_results() {
+                Ok(results) => {
+                    for result in results {
+                        let rule_path = result.rule_path.clone();
+                        detections.push(detection_from_result(file_type, &rule_path, result));
+                    }
+                }
+                Err(e) => diagnostics.push(format!("read results error for {file_type}: {e}")),
             }
 
             // If the runtime hit a budget limit, evict it.
@@ -1302,7 +1401,12 @@ mod tests {
             }
         };
 
-        // RAR v4 signature: Rar!\x1a\x07\x00 (needs >= 64 bytes)
+        // RAR v4 signature: Rar!\x1a\x07\x00 + MAIN_HEAD (needs >= 64 bytes
+        // for the Binary archive_RAR rule's nSize check). The header chain
+        // is intentionally incomplete (no ENDARC), so upstream
+        // XRar::isValid rejects it and the file falls back to the Binary
+        // group — where archive_RAR.1.sg still fires on the marker.
+        // Upstream oracle: Binary / archive: RAR (4).
         let mut data: Vec<u8> = vec![
             0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00, 0xCF, 0x90, 0x73, 0x00, 0x00, 0x0D, 0x00,
             0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
@@ -1319,10 +1423,13 @@ mod tests {
         )
         .unwrap();
 
-        let found = result.detections.iter().any(|d| d.name.contains("RAR"));
+        let found = result
+            .detections
+            .iter()
+            .any(|d| d.file_type == "Binary" && d.name == "RAR");
         assert!(
             found,
-            "Expected RAR detection, got: {:?}",
+            "Expected Binary archive RAR detection, got: {:?}",
             result.detections
         );
     }
@@ -1337,7 +1444,7 @@ mod tests {
             0x38, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let types = detect_rule_types(&elf_header);
+        let types = detect_rule_types(&elf_header, "test.elf");
         assert!(
             types.contains(&"ELF"),
             "Expected ELF in detected types, got: {:?}",
@@ -1364,7 +1471,7 @@ mod tests {
             0x38, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let types = alltypes_rule_types(&elf_header);
+        let types = alltypes_rule_types(&elf_header, "test.elf");
         assert!(types.contains(&"ELF"), "ELF must be in --alltypes types");
         // Unrelated formats must NOT appear.
         for bad in [
@@ -1409,7 +1516,7 @@ mod tests {
             h
         };
 
-        let types = alltypes_rule_types(&pe_header);
+        let types = alltypes_rule_types(&pe_header, "test.exe");
         assert!(types.contains(&"PE"), "PE must be in --alltypes types");
         assert!(
             types.contains(&"MSDOS"),
@@ -1430,9 +1537,18 @@ mod tests {
     fn detect_rule_types_macho_fat() {
         // Mach-O FAT magic is CAFEBABE — same as Java Class File.
         // Binary rules must NOT run to avoid false positive.
-        let macho_fat_header: Vec<u8> = vec![0xCA, 0xFE, 0xBA, 0xBE, 0x00, 0x00, 0x00, 0x02];
+        // Structurally valid FAT header: nfat=1 plus one arch record whose
+        // offset/size fall inside the file.
+        let mut macho_fat_header: Vec<u8> = vec![0xCA, 0xFE, 0xBA, 0xBE];
+        macho_fat_header.extend_from_slice(&1u32.to_be_bytes()); // nfat_arch
+        macho_fat_header.extend_from_slice(&7u32.to_be_bytes()); // cputype = x86
+        macho_fat_header.extend_from_slice(&3u32.to_be_bytes()); // cpusubtype
+        macho_fat_header.extend_from_slice(&48u32.to_be_bytes()); // offset
+        macho_fat_header.extend_from_slice(&4u32.to_be_bytes()); // size
+        macho_fat_header.extend_from_slice(&0u32.to_be_bytes()); // align
+        macho_fat_header.resize(52, 0);
 
-        let types = detect_rule_types(&macho_fat_header);
+        let types = detect_rule_types(&macho_fat_header, "test.bin");
         assert!(
             types.contains(&"MACHOFAT"),
             "Expected MACHOFAT in detected types, got: {:?}",
@@ -1452,11 +1568,17 @@ mod tests {
         // JPEG is a non-executable format — only JPEG rules should run,
         // not Binary rules (to avoid duplicate detections from
         // Binary/image_jpeg.1.sg and JPEG/format_jpeg.1.sg).
-        let jpeg_header: Vec<u8> = vec![
-            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-        ];
+        // Upstream XJpeg::isValid requires a complete SOI..EOI marker
+        // chain, so the fixture must be a structurally complete JPEG.
+        let jpeg_header: Vec<u8> = {
+            let mut d = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+            d.extend_from_slice(b"JFIF\0");
+            d.extend_from_slice(&[0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00]);
+            d.extend_from_slice(&[0xFF, 0xD9]);
+            d
+        };
 
-        let types = detect_rule_types(&jpeg_header);
+        let types = detect_rule_types(&jpeg_header, "test.jpg");
         assert!(
             types.contains(&"JPEG"),
             "Expected JPEG in detected types, got: {:?}",

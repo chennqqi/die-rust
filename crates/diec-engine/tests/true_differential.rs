@@ -135,12 +135,10 @@ fn golden_detections(case: &GoldenCase) -> Vec<(String, String, String)> {
         // rule-based detection (not just probe-level format identification).
         let ft = detect.filetype.as_str();
         let ft_mapping = match ft {
-            "ZIP" => Some(("archive", "Zip")),
-            "APK" => Some(("archive", "Zip")),
-            "JAR" => Some(("archive", "Zip")),
-            "IPA" => Some(("archive", "Zip")),
-            "TAR" => Some(("archive", "tar")),
-            "RAR" => Some(("archive", "RAR")),
+            // ZIP/APK/JAR/IPA/RAR/TAR: upstream dispatch is exclusive —
+            // these filetypes run only their own rule group, which emits
+            // "Unknown" on minimal fixtures. diec-rust now matches, so no
+            // synthetic archive:* expectation is added.
             "PDF" => Some(("format", "PDF")),
             "CFBF" => Some(("format", "CFBF")),
             "DEX" => Some(("format", "DEX")),
@@ -148,9 +146,9 @@ fn golden_detections(case: &GoldenCase) -> Vec<(String, String, String)> {
             "PNG" => Some(("format", "PNG")),
             "JPEG" => Some(("format", "JPEG")),
             "Amiga Hunk" => Some(("format", "Amiga loadable file")),
-            "LE" => Some(("type", "le")),
-            "LX" => Some(("type", "lx")),
-            "NE" => Some(("type", "ne")),
+            // NE/LE/LX: upstream promotes MZ subtypes via the e_lfanew
+            // signature and emits only "Unknown" for these fixtures, which
+            // diec-rust now matches exactly. No synthetic mapping needed.
             // PE/ELF/Mach-O: diec-rust does not produce format detections
             // for these (probe layer handles identification). Skip.
             // NPM: diec-rust lacks NPM rule support (needs archive extraction).

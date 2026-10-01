@@ -27,16 +27,25 @@ impl FormatProbe for PdfProbe {
     }
 
     fn probe(&self, view: &ByteView<'_>) -> Result<Option<ProbeOutcome>, ProbeError> {
+        // Upstream XPDF::getHeaderOffset: "%PDF" at offset 0 fast path;
+        // otherwise `'%PDF-'` is searched in the first 1024+5 bytes and must
+        // land at offset <= 1024 (BOM / mail-mangling / embedding).
         if view.len() < 5 {
             return Ok(None);
         }
-        let mut magic = [0u8; 5];
-        view.read_exact_at(0, &mut magic)
+        let n_scan = (view.len() as usize).min(1024 + 5);
+        let mut head = vec![0u8; n_scan];
+        view.read_exact_at(0, &mut head)
             .map_err(|cause| ProbeError::Truncated {
                 file_type: FileType::new("PDF"),
                 cause,
             })?;
-        if magic == PDF_MAGIC {
+        let found = head[..4] == [0x25, 0x50, 0x44, 0x46]
+            || head
+                .windows(PDF_MAGIC.len())
+                .position(|w| w == PDF_MAGIC)
+                .is_some_and(|p| p <= 1024);
+        if found {
             Ok(Some(ProbeOutcome {
                 candidate: strong_deferred("PDF"),
             }))
@@ -190,12 +199,24 @@ mod tests {
 
     #[test]
     fn pdf_partial_magic_does_not_match() {
-        // First 4 bytes correct, 5th wrong.
-        let data = [0x25u8, 0x50, 0x44, 0x46, 0x00];
+        // Upstream getHeaderOffset requires "%PDF" at offset 0 (or "%PDF-"
+        // within the first 1024 bytes); a wrong 4th byte must not match.
+        let data = [0x25u8, 0x50, 0x44, 0x00, 0x2D];
         let src = MemorySource::new(&data);
         let view = view_of(&src);
         let probe = PdfProbe;
         assert!(probe.probe(&view).unwrap().is_none());
+    }
+
+    /// Upstream accepts a bare "%PDF" magic at offset 0 (4 bytes only) —
+    /// the version tail is not validated by getHeaderOffset.
+    #[test]
+    fn pdf_bare_magic_matches() {
+        let data = [0x25u8, 0x50, 0x44, 0x46, 0x00];
+        let src = MemorySource::new(&data);
+        let view = view_of(&src);
+        let probe = PdfProbe;
+        assert!(probe.probe(&view).unwrap().is_some());
     }
 
     #[test]

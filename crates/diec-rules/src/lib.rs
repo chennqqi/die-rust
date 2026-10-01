@@ -37,6 +37,7 @@ pub mod host_api_bridge;
 ///
 /// Replaces hand-written JavaScript PE parsing with native Rust.
 pub mod elf_native;
+pub mod jpeg_native;
 pub mod macho_native;
 pub mod pe_native;
 

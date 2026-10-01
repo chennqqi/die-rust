@@ -54,6 +54,8 @@ RUN mkdir -p /opt/die-evidence \
         -B /opt/die-build \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+        -DCMAKE_CXX_FLAGS=-DUSE_ARCHIVE \
+        -DXFORMATS_USE_ARCHIVE=ON \
     && cmake --build /opt/die-build \
         --target diec \
         --parallel "$(nproc)" \

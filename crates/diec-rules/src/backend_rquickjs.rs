@@ -154,8 +154,25 @@ impl RquickjsRuntime {
 
         let globals_js = format!(
             r#"
+            // Align the JS surface with upstream Qt 6.4 V4 engine: ES2023
+            // additions to Array.prototype (with/toSorted/toReversed/toSpliced/
+            // findLast/findLastIndex) do not exist upstream. Rules use plain
+            // arrays as string-keyed dictionaries (e.g. TrueTypeTags[s]); a
+            // key colliding with a modern builtin returns a truthy function in
+            // QuickJS while upstream yields undefined, producing false-positive
+            // detections (observed: TrueType font FP on "with" in pdf.asm).
+            delete Array.prototype.with;
+            delete Array.prototype.toSorted;
+            delete Array.prototype.toReversed;
+            delete Array.prototype.toSpliced;
+            delete Array.prototype.findLast;
+            delete Array.prototype.findLastIndex;
             var __diec_results = [];
             var __diec_block_list = [];
+            // Path of the rule currently being evaluated. Stamped onto each
+            // pushed result so accumulated results can be attributed after a
+            // shared (upstream m_pListScanStructs-style) result group ends.
+            var __diec_current_rule = "";
             // Endian constants (used by read_uintN methods)
             var _LE = 0;
             var _BE = 1;
@@ -182,6 +199,7 @@ impl RquickjsRuntime {
                     name: name,
                     version: String(version),
                     options: String(options),
+                    rule: __diec_current_rule,
                     lang: "",
                     langVersion: "",
                     id: null,
@@ -396,6 +414,7 @@ impl RquickjsRuntime {
                 let is_heuristic: Option<bool> = obj.get("isHeuristic").ok().flatten();
                 let is_a_heuristic: Option<bool> = obj.get("isAHeuristic").ok().flatten();
                 let original_name: Option<String> = obj.get("originalName").ok().flatten();
+                let rule_path: String = obj.get("rule").unwrap_or_default();
 
                 results.push(DetectionResult {
                     type_name,
@@ -412,15 +431,28 @@ impl RquickjsRuntime {
                     is_heuristic,
                     is_a_heuristic,
                     original_name,
+                    rule_path,
                 });
             }
             Ok(results)
         })
     }
 
-    /// Clear the `__diec_results` array.
+    /// Clear the `__diec_results` array, the block list, and the current-rule
+    /// stamp. Called at the start of each shared result group (one file type
+    /// group of one scanned file), matching upstream where the result list
+    /// and block list live for a single scan.
     fn clear_results(&self) -> Result<(), RuleError> {
-        self.eval_script("__diec_results.length = 0;")
+        self.eval_script(
+            "__diec_results.length = 0; __diec_block_list.length = 0; __diec_current_rule = \"\";",
+        )
+    }
+
+    /// Start a shared result group: clear accumulated results and the block
+    /// list so subsequent `evaluate_rule_in_group` calls see a fresh
+    /// `m_pListScanStructs`-equivalent state.
+    pub fn begin_result_group(&mut self) -> Result<(), RuleError> {
+        self.clear_results()
     }
 
     /// Evaluate a script source in the context with sloppy mode (non-strict).
@@ -585,7 +617,7 @@ impl RquickjsRuntime {
         rule_source: &str,
         cancel: &CancellationToken,
     ) -> Result<Vec<DetectionResult>, RuleError> {
-        self.evaluate_rule_source_impl(rule_path, rule_source, cancel, true)
+        self.evaluate_rule_source_impl(rule_path, rule_source, cancel, true, true)
     }
 
     /// Evaluate a rule source without clearing `__diec_results` first.
@@ -597,7 +629,24 @@ impl RquickjsRuntime {
         rule_source: &str,
         cancel: &CancellationToken,
     ) -> Result<Vec<DetectionResult>, RuleError> {
-        self.evaluate_rule_source_impl(rule_path, rule_source, cancel, false)
+        self.evaluate_rule_source_impl(rule_path, rule_source, cancel, false, true)
+    }
+
+    /// Evaluate a rule source inside a shared result group without clearing
+    /// `__diec_results` and without reading results back. Results accumulate
+    /// across the group (upstream `m_pListScanStructs` semantics) and are
+    /// fetched once with [`read_results`] after the group's rules ran, so
+    /// that `_removeResult` can retroactively drop earlier records.
+    ///
+    /// [`read_results`]: Self::read_results
+    pub fn evaluate_rule_in_group(
+        &mut self,
+        rule_path: &str,
+        rule_source: &str,
+        cancel: &CancellationToken,
+    ) -> Result<(), RuleError> {
+        self.evaluate_rule_source_impl(rule_path, rule_source, cancel, false, false)?;
+        Ok(())
     }
 
     fn evaluate_rule_source_impl(
@@ -606,6 +655,7 @@ impl RquickjsRuntime {
         rule_source: &str,
         cancel: &CancellationToken,
         clear: bool,
+        read: bool,
     ) -> Result<Vec<DetectionResult>, RuleError> {
         if !self.initialized {
             return Err(RuleError::Backend {
@@ -624,6 +674,15 @@ impl RquickjsRuntime {
         if clear {
             self.clear_results()?;
         }
+
+        // Stamp subsequently pushed results with the rule path.
+        self.context.with(|ctx: Ctx<'_>| -> Result<(), RuleError> {
+            ctx.globals()
+                .set("__diec_current_rule", rule_path)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("set __diec_current_rule: {e}"),
+                })
+        })?;
 
         // Preprocess: convert `const` to `var` to match Qt Script behavior.
         // See eval_script() for details.
@@ -660,7 +719,8 @@ impl RquickjsRuntime {
         });
 
         match eval_result {
-            Ok(_) => self.read_results(),
+            Ok(_) if read => self.read_results(),
+            Ok(_) => Ok(Vec::new()),
             Err(e) => {
                 if self.cancel_flag.is_cancelled() {
                     Err(RuleError::Cancelled)
@@ -719,6 +779,10 @@ impl RquickjsRuntime {
                 obj.set("langVersion", r.lang_version.clone())
                     .map_err(|e| RuleError::Backend {
                         detail: format!("inject_results: set langVersion: {e}"),
+                    })?;
+                obj.set("rule", r.rule_path.clone())
+                    .map_err(|e| RuleError::Backend {
+                        detail: format!("inject_results: set rule: {e}"),
                     })?;
                 let len = arr.len();
                 arr.set(len, obj).map_err(|e| RuleError::Backend {
