@@ -171,6 +171,28 @@ fn half_to_f32(h: u16) -> f32 {
     }
 }
 
+/// Materialize the whole input into a `Vec<u8>` for the PDF encryption
+/// analyzer. Returns an empty buffer when the file size exceeds `usize`
+/// capacity, allocation size, or the read fails — the analyzer treats that
+/// as "no encrypt dictionary found".
+fn pdf_bytes(host: &dyn HostApi) -> Vec<u8> {
+    let Ok(size) = usize::try_from(host.file_size()) else {
+        return Vec::new();
+    };
+    // Defensive bound: a corrupt/incredibly large input must not trigger an
+    // unbounded allocation. PDFs larger than this are not analyzed for
+    // encryption (upstream reads the whole device; divergence recorded in
+    // docs).
+    const PDF_ANALYSIS_LIMIT: usize = 512 * 1024 * 1024;
+    if size > PDF_ANALYSIS_LIMIT {
+        return Vec::new();
+    }
+    let mut buf = vec![0u8; size];
+    let n = host.read_bytes(0, &mut buf);
+    buf.truncate(n);
+    buf
+}
+
 fn push_json_string(buf: &mut String, s: &str) {
     buf.push('"');
     for c in s.chars() {
@@ -2788,6 +2810,48 @@ impl HostApiBridge {
                 detail: format!("fSig set: {e}"),
             })?;
 
+            // PDF encryption helpers used by the PDF object's JS wrappers
+            // (isEncrypted / getEncryption / getPermissions). Semantics follow
+            // upstream XPDF @ 8ef2a804168b133c98820fcd45461d854cea8443.
+            let h_pdf = host.clone();
+            let pdf_is_encrypted_fn = rquickjs::Function::new(ctx.clone(), move || {
+                crate::pdf_encrypt::is_encrypted(&pdf_bytes(&*h_pdf))
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("__pdfIsEncrypted: {e}"),
+            })?;
+            binary
+                .set("__pdfIsEncrypted", pdf_is_encrypted_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__pdfIsEncrypted set: {e}"),
+                })?;
+
+            let h_pdf = host.clone();
+            let pdf_get_encryption_fn = rquickjs::Function::new(ctx.clone(), move || {
+                crate::pdf_encrypt::get_encryption(&pdf_bytes(&*h_pdf))
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("__pdfGetEncryption: {e}"),
+            })?;
+            binary
+                .set("__pdfGetEncryption", pdf_get_encryption_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__pdfGetEncryption set: {e}"),
+                })?;
+
+            let h_pdf = host.clone();
+            let pdf_get_permissions_fn = rquickjs::Function::new(ctx.clone(), move || {
+                crate::pdf_encrypt::get_permissions(&pdf_bytes(&*h_pdf))
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("__pdfGetPermissions: {e}"),
+            })?;
+            binary
+                .set("__pdfGetPermissions", pdf_get_permissions_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__pdfGetPermissions set: {e}"),
+                })?;
+
             // Register PE as an independent object (like ELF/MACH/MACHOFAT)
             // with Binary properties copied in. This allows adding PE-specific
             // methods without modifying Binary itself.
@@ -3602,6 +3666,12 @@ impl HostApiBridge {
                         if (!_peIsPE()) return 0;
                         var stubEnd = _peLfanew();
                         return stubEnd > 64 ? stubEnd - 64 : 0;
+                    };
+                    // DOS stub offset: upstream XMSDOS::getDosStubOffset()
+                    // unconditionally returns sizeof(IMAGE_DOS_HEADEREX) = 0x40.
+                    PE.getDosStubOffset = function() {
+                        if (!_peIsPE()) return -1;
+                        return 0x40;
                     };
 
                     // Rich signature: search for "Rich" in DOS stub.
@@ -5686,6 +5756,12 @@ impl HostApiBridge {
                         return hex;
                     };
                     PDF.getStringValuesByKey = function(key) { return []; };
+                    // PDF encryption support (upstream XPDF::isEncrypted /
+                    // getEncryption / getPermissions @ XPDF 8ef2a804).
+                    // Backed by native __pdf* helpers registered on Binary.
+                    PDF.isEncrypted = function() { return Binary.__pdfIsEncrypted(); };
+                    PDF.getEncryption = function() { return Binary.__pdfGetEncryption(); };
+                    PDF.getPermissions = function() { return Binary.__pdfGetPermissions(); };
 
                     // JPEG/Jpeg-specific: parse version from JFIF APP0 marker.
                     // Jpeg (mixed case) is used by _Jpeg.0.sg for detection.

@@ -8,9 +8,10 @@ Last updated: 2026-08-15
 ## Baseline
 
 - **Upstream**: https://github.com/horsicq/DIE-engine
-- **Fixed commit**: `c2c17dfa5` (recorded at the squashed subtree merge
-  `e0bcca000` on 2026-07-25; `upstream/Detect-It-Easy` is a vendored
-  subtree, not a git submodule — there is no `.gitmodules` entry)
+- **Fixed commit**: `8925358d2` (recorded at the squashed subtree merge
+  `d6e0c45c4` on 2026-10-01; `upstream/Detect-It-Easy` is a vendored
+  subtree, not a git submodule — there is no `.gitmodules` entry;
+  previous baseline `c2c17dfa5` at merge `e0bcca000` 2026-07-25)
 - **Rule database**: loaded verbatim from upstream, no modifications
 
 ## Rule Loading Compatibility
@@ -159,6 +160,8 @@ These are NOT engine bugs:
 | Mach-O.getImageBase | ✅ | Lowest LC_SEGMENT vmaddr |
 | MSDOS stubs | ⏳ | compareEP/compareOverlay/isNE return false (Phase 15.3c stub) |
 | PDF (version, header comment) | ✅ | |
+| PDF encryption | ✅ | isEncrypted/getEncryption/getPermissions, XPDF @ 8ef2a804 semantics |
+| PE.getDosStubOffset | ✅ | Upstream: unconditional `sizeof(IMAGE_DOS_HEADEREX)` = 0x40 |
 | JPEG (version from JFIF) | ✅ | |
 | DEX (version from header) | ✅ | |
 | CFBF (version from header) | ✅ | major.minor format |

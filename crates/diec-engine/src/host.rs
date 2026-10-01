@@ -149,6 +149,21 @@ impl HostApi for BufferHost {
         Ok(data[idx])
     }
 
+    /// Bulk copy override for `read_bytes`: copies the in-bounds prefix of
+    /// `buf` directly from the backing slice.
+    fn read_bytes(&self, offset: u64, buf: &mut [u8]) -> usize {
+        let data = self.data();
+        let Ok(start) = usize::try_from(offset) else {
+            return 0;
+        };
+        if start >= data.len() {
+            return 0;
+        }
+        let n = buf.len().min(data.len() - start);
+        buf[..n].copy_from_slice(&data[start..start + n]);
+        n
+    }
+
     fn read_u16_le(&self, offset: u64) -> Result<u16, HostApiError> {
         let data = self.data();
         let idx = offset as usize;

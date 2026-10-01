@@ -100,6 +100,24 @@ pub trait HostApi {
     /// up to `max_len` bytes.
     fn read_string(&self, offset: u64, max_len: u64) -> Result<String, HostApiError>;
 
+    /// Read raw bytes into `buf` starting at `offset`, returning the number
+    /// of bytes actually written. Reads stop at the end of the file or on
+    /// the first failing byte; this mirrors `ByteView::read_at` semantics
+    /// and never errors on a short read.
+    ///
+    /// The default implementation reads byte-by-byte via `read_u8`;
+    /// implementors with contiguous storage should override it with a bulk
+    /// copy for performance.
+    fn read_bytes(&self, offset: u64, buf: &mut [u8]) -> usize {
+        for (i, b) in buf.iter_mut().enumerate() {
+            match self.read_u8(offset + i as u64) {
+                Ok(v) => *b = v,
+                Err(_) => return i,
+            }
+        }
+        buf.len()
+    }
+
     // --- File metadata ---
 
     /// Get the file name (basename) as a string.

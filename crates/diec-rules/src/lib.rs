@@ -18,6 +18,7 @@ pub mod include_graph;
 pub mod inventory;
 pub mod manifest;
 pub mod order_manifest;
+pub mod pdf_encrypt;
 pub mod runtime;
 
 /// rquickjs backend module (ADR 0006).
