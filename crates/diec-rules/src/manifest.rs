@@ -96,7 +96,7 @@ mod tests {
     fn new_manifest_has_empty_trees() {
         let manifest = RuleSourceManifest::new(
             "https://github.com/horsicq/Detect-It-Easy.git",
-            "c2c17dfa5ea4e078ba31eab55d87430c96622fb6",
+            "8925358d2298957d758b6bba74c393b622322efc",
             "Detect-It-Easy",
             "2026-07-31T00:00:00Z",
         );

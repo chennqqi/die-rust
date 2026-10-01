@@ -35,7 +35,7 @@ const RULE_TREES: &[&str] = &["db", "db_extra", "db_custom", "dbs_min", "dbs_spe
 /// Default upstream component info for rule sync.
 const DEFAULT_REPOSITORY: &str = "https://github.com/horsicq/Detect-It-Easy.git";
 const DEFAULT_COMPONENT: &str = "Detect-It-Easy";
-const DEFAULT_COMMIT: &str = "c2c17dfa5ea4e078ba31eab55d87430c96622fb6";
+const DEFAULT_COMMIT: &str = "8925358d2298957d758b6bba74c393b622322efc";
 
 /// Allowed workspace dependencies for each runtime crate, mirroring
 /// `docs/design/architecture.md` section 5/6. Any edge not listed here is a

@@ -353,7 +353,7 @@ DIE-engine 规则与 host API 变化，并保持发布物健康度。
 ### 当前进展快照
 
 - **上游规则同步**：`upstream/Detect-It-Easy` 为 vendored subtree（非 submodule），
-  固定到 commit `c2c17dfa5`。
+  固定到 commit `8925358d2`（2026-10-01 同步；DIE-engine 基线 `23fec32ca`）。
 - **种子语料回放**：165 seeds × 6 harnesses，`cd fuzz && cargo test --no-default-features --features replay`。
 - **发布物**：v0.3.0（4 平台：Linux/Windows/macOS arm64/macOS x86_64），含 CLI、died、FFI 库、C 头文件、规则数据库、语言绑定。
 - **Benchmark 基础设施**（criterion 0.5）：scan_corpus、scan_flags、database_load、probe_corpus。
@@ -578,7 +578,7 @@ Phase 9 完成后，README.md "Known Limitations" 节列出三个已知问题。
 bug"，但条目仍残留在 "Known Limitations" 节中，应清理或移至正面描述。
 
 **现状**：
-- vendored subtree 固定到 commit `c2c17dfa5`（2026-07-25 合并）
+- vendored subtree 固定到 commit `8925358d2`（2026-10-01 同步，前基线 `c2c17dfa5`）
 - 上游 DIE 3.21 发布于 2026-04-22（`upstream/Detect-It-Easy/changelog.txt`）
 - 4 个差异均为"新规则检测到更多"而非"引擎行为不同"：
   - `minimal.apk` / `minimal.jar` / `payload.zip`：新规则检测 archive:Zip:2.0
@@ -1359,7 +1359,7 @@ Phase 15 聚焦"重建对齐方法论 + 闭合已识别缺口"，不再追加新
 - [x] 上游 DIE-engine oracle 集成
   - 从源码编译上游 `diec` 4.0.0（Qt6 + 全部 git 子模块）
   - `tools/record_golden_baselines.py` 录制 golden JSON 基线
-  - 固定上游 commit SHA `c2c17dfa5`，与兼容基线一致
+  - 固定上游 commit SHA `8925358d2`，与兼容基线一致
 - [x] `true_differential.rs` 真差分测试
   - 加载 golden 基线，运行 diec-rust `scan_bytes`，对比检测结果
   - 39 个 golden cases，38/38 匹配（1 个 NPM 已知差距跳过）

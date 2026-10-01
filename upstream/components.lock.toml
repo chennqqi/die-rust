@@ -1,81 +1,82 @@
 schema = 1
-generated_at = "2026-07-25"
+generated_at = "2026-10-01"
 
 [baseline]
 name = "DIE-engine"
 repository = "https://github.com/horsicq/DIE-engine.git"
-commit = "74eaf505c250ab47e709024e9dc41657cd8f2254"
+commit = "23fec32cac2a562342c1c2db8e22ce231b58f346"
 local_path = "upstream/DIE-engine"
 materialization = "subtree-squash"
 
 # Exhaustive direct submodule inventory from baseline .gitmodules and tree.
+# Upstream moved all submodules under dep/ since baseline 23fec32.
 [gitlink]
-"Detect-It-Easy" = { repository = "https://github.com/horsicq/Detect-It-Easy.git", commit = "c2c17dfa5ea4e078ba31eab55d87430c96622fb6" }
-"Formats" = { repository = "https://github.com/horsicq/Formats.git", commit = "1151e7254fdee3c0294ff7095edbdd7bfccf8201" }
-"SpecAbstract" = { repository = "https://github.com/horsicq/SpecAbstract.git", commit = "cdfe1070ce5c756bea134554b88592295800a485" }
-"StaticScan" = { repository = "https://github.com/horsicq/StaticScan.git", commit = "fcdcb25b16d0e0c6b2f82c2b270b2a3d58c1e11d" }
-"XArchive" = { repository = "https://github.com/horsicq/XArchive.git", commit = "0fcd4e8d3e9933baac3b12246d82ac026557ffd0" }
-"XQwt" = { repository = "https://github.com/horsicq/XQwt.git", commit = "eb14747e8a8eed860a8eaf7d566f270bf52a8b2d" }
-"XOptions" = { repository = "https://github.com/horsicq/XOptions.git", commit = "810d78d0654f45d39bf07bcda5dc92ce287a4aeb" }
-"XStyles" = { repository = "https://github.com/horsicq/XStyles.git", commit = "3a32a855f6776cf63fe6eeee5a62db60a396aa6a" }
-"XTranslation" = { repository = "https://github.com/horsicq/XTranslation.git", commit = "424271d5c390dc8f3c4e575558b651cfb002c01a" }
-"XDEX" = { repository = "https://github.com/horsicq/XDEX.git", commit = "035c61966d3a9018edf80cd0013083ee32626e71" }
-"FormatDialogs" = { repository = "https://github.com/horsicq/FormatDialogs.git", commit = "25f4074091004b54e043f13d26dbccb89c70efa6" }
-"FormatWidgets" = { repository = "https://github.com/horsicq/FormatWidgets.git", commit = "f122d47a6941b8ff040182f1ab6e5771f0792f21" }
-"Controls" = { repository = "https://github.com/horsicq/Controls.git", commit = "3e1fc8b4578e0a9f61b6fc4ec1230e8178cef3e8" }
-"XMemoryMapWidget" = { repository = "https://github.com/horsicq/XMemoryMapWidget.git", commit = "d314a08e6510acae36cd4c5e9462a787b3002c8d" }
-"XEntropyWidget" = { repository = "https://github.com/horsicq/XEntropyWidget.git", commit = "d2bf95b1019e21e5a5ae71f55fcd6c12349c3030" }
-"XCapstone" = { repository = "https://github.com/horsicq/XCapstone.git", commit = "96c639939478998b81d2e662a027a00f3054cbfe" }
-"XHashWidget" = { repository = "https://github.com/horsicq/XHashWidget.git", commit = "5eaa1815af7f689afa167ad7f4ff9c836a7a4f0e" }
-"die_script" = { repository = "https://github.com/horsicq/die_script.git", commit = "5d82316c110abf0eb863b50bc679d330e05067b6" }
-"die_widget" = { repository = "https://github.com/horsicq/die_widget.git", commit = "5b483772edde713fb872bc3ca86cfde4c00ea42c" }
-"nfd_widget" = { repository = "https://github.com/horsicq/nfd_widget.git", commit = "cf60ed2b9dcac8f183ec5e4172113df1aae17065" }
-"archive_widget" = { repository = "https://github.com/horsicq/archive_widget.git", commit = "2950341b5a9db041f65034393ae8e779ccb99455" }
-"XMIME" = { repository = "https://github.com/horsicq/XMIME.git", commit = "73168d35734c6b5b5fa2585af054ad31af53e87f" }
-"XSingleApplication" = { repository = "https://github.com/horsicq/XSingleApplication.git", commit = "6f7fdbca4389b78cf9e746a805fd0059712aa9ba" }
-"XMIMEWidget" = { repository = "https://github.com/horsicq/XMIMEWidget.git", commit = "ae33cf59a9574220c12ea82a5a21c5f4cb3aae9e" }
-"XHexView" = { repository = "https://github.com/horsicq/XHexView.git", commit = "56161ce8c2034dd8c9b35aa23585eb55ee20451c" }
-"XDisasmView" = { repository = "https://github.com/horsicq/XDisasmView.git", commit = "6cd5367d4d243b40b69949aa89184a8ee089fd70" }
-"XGithub" = { repository = "https://github.com/horsicq/XGithub.git", commit = "9d6c4dcbfce3200c66b9b5e9aa7f57f2b69ae904" }
-"XShortcuts" = { repository = "https://github.com/horsicq/XShortcuts.git", commit = "52f581bf7c5b83723e09182b99ff26d63cf953d3" }
-"XHexEdit" = { repository = "https://github.com/horsicq/XHexEdit.git", commit = "cde4ff0f869100007a41077adc0a636add32cb1b" }
-"signatures" = { repository = "https://github.com/horsicq/signatures.git", commit = "5d80fb2863d02e9366aee7b3ade6abb7d6598dbb" }
-"XDemangle" = { repository = "https://github.com/horsicq/XDemangle.git", commit = "e64230a0044f54c669d6698e0bf3a9fe345d88fc" }
-"XDemangleWidget" = { repository = "https://github.com/horsicq/XDemangleWidget.git", commit = "20ef25596dc7dd64c4e77296184fb8bce869c130" }
-"XCppfilt" = { repository = "https://github.com/horsicq/XCppfilt", commit = "07f5baa72fee1e23e70b248ad674657e76aa76ec" }
-"XDynStructs" = { repository = "https://github.com/horsicq/XDynStructs", commit = "09a4360561513df5146667d6174b3b43b97cd085" }
-"XDynStructsEngine" = { repository = "https://github.com/horsicq/XDynStructsEngine", commit = "3c75fef0cb57b0095e893bc3e162d8c85242738e" }
-"XDynStructsWidget" = { repository = "https://github.com/horsicq/XDynStructsWidget", commit = "c7fc0dbe7742bcd531e1e49bfbadcfdab1a931d7" }
-"XFileInfo" = { repository = "https://github.com/horsicq/XFileInfo", commit = "88b8e2821f86d309f141b38c4d46fa0b000aa74b" }
-"XPDF" = { repository = "https://github.com/horsicq/XPDF", commit = "cdcee54dce97f566f2c023f400a457f4e6278de2" }
-"XInfoDB" = { repository = "https://github.com/horsicq/XInfoDB", commit = "5a1a426c408e3825cf64153e44dc4ee383e1fe64" }
-"XSymbolsWidget" = { repository = "https://github.com/horsicq/XSymbolsWidget", commit = "c16c72ea0a7a986f94b8a4dd872f53bef2d55e6e" }
-"XOnlineTools" = { repository = "https://github.com/horsicq/XOnlineTools", commit = "0cacfe0a77e797d38cb662a11fdcfe7ccaad7256" }
-"XAboutWidget" = { repository = "https://github.com/horsicq/XAboutWidget", commit = "27616868c86ae22724b8693d8f08d953e09ee74f" }
-"hex_templates" = { repository = "https://github.com/horsicq/hex_templates", commit = "a7451c5d714e56d491dbd69f0ae86a1f85363f22" }
-"XExtractorWidget" = { repository = "https://github.com/horsicq/XExtractorWidget", commit = "fb0681e9ce13016c5c164e7c4c4c552e3661c767" }
-"XExtractor" = { repository = "https://github.com/horsicq/XExtractor", commit = "d67a714b3e1f8a5510a698606a537a255f355215" }
-"XUpdate" = { repository = "https://github.com/horsicq/XUpdate", commit = "b9f456b65c74a51011dd17283f3f6073d15f97fa" }
-"XVisualizationWidget" = { repository = "https://github.com/horsicq/XVisualizationWidget", commit = "791525650cf28dc6a79c7536451bd5d2cc82f9bb" }
-"XDecompiler" = { repository = "https://github.com/horsicq/XDecompiler", commit = "aa8359ca7edfc3d766fb09c2ccbec554539d13f0" }
-"XYara" = { repository = "https://github.com/horsicq/XYara", commit = "34a733e9c733669ad8dcaf4588d51197a08545e3" }
-"yara_widget" = { repository = "https://github.com/horsicq/yara_widget", commit = "611eae6b74d45ce8f916961f4de7fffc5d95f40b" }
-"XDataConvertorWidget" = { repository = "https://github.com/horsicq/XDataConvertorWidget", commit = "b681f5da8612da90a0dcc5537b1dfe92c7bf58da" }
-"XScanEngine" = { repository = "https://github.com/horsicq/XScanEngine", commit = "dfe4a419e4f491bb23688ba03c5a5bf39e34da83" }
-"XDisasmCore" = { repository = "https://github.com/horsicq/XDisasmCore.git", commit = "c5757cc007d3ddd419e4db9bd46be00e244644b6" }
-"XRegionsWidget" = { repository = "https://github.com/horsicq/XRegionsWidget.git", commit = "307edf22920c2d7a9dda69e3d7f333ea6539be2b" }
-"XStaticUnpacker" = { repository = "https://github.com/horsicq/XStaticUnpacker", commit = "c1633b9bcae7482dfae037f8efb531ac61baf3f8" }
-"XPEID" = { repository = "https://github.com/horsicq/XPEID", commit = "15c2e2951ab2443c7794e8f88c9fc5c65b217f28" }
-"build_tools" = { repository = "https://github.com/horsicq/build_tools.git", commit = "5dd5bcc8abf3b178d9ed47100f6f37ebecceb23e" }
-"peid_widget" = { repository = "https://github.com/horsicq/peid_widget", commit = "8a80abec2e0cfc9a718796263511542d21538874" }
+"dep/Controls" = { repository = "https://github.com/horsicq/Controls.git", commit = "28ed50726d8aa587064d8b41b1e428fc312f8309" }
+"dep/Detect-It-Easy" = { repository = "https://github.com/horsicq/Detect-It-Easy.git", commit = "8925358d2298957d758b6bba74c393b622322efc" }
+"dep/FormatDialogs" = { repository = "https://github.com/horsicq/FormatDialogs.git", commit = "faa787821f52b6338ac939109988247e563692c4" }
+"dep/FormatWidgets" = { repository = "https://github.com/horsicq/FormatWidgets.git", commit = "8de1efff3cf322943fb098dda6baf2dbbd9fea70" }
+"dep/Formats" = { repository = "https://github.com/horsicq/Formats.git", commit = "65b04bebf41d3090fd4d4223065945ffa88a689d" }
+"dep/SpecAbstract" = { repository = "https://github.com/horsicq/SpecAbstract.git", commit = "5188e047755299a87d6feee840e6d8f31fb89b3d" }
+"dep/StaticScan" = { repository = "https://github.com/horsicq/StaticScan.git", commit = "fcdcb25b16d0e0c6b2f82c2b270b2a3d58c1e11d" }
+"dep/XAboutWidget" = { repository = "https://github.com/horsicq/XAboutWidget", commit = "1b294f6fba45485f02714f4b7aaae0866638f1f2" }
+"dep/XArchive" = { repository = "https://github.com/horsicq/XArchive.git", commit = "cffced32e932491e998e4a740ccfa494f51df4eb" }
+"dep/XCapstone" = { repository = "https://github.com/horsicq/XCapstone.git", commit = "97f095100aea9b76c7f671468f7394f4ccf65430" }
+"dep/XCppfilt" = { repository = "https://github.com/horsicq/XCppfilt", commit = "d1188b5095519f41a0501f10d3ff75b997915a39" }
+"dep/XDEX" = { repository = "https://github.com/horsicq/XDEX.git", commit = "dc9d91e4c2bfc9ca56db75220139fa76c773cb8a" }
+"dep/XDataConvertorWidget" = { repository = "https://github.com/horsicq/XDataConvertorWidget", commit = "d8691468f08c28b31f93dd11b0f2e5a14f1dba0b" }
+"dep/XDecompiler" = { repository = "https://github.com/horsicq/XDecompiler", commit = "aa8359ca7edfc3d766fb09c2ccbec554539d13f0" }
+"dep/XDemangle" = { repository = "https://github.com/horsicq/XDemangle.git", commit = "161659880361e23cc4e983776becc323ff68da26" }
+"dep/XDemangleWidget" = { repository = "https://github.com/horsicq/XDemangleWidget.git", commit = "20ef25596dc7dd64c4e77296184fb8bce869c130" }
+"dep/XDisasmCore" = { repository = "https://github.com/horsicq/XDisasmCore.git", commit = "b4cdfb97a486098814263ecb183da8f77593e176" }
+"dep/XDisasmView" = { repository = "https://github.com/horsicq/XDisasmView.git", commit = "4e4610f60d0b29cba38bef46cd2770c9139aa4f0" }
+"dep/XDynStructs" = { repository = "https://github.com/horsicq/XDynStructs", commit = "09a4360561513df5146667d6174b3b43b97cd085" }
+"dep/XDynStructsEngine" = { repository = "https://github.com/horsicq/XDynStructsEngine", commit = "3c75fef0cb57b0095e893bc3e162d8c85242738e" }
+"dep/XDynStructsWidget" = { repository = "https://github.com/horsicq/XDynStructsWidget", commit = "306ae5aa4ab5d7ba3b0b14a8d60121cc86a3a869" }
+"dep/XEntropyWidget" = { repository = "https://github.com/horsicq/XEntropyWidget.git", commit = "7487d256681b487fb921ea87a12317182d4079ac" }
+"dep/XExtractor" = { repository = "https://github.com/horsicq/XExtractor", commit = "3ea2bd1c9d98e25200791851f7f6a9310cd321c2" }
+"dep/XExtractorWidget" = { repository = "https://github.com/horsicq/XExtractorWidget", commit = "86eb7e78cc2b9fd9dd85e908f65c953d6eb9a29a" }
+"dep/XFileInfo" = { repository = "https://github.com/horsicq/XFileInfo", commit = "7fa7027182b3ff10bfa231f1f0b3532e319d50fc" }
+"dep/XGithub" = { repository = "https://github.com/horsicq/XGithub.git", commit = "9d6c4dcbfce3200c66b9b5e9aa7f57f2b69ae904" }
+"dep/XHashWidget" = { repository = "https://github.com/horsicq/XHashWidget.git", commit = "291e3ef6e4ba1c4a4b0a5ebaff3210e04a0d877f" }
+"dep/XHexEdit" = { repository = "https://github.com/horsicq/XHexEdit.git", commit = "b491b4c8b7802900c5c770581ef8a9a9d78e8059" }
+"dep/XHexView" = { repository = "https://github.com/horsicq/XHexView.git", commit = "20b3065216cd42b549f55476ede5e82846d47276" }
+"dep/XInfoDB" = { repository = "https://github.com/horsicq/XInfoDB", commit = "176dddb4a81df929fef8d21f2cd3fa010bf8e7f2" }
+"dep/XMIME" = { repository = "https://github.com/horsicq/XMIME.git", commit = "89a00693c4fcde77154acc34170f9d0a8e1a7f53" }
+"dep/XMIMEWidget" = { repository = "https://github.com/horsicq/XMIMEWidget.git", commit = "3f64a3fe1a3b8103daf7547b6cfdafc8d34b8253" }
+"dep/XMemoryMapWidget" = { repository = "https://github.com/horsicq/XMemoryMapWidget.git", commit = "85f418ca04ee5b023faf2da5ec8f5d0fce336a92" }
+"dep/XOnlineTools" = { repository = "https://github.com/horsicq/XOnlineTools", commit = "ba2c9b8a3adf00f08fbd723a959d562380a7e6c1" }
+"dep/XOptions" = { repository = "https://github.com/horsicq/XOptions.git", commit = "954afe89663f7edfb6a376db724c25ac7994594d" }
+"dep/XPDF" = { repository = "https://github.com/horsicq/XPDF", commit = "8ef2a804168b133c98820fcd45461d854cea8443" }
+"dep/XPEID" = { repository = "https://github.com/horsicq/XPEID", commit = "15c2e2951ab2443c7794e8f88c9fc5c65b217f28" }
+"dep/XQwt" = { repository = "https://github.com/horsicq/XQwt.git", commit = "cd589e89869202bc2803bbd5032262facfdbc39c" }
+"dep/XRegionsWidget" = { repository = "https://github.com/horsicq/XRegionsWidget.git", commit = "307edf22920c2d7a9dda69e3d7f333ea6539be2b" }
+"dep/XScanEngine" = { repository = "https://github.com/horsicq/XScanEngine", commit = "2550d2dab08329a6319a72d0abb722c152d8c940" }
+"dep/XShortcuts" = { repository = "https://github.com/horsicq/XShortcuts.git", commit = "f74989a3657318756c41dcf676e82464fcac0b27" }
+"dep/XSingleApplication" = { repository = "https://github.com/horsicq/XSingleApplication.git", commit = "6f7fdbca4389b78cf9e746a805fd0059712aa9ba" }
+"dep/XStaticUnpacker" = { repository = "https://github.com/horsicq/XStaticUnpacker", commit = "746fb24433c29b6460edebac83fdad19909d9e81" }
+"dep/XStyles" = { repository = "https://github.com/horsicq/XStyles.git", commit = "948dd8503bf15370b4b6b8333d512298efb9f8c5" }
+"dep/XSymbolsWidget" = { repository = "https://github.com/horsicq/XSymbolsWidget", commit = "4c23d021b0ef498961d57565fa5b5860d69e89be" }
+"dep/XTranslation" = { repository = "https://github.com/horsicq/XTranslation.git", commit = "faa881a4c477f8e9ebe577ec7d515eb31f7f66e7" }
+"dep/XUpdate" = { repository = "https://github.com/horsicq/XUpdate", commit = "f8056907d03ad5d9ca80535a1a5644a13955c3b0" }
+"dep/XVisualizationWidget" = { repository = "https://github.com/horsicq/XVisualizationWidget", commit = "db8852e6471489f598b4d5e8042f91977ed41601" }
+"dep/XYara" = { repository = "https://github.com/horsicq/XYara", commit = "6b7652a0cac5535f23b483c3d970a4e7395f3f34" }
+"dep/archive_widget" = { repository = "https://github.com/horsicq/archive_widget.git", commit = "6a7d7839a2e7908737b002bb910ed16607a1201c" }
+"dep/build_tools" = { repository = "https://github.com/horsicq/build_tools.git", commit = "ec416af7477b5cccfbc3f572707b2c2a638f7e40" }
+"dep/die_script" = { repository = "https://github.com/horsicq/die_script.git", commit = "3a19ceb6d385b8d3e39d5e3d686391d87d252844" }
+"dep/die_widget" = { repository = "https://github.com/horsicq/die_widget.git", commit = "5ae98a5dd1a12316d2ac21021260a2ae71aa7cfb" }
+"dep/hex_templates" = { repository = "https://github.com/horsicq/hex_templates", commit = "a7451c5d714e56d491dbd69f0ae86a1f85363f22" }
+"dep/nfd_widget" = { repository = "https://github.com/horsicq/nfd_widget.git", commit = "bc49f5cb58a28bfdb200e5cf77d889485e4c8342" }
+"dep/peid_widget" = { repository = "https://github.com/horsicq/peid_widget", commit = "8a80abec2e0cfc9a718796263511542d21538874" }
+"dep/signatures" = { repository = "https://github.com/horsicq/signatures.git", commit = "5d80fb2863d02e9366aee7b3ade6abb7d6598dbb" }
+"dep/yara_widget" = { repository = "https://github.com/horsicq/yara_widget", commit = "2a44e1a1feea562d88df047155ac909957efbec2" }
 
 # Detailed policy metadata for materialized or directly researched components.
 [[component]]
 name = "Detect-It-Easy"
 role = "rules-and-release-data"
 repository = "https://github.com/horsicq/Detect-It-Easy.git"
-commit = "c2c17dfa5ea4e078ba31eab55d87430c96622fb6"
-gitlink_path = "Detect-It-Easy"
+commit = "8925358d2298957d758b6bba74c393b622322efc"
+gitlink_path = "dep/Detect-It-Easy"
 local_path = "upstream/Detect-It-Easy"
 materialization = "subtree-squash"
 license = "MIT"
@@ -85,61 +86,55 @@ tracked_content = ["db", "db_extra", "db_custom", "dbs_min", "dbs_special", "yar
 name = "Formats"
 role = "format-detection-and-parsing"
 repository = "https://github.com/horsicq/Formats.git"
-commit = "1151e7254fdee3c0294ff7095edbdd7bfccf8201"
-gitlink_path = "Formats"
+commit = "65b04bebf41d3090fd4d4223065945ffa88a689d"
+gitlink_path = "dep/Formats"
 materialization = "external-research-checkout"
 license = "MIT"
-
 [[component]]
 name = "XScanEngine"
 role = "scan-orchestration-and-host-api"
 repository = "https://github.com/horsicq/XScanEngine"
-commit = "dfe4a419e4f491bb23688ba03c5a5bf39e34da83"
-gitlink_path = "XScanEngine"
+commit = "2550d2dab08329a6319a72d0abb722c152d8c940"
+gitlink_path = "dep/XScanEngine"
 materialization = "external-research-checkout"
 license = "MIT"
-
 [[component]]
 name = "die_script"
 role = "die-javascript-runtime"
 repository = "https://github.com/horsicq/die_script.git"
-commit = "5d82316c110abf0eb863b50bc679d330e05067b6"
-gitlink_path = "die_script"
+commit = "3a19ceb6d385b8d3e39d5e3d686391d87d252844"
+gitlink_path = "dep/die_script"
 materialization = "external-research-checkout"
 license = "MIT"
-
 [[component]]
 name = "XOptions"
 role = "cli-option-definitions"
 repository = "https://github.com/horsicq/XOptions.git"
-commit = "810d78d0654f45d39bf07bcda5dc92ce287a4aeb"
-gitlink_path = "XOptions"
+commit = "954afe89663f7edfb6a376db724c25ac7994594d"
+gitlink_path = "dep/XOptions"
 materialization = "external-research-checkout"
 license = "MIT"
-
 [[component]]
 name = "XFileInfo"
 role = "file-information"
 repository = "https://github.com/horsicq/XFileInfo"
-commit = "88b8e2821f86d309f141b38c4d46fa0b000aa74b"
-gitlink_path = "XFileInfo"
+commit = "7fa7027182b3ff10bfa231f1f0b3532e319d50fc"
+gitlink_path = "dep/XFileInfo"
 materialization = "external-research-checkout"
 license = "MIT"
-
 [[component]]
 name = "XEntropyWidget"
 role = "entropy-processing"
 repository = "https://github.com/horsicq/XEntropyWidget.git"
-commit = "d2bf95b1019e21e5a5ae71f55fcd6c12349c3030"
-gitlink_path = "XEntropyWidget"
+commit = "7487d256681b487fb921ea87a12317182d4079ac"
+gitlink_path = "dep/XEntropyWidget"
 materialization = "external-research-checkout"
 license = "MIT"
-
 [[component]]
 name = "signatures"
 role = "crypto-and-junk-binary-signatures"
 repository = "https://github.com/horsicq/signatures.git"
 commit = "5d80fb2863d02e9366aee7b3ade6abb7d6598dbb"
-gitlink_path = "signatures"
+gitlink_path = "dep/signatures"
 materialization = "external-research-checkout"
 license = "MIT"

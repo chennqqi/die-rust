@@ -44,26 +44,36 @@ git remote set-url --push upstream-detect-it-easy DISABLED
 
 subtree 内容仅作为上游参考与变更跟踪来源，不直接成为 diec-rust 的编译输入。
 
-当前导入提交记录：
+当前导入提交记录（2026-10-01 同步）：
 
 | Item | Value |
 | --- | --- |
-| Local merge commit | `5f39bfba` |
-| Squashed subtree commit | `438a02af` |
-| `git-subtree-split` | `74eaf505c250ab47e709024e9dc41657cd8f2254` |
-| Tree entries | 621 |
-| Nested gitlinks | 58 |
+| Local merge commit | `d73a8e83` |
+| Squashed subtree commit | `70c74fbe` |
+| `git-subtree-split` | `23fec32cac2a562342c1c2db8e22ce231b58f346` |
+| Nested gitlinks | 58（全部位于 `dep/` 下） |
 
-规则/发布数据 sibling subtree：
+历史导入记录：`5f39bfba` / split `74eaf505c250ab47e709024e9dc41657cd8f2254`。
+
+**布局变化**：新基线将上游全部 58 个 submodule 从仓库根目录迁移到
+`dep/` 前缀下（如 `dep/XScanEngine`、`dep/Formats`）。`git subtree pull`
+无法自动完成 rename/delete 合并，需手动重建 gitlink。lock 清单与
+`tools/verify_upstream.py` 已适配嵌套 `dep/` gitlink。
+
+规则/发布数据 sibling subtree（2026-10-01 同步）：
 
 | Item | Value |
 | --- | --- |
 | Local path | `upstream/Detect-It-Easy/` |
-| Local merge commit | `e0bcca00` |
-| Squashed subtree commit | `dcf687c8` |
-| `git-subtree-split` | `c2c17dfa5ea4e078ba31eab55d87430c96622fb6` |
-| Tree entries | 5024 |
+| Local merge commit | `d6e0c45c` |
+| Squashed subtree commit | `08b2951b` |
+| `git-subtree-split` | `8925358d2298957d758b6bba74c393b622322efc` |
 | Nested gitlinks | 0 |
+
+历史导入记录：`e0bcca00` / split `c2c17dfa5ea4e078ba31eab55d87430c96622fb6`。
+
+规则布局变化：大量可疑/低置信度规则移入 `dbs_special/db_dubious/`，
+新增 `dbs_special/experimental/`、`help/DOTNET.md`，删除 `update.json`。
 
 ## 重要限制
 
@@ -113,7 +123,7 @@ git fetch upstream-die master
 
 ```sh
 git diff --submodule=log \
-  74eaf505c250ab47e709024e9dc41657cd8f2254..upstream-die/master
+  23fec32cac2a562342c1c2db8e22ce231b58f346..upstream-die/master
 ```
 
 调研并确定新的固定 SHA 后，执行：

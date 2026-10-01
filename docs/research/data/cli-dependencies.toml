@@ -1,13 +1,13 @@
 schema = 1
-generated_at = "2026-07-25"
+generated_at = "2026-10-01"
 upstream = "https://github.com/horsicq/DIE-engine.git"
-baseline_commit = "74eaf505c250ab47e709024e9dc41657cd8f2254"
+baseline_commit = "23fec32cac2a562342c1c2db8e22ce231b58f346"
 source_lock = "../../../upstream/components.lock.toml"
 scope = "Static CMake dependency closure of the diec target; no runtime build observation"
 
 [[component]]
 name = "Detect-It-Easy"
-commit = "c2c17dfa5ea4e078ba31eab55d87430c96622fb6"
+commit = "8925358d2298957d758b6bba74c393b622322efc"
 build_role = "runtime-data"
 dependencies = []
 root_license = "MIT"
@@ -16,7 +16,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "die_script"
-commit = "5d82316c110abf0eb863b50bc679d330e05067b6"
+commit = "3a19ceb6d385b8d3e39d5e3d686391d87d252844"
 build_role = "compiled-source"
 dependencies = ["XDisasmCore", "XScanEngine", "Detect-It-Easy"]
 root_license = "MIT"
@@ -25,7 +25,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XOptions"
-commit = "810d78d0654f45d39bf07bcda5dc92ce287a4aeb"
+commit = "954afe89663f7edfb6a376db724c25ac7994594d"
 build_role = "compiled-source"
 dependencies = []
 root_license = "MIT"
@@ -34,7 +34,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XEntropyWidget"
-commit = "d2bf95b1019e21e5a5ae71f55fcd6c12349c3030"
+commit = "7487d256681b487fb921ea87a12317182d4079ac"
 build_role = "compiled-source-non-ui-subset"
 dependencies = ["Formats"]
 root_license = "MIT"
@@ -43,7 +43,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XFileInfo"
-commit = "88b8e2821f86d309f141b38c4d46fa0b000aa74b"
+commit = "7fa7027182b3ff10bfa231f1f0b3532e319d50fc"
 build_role = "compiled-source"
 dependencies = ["Formats", "XDEX", "XPDF", "XArchive", "XDisasmCore", "XOptions", "SpecAbstract", "die_script"]
 root_license = "MIT"
@@ -52,7 +52,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XScanEngine"
-commit = "dfe4a419e4f491bb23688ba03c5a5bf39e34da83"
+commit = "2550d2dab08329a6319a72d0abb722c152d8c940"
 build_role = "compiled-source"
 dependencies = ["Formats", "XDEX", "XPDF", "XArchive", "XStaticUnpacker", "XOptions", "XDisasmCore"]
 root_license = "MIT"
@@ -61,7 +61,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "Formats"
-commit = "1151e7254fdee3c0294ff7095edbdd7bfccf8201"
+commit = "65b04bebf41d3090fd4d4223065945ffa88a689d"
 build_role = "compiled-source-and-linked-static-target"
 dependencies = ["XDEX", "XPDF", "XArchive"]
 root_license = "MIT"
@@ -70,7 +70,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XDEX"
-commit = "035c61966d3a9018edf80cd0013083ee32626e71"
+commit = "dc9d91e4c2bfc9ca56db75220139fa76c773cb8a"
 build_role = "compiled-source"
 dependencies = ["Formats"]
 root_license = "MIT"
@@ -79,7 +79,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XPDF"
-commit = "cdcee54dce97f566f2c023f400a457f4e6278de2"
+commit = "8ef2a804168b133c98820fcd45461d854cea8443"
 build_role = "compiled-source"
 dependencies = ["Formats"]
 root_license = "MIT"
@@ -88,7 +88,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XArchive"
-commit = "0fcd4e8d3e9933baac3b12246d82ac026557ffd0"
+commit = "cffced32e932491e998e4a740ccfa494f51df4eb"
 build_role = "compiled-source-and-linked-static-targets"
 dependencies = ["Formats", "XOptions"]
 root_license = "MIT"
@@ -97,7 +97,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XStaticUnpacker"
-commit = "c1633b9bcae7482dfae037f8efb531ac61baf3f8"
+commit = "746fb24433c29b6460edebac83fdad19909d9e81"
 build_role = "compiled-source"
 dependencies = ["Formats", "XArchive"]
 root_license = "MIT"
@@ -106,7 +106,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XDisasmCore"
-commit = "c5757cc007d3ddd419e4db9bd46be00e244644b6"
+commit = "b4cdfb97a486098814263ecb183da8f77593e176"
 build_role = "compiled-source"
 dependencies = ["Formats", "XCapstone"]
 root_license = "MIT"
@@ -115,7 +115,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XCapstone"
-commit = "96c639939478998b81d2e662a027a00f3054cbfe"
+commit = "97f095100aea9b76c7f671468f7394f4ccf65430"
 build_role = "compiled-source-and-linked-static-target"
 dependencies = ["Formats"]
 root_license = "MIT"
@@ -124,7 +124,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "SpecAbstract"
-commit = "cdfe1070ce5c756bea134554b88592295800a485"
+commit = "5188e047755299a87d6feee840e6d8f31fb89b3d"
 build_role = "compiled-source"
 dependencies = ["XScanEngine"]
 root_license = "MIT"
@@ -133,7 +133,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XCppfilt"
-commit = "07f5baa72fee1e23e70b248ad674657e76aa76ec"
+commit = "d1188b5095519f41a0501f10d3ff75b997915a39"
 build_role = "default-build-target-not-linked-by-diec"
 dependencies = []
 root_license = "MIT"
@@ -142,7 +142,7 @@ nested_gitmodules = false
 
 [[component]]
 name = "XYara"
-commit = "34a733e9c733669ad8dcaf4588d51197a08545e3"
+commit = "6b7652a0cac5535f23b483c3d970a4e7395f3f34"
 build_role = "default-build-target-not-linked-by-diec"
 dependencies = []
 root_license = "MIT"

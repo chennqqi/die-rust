@@ -1177,3 +1177,17 @@ getSectionNameCollision/getImportFunctionName/getNumberOfImportThunks）。
 这些问题已在 Phase 16.7（commit 5770542）修复，但缺少回归测试。本次补充了
 10 个回归测试到 host_api_unit.rs，使用手工构建的 PE32 二进制验证三个方法的
 语义正确性。
+
+## 2026-10-01: 上游基线同步执行 + 新规则所需 host API 补齐
+
+在需求分析 006 基础上执行同步：DIE-engine subtree 升级到 `23fec32c`
+（submodule 全部迁至 `dep/` 前缀），Detect-It-Easy subtree 升级到
+`8925358d`（db 树校验一致）。更新 components.lock.toml 全部 58 个
+gitlink 为 `dep/` 路径与新 SHA，适配 verify_upstream.py 嵌套 gitlink，
+重生成 rule-source-manifest.json。
+
+新规则要求的 host API 缺口补齐：新增 `pdf_encrypt.rs` 移植上游 XPDF
+加密字典语义（isEncrypted/getEncryption/getPermissions，含 trailer
+/Encrypt 解析、crypt filter、权限位映射）；新增 `PE.getDosStubOffset`
+（上游无条件返回 0x40）；`HostApi` 新增 `read_bytes` 批量读原语
+（BufferHost 覆盖为切片拷贝）。

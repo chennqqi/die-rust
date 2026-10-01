@@ -230,7 +230,9 @@ def validate_cli_dependency_data(
             errors.append(f"duplicate component name: {name}")
         names.add(name)
 
-        locked = locked_gitlinks.get(name)
+        # Upstream moved all submodules under dep/ in baseline 23fec32;
+        # accept both the bare name and the dep/-prefixed gitlink path.
+        locked = locked_gitlinks.get(name) or locked_gitlinks.get(f"dep/{name}")
         if locked is None:
             errors.append(f"{prefix}.name is not present in component lock: {name}")
         elif component.get("commit") != locked.get("commit"):
@@ -284,7 +286,7 @@ def verify_gitlink_inventory(
 ) -> None:
     try:
         tree_gitlinks = parse_gitlink_tree(
-            run_git(repo, "ls-tree", baseline_commit)
+            run_git(repo, "ls-tree", "-r", baseline_commit)
         )
         module_repositories = parse_gitmodules(
             run_git(repo, "show", f"{baseline_commit}:.gitmodules")

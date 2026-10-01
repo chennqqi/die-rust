@@ -1,23 +1,34 @@
 # 上游基线
 
 Status: In Review  
-Upstream: `horsicq/DIE-engine@74eaf505c250ab47e709024e9dc41657cd8f2254`  
-Last updated: 2026-07-29
+Upstream: `horsicq/DIE-engine@23fec32cac2a562342c1c2db8e22ce231b58f346`  
+Last updated: 2026-10-01
 
 ## 结论摘要
 
-本轮调研将 DIE-engine 基线固定为：
+DIE-engine 基线（2026-10-01 升级）固定为：
 
 | 项目 | 值 |
 | --- | --- |
 | Repository | `https://github.com/horsicq/DIE-engine` |
 | Branch | `master` |
-| Commit | `74eaf505c250ab47e709024e9dc41657cd8f2254` |
-| Commit time | `2026-07-24T18:30:29Z` |
-| Commit subject | `Update submodules to latest versions` |
-| `release_version.txt` | `4.0.0` |
-| Submodule count | 58 |
+| Commit | `23fec32cac2a562342c1c2db8e22ce231b58f346` |
+| Submodule count | 58（全部位于 `dep/` 前缀下） |
 | Main license | MIT |
+
+Detect-It-Easy 规则 sibling subtree 固定为
+`8925358d2298957d758b6bba74c393b622322efc`（`db`/`db_extra`/`db_custom`/
+`dbs_min`/`dbs_special`/`yara_rules`/`peid_rules` tree 均已由
+`tools/verify_upstream.py` 逐树核对一致）。
+
+**基线历史**：2026-07-29 首轮基线为
+`74eaf505c250ab47e709024e9dc41657cd8f2254`（`Detect-It-Easy` 为
+`c2c17dfa5ea4e078ba31eab55d87430c96622fb6`）。下文"完整性记录"、
+"构建系统静态分析"中的 SHA-256 和源码链接基于首轮基线采集，仍作为
+上游证据保留；新基线的差异审计见 [`upstream-sync.md`](../design/upstream-sync.md)
+及 `doc/requirements-analysis-006-2026-10-01.md`。新基线将 submodule
+全部迁移至 `dep/` 前缀，`components.lock.toml` 中全部 `gitlink_path`
+已更新为 `dep/<component>`。
 
 固定 SHA 是兼容性实验的唯一身份；文档中的日期或版本号不能替代 SHA。
 
@@ -25,7 +36,7 @@ Last updated: 2026-07-29
 
 ```sh
 git clone https://github.com/horsicq/DIE-engine.git
-git -C DIE-engine checkout 74eaf505c250ab47e709024e9dc41657cd8f2254
+git -C DIE-engine checkout 23fec32cac2a562342c1c2db8e22ce231b58f346
 git -C DIE-engine submodule update --init --recursive
 git -C DIE-engine submodule status --recursive
 ```
@@ -79,19 +90,19 @@ XDecompiler XYara yara_widget XDataConvertorWidget XScanEngine
 XDisasmCore XRegionsWidget XStaticUnpacker XPEID build_tools peid_widget
 ```
 
-首轮核心源码分析使用以下主仓库 gitlink：
+首轮核心源码分析使用以下主仓库 gitlink（2026-10-01 基线）：
 
 | Submodule | Commit | 初步角色 |
 | --- | --- | --- |
-| `Detect-It-Easy` | `c2c17dfa5ea4e078ba31eab55d87430c96622fb6` | 发布数据、`db*` 规则库、YARA/PEiD 规则 |
-| `Formats` | `1151e7254fdee3c0294ff7095edbdd7bfccf8201` | 二进制格式探测和解析基础 |
+| `Detect-It-Easy` | `8925358d2298957d758b6bba74c393b622322efc` | 发布数据、`db*` 规则库、YARA/PEiD 规则 |
+| `Formats` | `65b04bebf41d3090fd4d4223065945ffa88a689d` | 二进制格式探测和解析基础 |
 | `StaticScan` | `fcdcb25b16d0e0c6b2f82c2b270b2a3d58c1e11d` | 静态扫描相关 UI/模型；与 CLI 范围关系待确认 |
-| `XScanEngine` | `dfe4a419e4f491bb23688ba03c5a5bf39e34da83` | 扫描编排、结果模型、递归和数据库加载 |
-| `die_script` | `5d82316c110abf0eb863b50bc679d330e05067b6` | DIE 规则脚本运行时 |
+| `XScanEngine` | `2550d2dab08329a6319a72d0abb722c152d8c940` | 扫描编排、结果模型、递归和数据库加载 |
+| `die_script` | `3a19ceb6d385b8d3e39d5e3d686391d87d252844` | DIE 规则脚本运行时 |
 | `signatures` | `5d80fb2863d02e9366aee7b3ade6abb7d6598dbb` | crypto/junk 二进制签名，不等同于 `db` 脚本规则 |
-| `XOptions` | `810d78d0654f45d39bf07bcda5dc92ce287a4aeb` | CLI 选项定义 |
-| `XFileInfo` | `88b8e2821f86d309f141b38c4d46fa0b000aa74b` | `--info` 和 `--struct` 信息输出 |
-| `XEntropyWidget` | `d2bf95b1019e21e5a5ae71f55fcd6c12349c3030` | `--entropy` 的非 UI 处理代码 |
+| `XOptions` | `954afe89663f7edfb6a376db724c25ac7994594d` | CLI 选项定义 |
+| `XFileInfo` | `7fa7027182b3ff10bfa231f1f0b3532e319d50fc` | `--info` 和 `--struct` 信息输出 |
+| `XEntropyWidget` | `7487d256681b487fb921ea87a12317182d4079ac` | `--entropy` 的非 UI 处理代码 |
 
 全部 58 个直接 gitlink 的 repository URL 和 commit SHA 已记录在
 [`../../upstream/components.lock.toml`](../../upstream/components.lock.toml) 的
@@ -133,7 +144,9 @@ vendored 目录仍需独立 source/license 审计。
 - `db/`：Amiga、APK、Archive、AtariST、Binary、CFBF、COM、DEX、DOS16M、DOS4G、ELF、Image、IPA、ISO9660、JAR、JavaClass、JPEG、LE、LX、MACH、MACHOFAT、MSDOS、NE、NPM、PDF、PE、PNG、PYC、RAR、ZIP。
 - `db_extra/`：Amiga、COM、ELF、MSDOS、PE。
 - `db_custom/`：默认没有规则类别目录。
-- `dbs_min/`、`dbs_special/`：用途和发布选择规则待分析。
+- `dbs_min/`、`dbs_special/`：用途和发布选择规则待分析。2026-10-01
+  基线中 `dbs_special/` 新增 `db_dubious/`（低置信度规则迁入）与
+  `experimental/`。
 - `yara_rules/`、`peid_rules/`：固定 `diec` CLI 不加载；Detect release tree
   与 XYara/XPEID component tree 又不是字节镜像。它们属于 GUI/替代引擎及
   发布物审计范围，见
