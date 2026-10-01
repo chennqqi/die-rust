@@ -162,6 +162,16 @@ These are NOT engine bugs:
 | PDF (version, header comment) | ✅ | |
 | PDF encryption | ✅ | isEncrypted/getEncryption/getPermissions, XPDF @ 8ef2a804 semantics |
 | PE.getDosStubOffset | ✅ | Upstream: unconditional `sizeof(IMAGE_DOS_HEADEREX)` = 0x40 |
+| PE.isDosStubPresent | ✅ | Upstream MSDOS_Script semantics: DOS stub region non-empty |
+| Binary.findSignatures | ✅ | Batch search; upstream `[]` on invalid input, `-1` per miss (XScanEngine @ 2550d2d) |
+| Archive record names | ✅ | isArchiveRecordPresent (exact member-name match) / isArchiveRecordPresentExp (regex; RegExp arg stringified like Qt) on Archive/ZIP/JAR/APK/NPM; replaces raw-byte substring scan |
+| JAR.getManifestRecord | ✅ | META-INF/MANIFEST.MF record; Qt `.`-matches-`\r` emulated via `[^\n]` |
+| APK.getManifestRecord | ✅ | Inherited from JAR_Script upstream |
+| NPM.getPackageJsonRecord | ✅ | `package/package.json` field; non-string → "" (QJsonValue::toString) |
+| APK.getAndroidManifest(Record) | ⚠ stub | Returns ""; binary AXML decode (XAndroidBinary) not implemented |
+| NE.isNE16/isDriver/isFont/isDll | ✅ | XNE::getType(): ne_flags 0x8000 + non-resident name table scan |
+| NE.isImportPresent/isExportPresent/isResourcesPresent | ❌ missing | Requires NE module-ref/resident-name/resource table parsing; left undefined (unguarded use errors loudly) |
+| Binary.is8 | ✅ | MODE_8 memory-map check via file type |
 | JPEG (version from JFIF) | ✅ | |
 | DEX (version from header) | ✅ | |
 | CFBF (version from header) | ✅ | major.minor format |
@@ -187,6 +197,8 @@ for the full list. Key gaps by priority:
 | D001 | Rule version differences (submodule vs 3.21) | N/A | Detection name/version diffs |
 | D002 | Format-specific rules exclude Binary rules | N/A | Eliminates duplicate detections |
 | D003 | JavaClass no longer runs Binary rules | N/A | Host API now complete |
+| D004 | `PE.isNET()` alias retained | N/A | Upstream @ 2550d2d removed `isNET` (only `isNet` remains); the alias keeps rules calling `PE.isNET()` working — a deliberate superset |
+| D005 | `getEPSignature` intentionally undefined | N/A | `Scan_Nullsoft_Install_System` calls it, but no upstream engine defines it at baseline — leaving it undefined preserves upstream observable behavior |
 
 ## Performance Baseline
 

@@ -2852,6 +2852,35 @@ impl HostApiBridge {
                     detail: format!("__pdfGetPermissions set: {e}"),
                 })?;
 
+            // Archive member access backing Archive_Script-style methods
+            // (upstream XArchive::getRecords / decompress at 65b04beb).
+            let h_arc = host.clone();
+            let arc_names_fn = rquickjs::Function::new(ctx.clone(), move || -> Vec<String> {
+                h_arc.archive_record_names()
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("__archiveRecordNames: {e}"),
+            })?;
+            binary
+                .set("__archiveRecordNames", arc_names_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__archiveRecordNames set: {e}"),
+                })?;
+
+            let h_arc = host.clone();
+            let arc_record_fn =
+                rquickjs::Function::new(ctx.clone(), move |name: String| -> String {
+                    h_arc.archive_record_string(&name)
+                })
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__archiveRecordString: {e}"),
+                })?;
+            binary
+                .set("__archiveRecordString", arc_record_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__archiveRecordString set: {e}"),
+                })?;
+
             // Register PE as an independent object (like ELF/MACH/MACHOFAT)
             // with Binary properties copied in. This allows adding PE-specific
             // methods without modifying Binary itself.
@@ -3673,6 +3702,11 @@ impl HostApiBridge {
                         if (!_peIsPE()) return -1;
                         return 0x40;
                     };
+                    // Upstream MSDOS_Script::isDosStubPresent (inherited by
+                    // PE_Script): true when the DOS stub region is non-empty.
+                    PE.isDosStubPresent = function() {
+                        return PE.getDosStubSize() > 0;
+                    };
 
                     // Rich signature: search for "Rich" in DOS stub.
                     // The Rich signature is at a variable offset in the DOS stub.
@@ -4349,6 +4383,9 @@ impl HostApiBridge {
                     PE.findSignature = function(offset, sizeOrSig, sig) {
                         if (sig === undefined) { sig = sizeOrSig; return _B.findSignature(offset, sig); }
                         return _B.findSignature(offset, sizeOrSig, sig);
+                    };
+                    PE.findSignatures = function(offset, size, signatures) {
+                        return _B.findSignatures(offset, size, signatures);
                     };
                     PE.findString = function(offset, sizeOrStr, str) {
                         if (str === undefined) { str = sizeOrStr; sizeOrStr = 0; }
@@ -5547,6 +5584,57 @@ impl HostApiBridge {
                         return false;
                     };
 
+                    // NE-specific methods (upstream NE_Script, new in
+                    // XScanEngine +39 commits). getType mirrors
+                    // XNE::getType(): ne_flags & 0x8000 marks a library-like
+                    // module; the non-resident name table is then scanned for
+                    // "driver"/"font" (case-insensitive), defaulting to DLL.
+                    // TYPE_*: UNKNOWN=0, EXE=1, DLL=3, DRIVER=4, FONT=5.
+                    var _neGetType = function() {
+                        var TYPE_EXE = 1, TYPE_DLL = 3, TYPE_DRIVER = 4, TYPE_FONT = 5;
+                        if (Binary.getSize() < 0x40) return TYPE_EXE;
+                        var lfanew = Binary.read_uint32_le(0x3C);
+                        if (lfanew + 56 > Binary.getSize()) return TYPE_EXE;
+                        // Upstream XNE validates the "NE" magic at
+                        // construction; a non-NE file maps to TYPE_EXE here.
+                        if (Binary.read_uint16_le(lfanew) !== 0x454E) return TYPE_EXE;
+                        // IMAGE_OS2_HEADER.ne_flags at +12; ne_cbnrestab at +32;
+                        // ne_nrestab (absolute file offset) at +44.
+                        var flags = Binary.read_uint16_le(lfanew + 12);
+                        if ((flags & 0x8000) === 0) return TYPE_EXE;
+                        var nrtOffset = Binary.read_uint32_le(lfanew + 44);
+                        var nrtSize = Binary.read_uint16_le(lfanew + 32);
+                        var type = TYPE_DLL;
+                        if (nrtOffset > 0 && nrtSize > 0 &&
+                            nrtOffset + nrtSize <= Binary.getSize()) {
+                            var pos = nrtOffset, end = nrtOffset + nrtSize;
+                            while (pos < end) {
+                                var len = Binary.read_uint8(pos);
+                                pos += 1;
+                                if (len === 0) break;
+                                var name = "";
+                                var nameLen = Math.min(len, 255);
+                                for (var j = 0; j < nameLen && pos + j < Binary.getSize(); j++) {
+                                    name += String.fromCharCode(Binary.read_uint8(pos + j));
+                                }
+                                var lower = name.toLowerCase();
+                                if (lower.indexOf("driver") >= 0) { type = TYPE_DRIVER; break; }
+                                if (lower.indexOf("font") >= 0) type = TYPE_FONT;
+                                pos += len + 2;
+                            }
+                        }
+                        return type;
+                    };
+                    // isNE16: NE memory map mode is always 16-bit segmented.
+                    NE.isNE16 = function() { return true; };
+                    NE.isDriver = function() { return _neGetType() === 4; };
+                    NE.isFont = function() { return _neGetType() === 5; };
+                    NE.isDll = function() { return _neGetType() === 3; };
+                    // NE.isImportPresent/isExportPresent/isResourcesPresent
+                    // require NE table parsing (module-reference, resident
+                    // name, resource tables) which is not implemented yet;
+                    // left undefined so unguarded use fails loudly.
+
                     // JavaClass-specific: parse version from class file header.
                     // Class file: magic (4 bytes, 0xCAFEBABE) + minor (2 bytes, BE) +
                     // major (2 bytes, BE). Map major version to Java SE string.
@@ -5603,7 +5691,8 @@ impl HostApiBridge {
                     };
 
                     // ZIP-specific stubs.
-                    ZIP.isArchiveRecordPresent = function(name) { return false; };
+                    // ZIP.isArchiveRecordPresent/Exp are assigned from the
+                    // real Archive_Script implementation further below.
 
                     // ISO9660-specific: parse Primary Volume Descriptor fields.
                     // PVD is at offset 0x8000 (sector 16). Fields are ASCII,
@@ -5949,6 +6038,53 @@ impl HostApiBridge {
                     File.findSignature = Binary.findSignature;
                     ELF.findSignature = Binary.findSignature;
                     MACH.findSignature = Binary.findSignature;
+
+                    // Upstream Binary_Script::findSignatures(offset, size,
+                    // signatures): batch signature search returning an array
+                    // of offsets (-1 per miss). Returns [] on invalid input:
+                    // non-safe-integer offset/size, >128 signatures, or a
+                    // combined signature-string budget over 65536 chars.
+                    // _fixOffsetAndSize only clamps the end; find_signatures
+                    // rejects offset<0, offset>fileSize and nSize<=0 with
+                    // all--1 results.
+                    var MAX_SAFE_OFFSET = 9007199254740991;
+                    Binary.findSignatures = function(offset, size, signatures) {
+                        if (typeof offset !== "number" || typeof size !== "number" ||
+                            !isFinite(offset) || !isFinite(size) ||
+                            offset < -MAX_SAFE_OFFSET || offset > MAX_SAFE_OFFSET ||
+                            size < -MAX_SAFE_OFFSET || size > MAX_SAFE_OFFSET ||
+                            Math.floor(offset) !== offset || Math.floor(size) !== size) {
+                            return [];
+                        }
+                        if (!signatures || signatures.length === undefined ||
+                            signatures.length > 128) {
+                            return [];
+                        }
+                        var result = [];
+                        var budget = 0;
+                        for (var i = 0; i < signatures.length; i++) {
+                            budget += String(signatures[i]).length;
+                            if (budget > 65536) return [];
+                            result.push(-1);
+                        }
+                        if (signatures.length === 0) return result;
+                        var fileSize = Binary.getSize();
+                        if (offset < 0 || offset > fileSize) return result;
+                        var end = (size === -1 || offset + size > fileSize)
+                            ? fileSize : offset + size;
+                        if (end - offset <= 0) return result;
+                        for (var j = 0; j < signatures.length; j++) {
+                            var found = _orig_fsr(offset, end, String(signatures[j]));
+                            if (typeof found === "number" && found >= 0) {
+                                result[j] = found;
+                            }
+                        }
+                        return result;
+                    };
+                    X.findSignatures = Binary.findSignatures;
+                    File.findSignatures = Binary.findSignatures;
+                    ELF.findSignatures = Binary.findSignatures;
+                    MACH.findSignatures = Binary.findSignatures;
 
                     // Endianness wrappers: U16(offset, bigEndian?) etc.
                     // The native functions are LE-only; BE is handled by
@@ -6663,20 +6799,72 @@ impl HostApiBridge {
                         };
                     }
                     if (typeof Archive !== 'undefined') {
-                        // Archive record: search for filename in archive member list.
-                        Archive.isArchiveRecordPresent = function(name) {
-                            // Search for the filename in file data as a null-terminated string.
-                            var off = Binary.find_ansiString(0, Binary.getSize(), name);
-                            return off >= 0;
+                        // Upstream XArchive::isArchiveRecordPresent: exact
+                        // member-name equality over the archive record list.
+                        var _archivePresent = function(name) {
+                            var names = Binary.__archiveRecordNames();
+                            return names.indexOf(String(name)) >= 0;
                         };
-                        Archive.isArchiveRecordPresentExp = function(name) {
-                            // Case-insensitive search.
-                            var upper = name.toUpperCase();
-                            var lower = name.toLowerCase();
-                            return Archive.isArchiveRecordPresent(upper) ||
-                                   Archive.isArchiveRecordPresent(lower) ||
-                                   Archive.isArchiveRecordPresent(name);
+                        // Upstream XArchive::isArchiveRecordPresentExp:
+                        // isRegExpPresent(pattern, name) — the regex match on
+                        // a record name must be non-empty. Note: Qt converts a
+                        // JS RegExp argument to "/src/flags" before applying
+                        // QRegularExpression, so regex literals never match —
+                        // we reproduce that by always converting to String
+                        // first, keeping observable behavior identical.
+                        var _archivePresentExp = function(pattern) {
+                            var re;
+                            try { re = new RegExp(String(pattern)); }
+                            catch (e) { return false; }
+                            var names = Binary.__archiveRecordNames();
+                            for (var i = 0; i < names.length; i++) {
+                                var m = re.exec(names[i]);
+                                if (m && m[0] !== "") return true;
+                            }
+                            return false;
                         };
+                        Archive.isArchiveRecordPresent = _archivePresent;
+                        Archive.isArchiveRecordPresentExp = _archivePresentExp;
+                        ZIP.isArchiveRecordPresent = _archivePresent;
+                        ZIP.isArchiveRecordPresentExp = _archivePresentExp;
+                        JAR.isArchiveRecordPresent = _archivePresent;
+                        JAR.isArchiveRecordPresentExp = _archivePresentExp;
+                        APK.isArchiveRecordPresent = _archivePresent;
+                        APK.isArchiveRecordPresentExp = _archivePresentExp;
+                        NPM.isArchiveRecordPresent = _archivePresent;
+                        NPM.isArchiveRecordPresentExp = _archivePresentExp;
+
+                        // Upstream JAR_Script::getManifestRecord:
+                        // regExp(key + ": (.*?)\\n", manifest, 1).remove("\r").
+                        // Qt QRegExp `.` matches "\r"; JS `.` does not match
+                        // line terminators, so [^\\n] is the faithful equivalent.
+                        var _jarManifestRecord = function(key) {
+                            var mf = Binary.__archiveRecordString("META-INF/MANIFEST.MF");
+                            var re;
+                            try { re = new RegExp(String(key) + ": ([^\\n]*?)\\n"); }
+                            catch (e) { return ""; }
+                            var m = re.exec(mf);
+                            return m ? m[1].replace(/\r/g, "") : "";
+                        };
+                        JAR.getManifestRecord = _jarManifestRecord;
+                        APK.getManifestRecord = _jarManifestRecord;
+
+                        // Upstream NPM_Script::getPackageJsonRecord:
+                        // JSON field of package/package.json; non-string
+                        // values convert to "" (QJsonValue::toString).
+                        NPM.getPackageJsonRecord = function(key) {
+                            var s = Binary.__archiveRecordString("package/package.json");
+                            try {
+                                var v = JSON.parse(s)[key];
+                                return (typeof v === "string") ? v : "";
+                            } catch (e) { return ""; }
+                        };
+
+                        // APK AndroidManifest.xml is binary AXML which is not
+                        // decoded yet; upstream decodes via XAndroidBinary.
+                        // Stub returns "" (recorded in COMPATIBILITY.md).
+                        APK.getAndroidManifest = function() { return ""; };
+                        APK.getAndroidManifestRecord = function(key) { return ""; };
                     }
                 })();
                 "#,

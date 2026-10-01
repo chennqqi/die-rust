@@ -122,6 +122,66 @@ pub fn extract_zip(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
     members
 }
 
+/// Maximum members enumerated by `zip_member_names` (central directory is
+/// cheap to walk; cap only guards against malicious huge archives).
+const MAX_MEMBER_NAMES: usize = 65536;
+
+/// Maximum bytes decompressed for a single member read by
+/// `zip_member_string` (16 MiB — manifests and manifests-like records are
+/// small; larger members are truncated, matching upstream's unbounded read
+/// is not acceptable for untrusted input).
+const MAX_MEMBER_STRING_BYTES: u64 = 16 * 1024 * 1024;
+
+/// List ZIP member file names without decompressing member contents.
+///
+/// Mirrors upstream `XArchive::getRecords` name enumeration for ZIP-family
+/// archives (ZIP/JAR/APK). Returns an empty vector for non-ZIP input or
+/// parse failure.
+pub fn zip_member_names(data: &[u8]) -> Vec<String> {
+    if !is_zip(data) {
+        return Vec::new();
+    }
+    let cursor = std::io::Cursor::new(data);
+    let archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return Vec::new(),
+    };
+    archive
+        .file_names()
+        .take(MAX_MEMBER_NAMES)
+        .map(|s| s.to_string())
+        .collect()
+}
+
+/// Decompress a single ZIP member by exact name and return it as a
+/// lossy-UTF8 string, bounded to `MAX_MEMBER_STRING_BYTES`.
+///
+/// Mirrors upstream `XArchive::decompress(record)` for text records such as
+/// `META-INF/MANIFEST.MF` (JAR/APK) and `package/package.json` (NPM).
+/// Returns an empty string when the member is absent or undecodable.
+pub fn zip_member_string(data: &[u8], name: &str) -> String {
+    if !is_zip(data) || name.is_empty() {
+        return String::new();
+    }
+    let cursor = std::io::Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return String::new(),
+    };
+    let mut file = match archive.by_name(name) {
+        Ok(f) => f,
+        Err(_) => return String::new(),
+    };
+    if file.is_dir() || file.size() > MAX_MEMBER_STRING_BYTES {
+        return String::new();
+    }
+    let mut buf = Vec::with_capacity(file.size() as usize);
+    if std::io::Read::read_to_end(&mut file, &mut buf).is_err() {
+        return String::new();
+    }
+    String::from_utf8_lossy(&buf).into_owned()
+}
+
 /// Extract members from a 7Z archive with safety bounds (ADR 0030).
 ///
 /// Uses a temporary directory for extraction since sevenz-rust requires

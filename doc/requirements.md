@@ -1191,3 +1191,11 @@ gitlink 为 `dep/` 路径与新 SHA，适配 verify_upstream.py 嵌套 gitlink�
 /Encrypt 解析、crypt filter、权限位映射）；新增 `PE.getDosStubOffset`
 （上游无条件返回 0x40）；`HostApi` 新增 `read_bytes` 批量读原语
 （BufferHost 覆盖为切片拷贝）。
+
+## 2026-10-01 host API 差集审计收尾
+
+继续上游同步遗留：系统性审计新规则树 host API 差集（XScanEngine +39）。
+实现归档成员 API（isArchiveRecordPresent[Exp]、getManifestRecord、
+getPackageJsonRecord，成员名语义取代原字节子串误实现）、PE.isDosStubPresent、
+Binary.findSignatures 批量搜索、NE.isNE16/isDriver/isFont/isDll；
+APK.getAndroidManifest 保持 stub，NE 导入/导出/资源表方法暂缺并文档化。

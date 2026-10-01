@@ -164,6 +164,16 @@ impl HostApi for BufferHost {
         n
     }
 
+    /// ZIP-family member name enumeration (upstream `XArchive::getRecords`).
+    fn archive_record_names(&self) -> Vec<String> {
+        crate::archive_unpack::zip_member_names(self.data())
+    }
+
+    /// ZIP-family member decompression (upstream `XArchive::decompress`).
+    fn archive_record_string(&self, name: &str) -> String {
+        crate::archive_unpack::zip_member_string(self.data(), name)
+    }
+
     fn read_u16_le(&self, offset: u64) -> Result<u16, HostApiError> {
         let data = self.data();
         let idx = offset as usize;

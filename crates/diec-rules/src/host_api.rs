@@ -118,6 +118,22 @@ pub trait HostApi {
         buf.len()
     }
 
+    // --- Archive record access (Archive_Script subset) ---
+
+    /// Names of archive member records (e.g. ZIP central directory file
+    /// names). Returns an empty vector for non-archive inputs.
+    /// Mirrors upstream `XArchive::getRecords` names.
+    fn archive_record_names(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Decompressed content of an archive member as a string, or an empty
+    /// string when the member is absent or the input is not an archive.
+    /// Mirrors upstream `XArchive::decompress(record)`.
+    fn archive_record_string(&self, _name: &str) -> String {
+        String::new()
+    }
+
     // --- File metadata ---
 
     /// Get the file name (basename) as a string.
