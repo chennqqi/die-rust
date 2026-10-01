@@ -25,7 +25,12 @@ endif()
 
 # --- Version from file ---
 file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/../release_version.txt" X_PROJECT_VERSION)
-project(DetectItEasy VERSION ${X_PROJECT_VERSION} LANGUAGES CXX)
+# C as well as CXX: XArchive contributes C translation units directly (the Algos
+# zstd/bzip2/zlib amalgamations). Without C enabled, CMake emits no <CompileAs>
+# for them, MSBuild compiles them as C by extension, and they pull in a C++ STL
+# header -- "error STL1003: Unexpected compiler, expected C++ compiler".
+project(DetectItEasy VERSION ${X_PROJECT_VERSION} LANGUAGES C CXX)
+option(USE_DIE "Enable Detect It Easy integration" ON)
 
 # --- Project identity variables ---
 set(X_COMPANYNAME    "ntinfo")
@@ -53,45 +58,43 @@ set(X_MACOS_INFO_PLIST_IN        "${X_RESOURCE_DIR}/macos/Info.plist.in")
 set(X_MACOS_INFO_PLIST           "${X_RESOURCE_DIR}/macos/Info.plist")
 
 # --- Optional: packaging support via _mylibs ---
-set(DIE_DEPLOY_INIT "${CMAKE_CURRENT_LIST_DIR}/../build_tools/cmake/deploy_init.cmake")
-if(EXISTS "${DIE_DEPLOY_INIT}"
-   AND EXISTS "${X_WINDOWS_RESOURCE_RC_IN}"
-   AND EXISTS "${X_WINDOWS_RESOURCE_ICON_RC_IN}"
-   AND EXISTS "${X_MACOS_ICON}"
-   AND EXISTS "${X_MACOS_INFO_PLIST_IN}")
+set(DIE_DEPLOY_INIT "${CMAKE_SOURCE_DIR}/dep/build_tools/cmake/deploy_init.cmake")
+if(EXISTS "${DIE_DEPLOY_INIT}")
     include("${DIE_DEPLOY_INIT}")
 else()
     message(STATUS "Skipping deploy_init.cmake — packaging templates missing")
 endif()
 
 # --- Translations ---
-set(DIE_TRANSLATION_HELPER "${CMAKE_CURRENT_LIST_DIR}/../build_tools/cmake/deploy_translation.cmake")
+set(DIE_TRANSLATION_HELPER "${CMAKE_SOURCE_DIR}/dep/build_tools/cmake/deploy_translation.cmake")
 if(EXISTS "${DIE_TRANSLATION_HELPER}")
     include("${DIE_TRANSLATION_HELPER}")
 
+    set(DIE_TRANSLATION_DIR "${CMAKE_CURRENT_LIST_DIR}/gui/translation")
     set(DIE_TS_FILES
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_ar_AR.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_bn_BN.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_de_DE.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_es_ES.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_fa_FA.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_fr_FR.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_he_IL.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_id_ID.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_it_IT.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_ja_JP.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_ko_KR.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_pl_PL.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_pt_BR.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_pt_PT.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_ru_RU.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_sv_SE.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_tr_TR.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_uk_UA.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_vi_VN.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_sq_AL.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_zh_CN.ts"
-        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_zh_TW.ts"
+        "${DIE_TRANSLATION_DIR}/die_ar.ts"
+        "${DIE_TRANSLATION_DIR}/die_bn.ts"
+        "${DIE_TRANSLATION_DIR}/die_de.ts"
+        "${DIE_TRANSLATION_DIR}/die_es.ts"
+        "${DIE_TRANSLATION_DIR}/die_fa.ts"
+        "${DIE_TRANSLATION_DIR}/die_fr.ts"
+        "${DIE_TRANSLATION_DIR}/die_he.ts"
+        "${DIE_TRANSLATION_DIR}/die_id.ts"
+        "${DIE_TRANSLATION_DIR}/die_it.ts"
+        "${DIE_TRANSLATION_DIR}/die_ja.ts"
+        "${DIE_TRANSLATION_DIR}/die_ko.ts"
+        "${DIE_TRANSLATION_DIR}/die_pl.ts"
+        "${DIE_TRANSLATION_DIR}/die_pt_BR.ts"
+        "${DIE_TRANSLATION_DIR}/die_pt_PT.ts"
+        "${DIE_TRANSLATION_DIR}/die_ru.ts"
+        "${DIE_TRANSLATION_DIR}/die_sv.ts"
+        "${DIE_TRANSLATION_DIR}/die_tr.ts"
+        "${DIE_TRANSLATION_DIR}/die_uk.ts"
+        "${DIE_TRANSLATION_DIR}/die_vi.ts"
+        # Albanian is maintained in the newer locale-specific catalog.
+        "${CMAKE_CURRENT_LIST_DIR}/../translations/die_sq.ts"
+        "${DIE_TRANSLATION_DIR}/die_zh.ts"
+        "${DIE_TRANSLATION_DIR}/die_zh_TW.ts"
     )
 
     deploy_add_translations(
@@ -105,12 +108,12 @@ if(EXISTS "${DIE_TRANSLATION_HELPER}")
 endif()
 
 # --- Library subdirectories ---
-add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../XCppfilt"      XCppfilt)
-add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../XCapstone"     XCapstone)
-add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../XCapstone/x86" XCapstone_86)
-add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../XArchive"      XArchive)
-add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../XYara"         XYara)
-add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../Formats/xsimd" XSIMD)
+add_subdirectory("${CMAKE_SOURCE_DIR}/dep/XCppfilt"      XCppfilt)
+add_subdirectory("${CMAKE_SOURCE_DIR}/dep/XCapstone"     XCapstone)
+add_subdirectory("${CMAKE_SOURCE_DIR}/dep/XCapstone/x86" XCapstone_86)
+add_subdirectory("${CMAKE_SOURCE_DIR}/dep/XArchive"      XArchive)
+add_subdirectory("${CMAKE_SOURCE_DIR}/dep/XYara"         XYara)
+add_subdirectory("${CMAKE_SOURCE_DIR}/dep/Formats/xsimd" XSIMD)
 
 # --- Executable targets ---
 add_subdirectory(gui)

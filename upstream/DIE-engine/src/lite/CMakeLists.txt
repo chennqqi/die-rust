@@ -1,21 +1,22 @@
-include(${CMAKE_CURRENT_LIST_DIR}/../../build_tools/cmake/cpp_standart_setup.cmake)
+include(${CMAKE_SOURCE_DIR}/dep/build_tools/cmake/cpp_standart_setup.cmake)
 
 if(MSVC)
     add_compile_options(/FS)
     add_compile_options($<$<CONFIG:Debug>:/Z7> $<$<CONFIG:RelWithDebInfo>:/Z7>)
 endif()
 
-add_definitions(-DUSE_DEX)
-add_definitions(-DUSE_PDF)
-add_definitions(-DUSE_ARCHIVE)
-add_definitions(-DUSE_DIE)
+# Adds the xjs* sources to XPDF and defines USE_PDFJSEMUL (see xpdf.cmake)
+option(WITH_PDFJSEMUL "Use PDF JavaScript emulator" ON)
+if(USE_DIE)
+    add_definitions(-DUSE_DIE)
+endif()
 add_definitions(-DUSE_XSIMD)
 
-include(${CMAKE_CURRENT_LIST_DIR}/../../die_script/die_script.cmake)
+include(${CMAKE_SOURCE_DIR}/dep/die_script/die_script.cmake)
 if(NOT DEFINED XOPTIONS_SOURCES)
-    include(${CMAKE_CURRENT_LIST_DIR}/../../XOptions/xoptions.cmake)
+    include(${CMAKE_SOURCE_DIR}/dep/XOptions/xoptions.cmake)
 endif()
-include(${CMAKE_CURRENT_LIST_DIR}/../../Controls/xcomboboxex.cmake)
+include(${CMAKE_SOURCE_DIR}/dep/Controls/xcomboboxex.cmake)
 
 if(UNIX AND NOT APPLE)
     include(GNUInstallDirs)
@@ -58,17 +59,22 @@ set_target_properties(DetectItEasyLite PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE    TRUE
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.ntinfo.diel"
+    MACOSX_BUNDLE_BUNDLE_NAME "Detect It Easy Lite"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_ICON_FILE "lite.icns"
     OUTPUT_NAME "diel"
 )
+
+if(MSVC)
+    # The .rc already supplies RT_MANIFEST; keep the linker from embedding a competing one.
+    target_link_options(DetectItEasyLite PRIVATE /MANIFEST:NO)
+endif()
 
 target_include_directories(DetectItEasyLite PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(DetectItEasyLite PRIVATE
-    bzip2
-    lzma
-    zlib
     capstone_x86
-    ppmd
     xsimd
     Qt${DIE_QT_MAJOR}::Widgets
     Qt${DIE_QT_MAJOR}::Concurrent
@@ -100,10 +106,10 @@ install(TARGETS DetectItEasyLite
 )
 
 if(APPLE)
-    include(${CMAKE_CURRENT_LIST_DIR}/../../build_tools/cmake/macdeployqt.cmake)
+    include(${CMAKE_SOURCE_DIR}/dep/build_tools/cmake/macdeployqt.cmake)
 endif()
 
 if(WIN32)
-    include(${CMAKE_CURRENT_LIST_DIR}/../../build_tools/cmake/deploy_qt_windows.cmake)
-    include(${CMAKE_CURRENT_LIST_DIR}/../../build_tools/cmake/deploy_msvc.cmake)
+    include(${CMAKE_SOURCE_DIR}/dep/build_tools/cmake/deploy_qt_windows.cmake)
+    include(${CMAKE_SOURCE_DIR}/dep/build_tools/cmake/deploy_msvc.cmake)
 endif()
