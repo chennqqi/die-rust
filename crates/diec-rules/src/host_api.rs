@@ -134,6 +134,14 @@ pub trait HostApi {
         String::new()
     }
 
+    /// Decoded AndroidManifest.xml text for APK inputs (binary AXML →
+    /// XML text). Mirrors upstream `XAndroidBinary::getDecoded` applied to
+    /// the `AndroidManifest.xml` archive record. Empty string when absent,
+    /// not an APK/ZIP, or undecodable.
+    fn android_manifest(&self) -> String {
+        String::new()
+    }
+
     // --- File metadata ---
 
     /// Get the file name (basename) as a string.

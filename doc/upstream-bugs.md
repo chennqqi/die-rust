@@ -38,6 +38,30 @@ JavaScript 区分大小写，所以 `PE.isNET` 为 `undefined`，调用时抛 `T
 作为 `PE.isNet` 的别名，使这 5 个规则能正常执行。这是**有意偏离上游**——上游
 这些规则是死代码（永远抛异常），diec-rust 让它们恢复功能。
 
+**更新（基线 8925358 / XScanEngine 2550d2d）**：上游 commit `eb58192d7`
+正式删除 `isNET` 并把所有规则改为 `isNet`；当前规则树 0 处调用
+`PE.isNET(`。diec-rust 已同步删除别名，与上游完全对齐。
+
+---
+
+## Bug 6：`PE.getEPSignature()` 未定义（CipherWall 规则上游死代码）
+
+**严重程度**：中（规则执行失败但上游静默忽略）
+
+**受影响规则**：`db_extra/PE/sfx_CipherWall.1.sg:8` —
+`switch (PE.getEPSignature(19, 14))`，用于区分 CipherWall 1.5 的
+"Decryptor Console"/"Decryptor GUI" 变体。
+
+**表现**：`getEPSignature` 在基线 XScanEngine `2550d2d` 的全部模块及
+die_script `3a19ceb6` 中均无定义（2022 年起的 `die_script` 历史版本中
+也不存在）。上游执行该规则时抛 TypeError 被静默忽略 → CipherWall 的
+options 分支上游永远不可达。
+
+**diec-rust 处理策略**：**有意超集**——实现了
+`PE.getEPSignature(offset, size)` = `getSignature(EP文件偏移+offset, size)`
+（语义从规则用法反推：返回 EP 相对偏移处的 hex 字符串）。这会产生上游
+无法产生的检测结果（over-detection 方向的有意偏差，同 Bug 1 的处理原则）。
+
 ---
 
 ## Bug 2：`archive_Resources.6.sg` 循环条件逻辑错误
@@ -154,11 +178,12 @@ case 2:
 
 | Bug | 类型 | 影响规则数 | diec-rust 策略 |
 |-----|------|-----------|---------------|
-| 1 | `isNET` 未定义 | 5 | 注册别名，恢复功能 |
+| 1 | `isNET` 未定义 | 5→0 | 上游已删除 `isNET` 并更新规则；别名同步移除 |
 | 2 | 循环条件逻辑错误 | 1 | 正确实现掩盖 bug |
 | 3 | `const` 重声明 | 1 | `const`→`var` 预处理 |
 | 4 | 静默忽略异常 | 全局 | 更严格：零异常断言 |
 | 5 | 空签名错误 | 未知 | 不影响检测结果 |
+| 6 | `getEPSignature` 未定义 | 1 | 有意超集实现，CipherWall 可检测 |
 
 **原则**：diec-rust 的目标是"与上游输出一致"，而非"复制上游 bug"。
 对于影响检测结果的 bug（Bug 1），diec-rust 选择修复而非复制。

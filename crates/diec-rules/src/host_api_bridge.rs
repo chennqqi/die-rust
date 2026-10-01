@@ -2881,6 +2881,22 @@ impl HostApiBridge {
                     detail: format!("__archiveRecordString set: {e}"),
                 })?;
 
+            // Decoded AndroidManifest.xml text (binary AXML -> XML),
+            // upstream APK_Script::m_sAndroidManifest.
+            let h_axml = host.clone();
+            let axml_fn =
+                rquickjs::Function::new(ctx.clone(), move || -> String {
+                    h_axml.android_manifest()
+                })
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__androidManifest: {e}"),
+                })?;
+            binary
+                .set("__androidManifest", axml_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__androidManifest set: {e}"),
+                })?;
+
             // Register PE as an independent object (like ELF/MACH/MACHOFAT)
             // with Binary properties copied in. This allows adding PE-specific
             // methods without modifying Binary itself.
@@ -3451,11 +3467,9 @@ impl HostApiBridge {
                     PE.isNet = function() {
                         return _peGetBatch().isNet;
                     };
-                    // Alias: upstream help documents `isNET` and many rules
-                    // (cryptor/installer/protector) call `PE.isNET()` with
-                    // uppercase. JavaScript is case-sensitive, so both forms
-                    // must be registered.
-                    PE.isNET = PE.isNet;
+                    // Upstream @2550d2d removed `isNET` (only `isNet`
+                    // remains) and no rule calls the uppercase form anymore;
+                    // the former alias was dropped for exact parity.
                     // .NET methods: backed by pelite + native BSJB metadata parsing.
                     // isNetObjectPresent: search .NET ANSI strings (#Strings heap).
                     PE.isNetObjectPresent = function(s) {
@@ -3953,6 +3967,19 @@ impl HostApiBridge {
                             hex += h;
                         }
                         return hex.toUpperCase();
+                    };
+
+                    // getEPSignature(offset, size): hex string of `size`
+                    // bytes at entryPointOffset + offset. Intentional
+                    // superset: the method is not defined upstream at
+                    // baseline (2550d2d), so db_extra/PE/sfx_CipherWall.1.sg
+                    // fails there with TypeError; providing it detects
+                    // CipherWall. Recorded in doc/upstream-bugs.md and
+                    // COMPATIBILITY.md D005.
+                    PE.getEPSignature = function(offset, size) {
+                        var ep = PE.getEntryPointOffset();
+                        if (ep < 0) return "";
+                        return PE.getSignature(ep + offset, size);
                     };
 
                     // RVAToOffset / OffsetToRVA / VAToOffset
@@ -5630,10 +5657,93 @@ impl HostApiBridge {
                     NE.isDriver = function() { return _neGetType() === 4; };
                     NE.isFont = function() { return _neGetType() === 5; };
                     NE.isDll = function() { return _neGetType() === 3; };
-                    // NE.isImportPresent/isExportPresent/isResourcesPresent
-                    // require NE table parsing (module-reference, resident
-                    // name, resource tables) which is not implemented yet;
-                    // left undefined so unguarded use fails loudly.
+
+                    // NE table offsets within IMAGE_OS2_HEADER.
+                    // ne_enttab +4, ne_cbenttab +6, ne_cseg +28, ne_cmod +30,
+                    // ne_rsrctab +36, ne_modtab +40, ne_imptab +42.
+                    function _neBase() {
+                        if (Binary.getSize() < 0x40) return -1;
+                        var lfanew = Binary.read_uint32_le(0x3C);
+                        if (lfanew + 56 > Binary.getSize()) return -1;
+                        if (Binary.read_uint16_le(lfanew) !== 0x454E) return -1;
+                        return lfanew;
+                    }
+                    // Upstream checkOffsetSize / isOffsetValid semantics.
+                    function _neCheckRange(off, size) {
+                        var total = Binary.getSize();
+                        return size > 0 && off >= 0 && off < total && off + size <= total;
+                    }
+                    function _neValidOff(off) {
+                        return off >= 0 && off < Binary.getSize();
+                    }
+
+                    // Upstream XNE::isImportPresent == !getImportStructs()
+                    // .isEmpty(). Unused-module fallback guarantees a non-
+                    // empty result whenever the module-reference table is
+                    // valid and non-empty, so relocation walking is unneeded
+                    // for the presence predicate.
+                    NE.isImportPresent = function() {
+                        var base = _neBase();
+                        if (base < 0) return false;
+                        var nModules = Math.min(Binary.read_uint16_le(base + 30), 0x4000);
+                        if (nModules === 0) return false;
+                        var modtab = base + Binary.read_uint16_le(base + 40);
+                        var imptab = base + Binary.read_uint16_le(base + 42);
+                        return _neCheckRange(modtab, nModules * 2) && _neValidOff(imptab);
+                    };
+
+                    // Upstream XNE::isExportPresent == !getExportStructs()
+                    // .isEmpty(): walk the bundled entry table; any bundle
+                    // with count>0 and a non-zero type yields a record.
+                    NE.isExportPresent = function() {
+                        var base = _neBase();
+                        if (base < 0) return false;
+                        var entOff = base + Binary.read_uint16_le(base + 4);
+                        var entSize = Binary.read_uint16_le(base + 6);
+                        if (!_neCheckRange(entOff, entSize)) return false;
+                        var cur = entOff, end = entOff + entSize, guard = 0;
+                        while (cur + 2 <= end && guard++ < 0x10000) {
+                            var count = Binary.read_uint8(cur);
+                            var btype = Binary.read_uint8(cur + 1);
+                            cur += 2;
+                            if (count === 0) break;
+                            if (btype === 0) continue;
+                            var recSize = (btype === 0xFF) ? 6 : 3;
+                            if (cur > end - count * recSize) break;
+                            return true;
+                        }
+                        return false;
+                    };
+
+                    // Upstream XNE::isResourcesPresent ==
+                    // !getResourceStructs().isEmpty(): resource table at
+                    // rsrctab, TYPEINFO blocks of 8 bytes, NAMEINFO records
+                    // of 12 bytes; a record counts only when its shifted
+                    // range is in bounds.
+                    NE.isResourcesPresent = function() {
+                        var base = _neBase();
+                        if (base < 0) return false;
+                        var rt = base + Binary.read_uint16_le(base + 36);
+                        if (!_neCheckRange(rt, 2)) return false;
+                        var shift = Binary.read_uint16_le(rt);
+                        if (shift > 47) return false;
+                        var cur = rt + 2, guard = 0;
+                        while (_neCheckRange(cur, 8) && guard++ < 0x4000) {
+                            var typeId = Binary.read_uint16_le(cur);
+                            if (typeId === 0) break;
+                            var count = Math.min(Binary.read_uint16_le(cur + 2), 0x4000);
+                            cur += 8;
+                            if (!_neCheckRange(cur, count * 12)) break;
+                            for (var i = 0; i < count; i++) {
+                                var ni = cur + i * 12;
+                                var rOff = Binary.read_uint16_le(ni) * Math.pow(2, shift);
+                                var rSize = Binary.read_uint16_le(ni + 2) * Math.pow(2, shift);
+                                if (_neCheckRange(rOff, rSize)) return true;
+                            }
+                            cur += count * 12;
+                        }
+                        return false;
+                    };
 
                     // JavaClass-specific: parse version from class file header.
                     // Class file: magic (4 bytes, 0xCAFEBABE) + minor (2 bytes, BE) +
@@ -6860,11 +6970,22 @@ impl HostApiBridge {
                             } catch (e) { return ""; }
                         };
 
-                        // APK AndroidManifest.xml is binary AXML which is not
-                        // decoded yet; upstream decodes via XAndroidBinary.
-                        // Stub returns "" (recorded in COMPATIBILITY.md).
-                        APK.getAndroidManifest = function() { return ""; };
-                        APK.getAndroidManifestRecord = function(key) { return ""; };
+                        // Upstream APK_Script::getAndroidManifest returns the
+                        // decoded AndroidManifest.xml; getAndroidManifestRecord
+                        // applies regExp(key + "=\"(.*?)\"") — JS `.` does not
+                        // match quotes anyway, but [^\"] keeps values bounded
+                        // to the attribute literal like upstream's lazy match.
+                        APK.getAndroidManifest = function() {
+                            return Binary.__androidManifest();
+                        };
+                        APK.getAndroidManifestRecord = function(key) {
+                            var mf = Binary.__androidManifest();
+                            var re;
+                            try { re = new RegExp(String(key) + "=\\\"([^\\\"]*)\\\""); }
+                            catch (e) { return ""; }
+                            var m = re.exec(mf);
+                            return m ? m[1] : "";
+                        };
                     }
                 })();
                 "#,

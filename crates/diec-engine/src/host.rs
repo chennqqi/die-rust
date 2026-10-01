@@ -174,6 +174,15 @@ impl HostApi for BufferHost {
         crate::archive_unpack::zip_member_string(self.data(), name)
     }
 
+    /// Decoded AndroidManifest.xml (upstream `XAndroidBinary::getDecoded`).
+    fn android_manifest(&self) -> String {
+        let bytes = crate::archive_unpack::zip_member_bytes(self.data(), "AndroidManifest.xml");
+        if bytes.is_empty() {
+            return String::new();
+        }
+        crate::axml::decode_axml(&bytes)
+    }
+
     fn read_u16_le(&self, offset: u64) -> Result<u16, HostApiError> {
         let data = self.data();
         let idx = offset as usize;

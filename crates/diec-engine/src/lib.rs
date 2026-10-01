@@ -12,6 +12,7 @@
 #![warn(missing_docs)]
 
 mod archive_unpack;
+mod axml;
 mod database;
 pub mod host;
 mod nested_scan;

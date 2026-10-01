@@ -1199,3 +1199,12 @@ gitlink 为 `dep/` 路径与新 SHA，适配 verify_upstream.py 嵌套 gitlink�
 getPackageJsonRecord，成员名语义取代原字节子串误实现）、PE.isDosStubPresent、
 Binary.findSignatures 批量搜索、NE.isNE16/isDriver/isFont/isDll；
 APK.getAndroidManifest 保持 stub，NE 导入/导出/资源表方法暂缺并文档化。
+
+### 补差集（同日后续）
+
+用户要求补齐四项有意保留差集：删除 `PE.isNET` 死别名（上游已移除、
+规则 0 调用）；`PE.getEPSignature` 作为有意超集实现（记 upstream-bugs
+Bug 6，CipherWall 规则上游死代码）；实现 APK AXML 解码器（
+`axml.rs` 移植 XAndroidBinary::recordToString，修复 `package_PackageName`
+漏检）；全量移植 NE.isImportPresent/isExportPresent/isResourcesPresent
+（getImportStructs/getExportStructs/getResourceStructs 存在性语义）。

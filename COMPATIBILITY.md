@@ -168,9 +168,10 @@ These are NOT engine bugs:
 | JAR.getManifestRecord | ✅ | META-INF/MANIFEST.MF record; Qt `.`-matches-`\r` emulated via `[^\n]` |
 | APK.getManifestRecord | ✅ | Inherited from JAR_Script upstream |
 | NPM.getPackageJsonRecord | ✅ | `package/package.json` field; non-string → "" (QJsonValue::toString) |
-| APK.getAndroidManifest(Record) | ⚠ stub | Returns ""; binary AXML decode (XAndroidBinary) not implemented |
+| APK.getAndroidManifest(Record) | ✅ | Native AXML decoder (`axml.rs`, ports XAndroidBinary::recordToString); regExp `key="..."` record lookup |
 | NE.isNE16/isDriver/isFont/isDll | ✅ | XNE::getType(): ne_flags 0x8000 + non-resident name table scan |
-| NE.isImportPresent/isExportPresent/isResourcesPresent | ❌ missing | Requires NE module-ref/resident-name/resource table parsing; left undefined (unguarded use errors loudly) |
+| NE.isImportPresent/isExportPresent/isResourcesPresent | ✅ | Presence predicates ported from XNE::getImportStructs/getExportStructs/getResourceStructs (module-ref validity, bundled entry table walk, resource NAMEINFO bounds check) |
+| PE.getEPSignature | ✅ superset | Not defined upstream (rule bug, doc/upstream-bugs.md Bug 6); implemented as getSignature(EP+offset, size) |
 | Binary.is8 | ✅ | MODE_8 memory-map check via file type |
 | JPEG (version from JFIF) | ✅ | |
 | DEX (version from header) | ✅ | |
@@ -197,8 +198,8 @@ for the full list. Key gaps by priority:
 | D001 | Rule version differences (submodule vs 3.21) | N/A | Detection name/version diffs |
 | D002 | Format-specific rules exclude Binary rules | N/A | Eliminates duplicate detections |
 | D003 | JavaClass no longer runs Binary rules | N/A | Host API now complete |
-| D004 | `PE.isNET()` alias retained | N/A | Upstream @ 2550d2d removed `isNET` (only `isNet` remains); the alias keeps rules calling `PE.isNET()` working — a deliberate superset |
-| D005 | `getEPSignature` intentionally undefined | N/A | `Scan_Nullsoft_Install_System` calls it, but no upstream engine defines it at baseline — leaving it undefined preserves upstream observable behavior |
+| D004 | `PE.isNET()` removed with upstream | N/A | Upstream @ 2550d2d removed `isNET` (commit eb58192d) and updated all rules to `isNet`; the former diec-rust alias was dropped for exact parity |
+| D005 | `PE.getEPSignature` implemented as superset | N/A | Undefined upstream at baseline — `sfx_CipherWall.1.sg` fails there (doc/upstream-bugs.md Bug 6); diec-rust intentionally implements it, producing detections upstream cannot |
 
 ## Performance Baseline
 

@@ -350,3 +350,129 @@ fn pe_find_signatures_batch() {
         "findSignatures batch semantics: {results:?}"
     );
 }
+
+/// Build a minimal binary AXML manifest (ResXMLTree) for APK decoding tests.
+///
+/// Layout: root chunk (RES_XML_TYPE) -> string pool -> start namespace
+/// (android prefix) -> start element "manifest" with attributes
+/// `package` (string) and `android:versionName` (string) -> end element.
+fn make_axml_manifest(package: &str, version_name: &str) -> Vec<u8> {
+    // String pool contents.
+    let pool_strs: Vec<&str> = vec![
+        "http://schemas.android.com/apk/res/android", // 0 ns uri
+        "android",                                    // 1 prefix
+        "manifest",                                   // 2 element name
+        "package",                                    // 3 attr name
+        package,                                      // 4 attr value
+        "versionName",                                // 5 attr name
+        version_name,                                 // 6 attr value
+    ];
+    // Encode pool strings as UTF-8: len16(1B) + len8(1B) + bytes + NUL.
+    let mut pool_data = Vec::new();
+    let mut offsets = Vec::new();
+    for s in &pool_strs {
+        offsets.push(pool_data.len() as u32);
+        pool_data.push(s.len() as u8); // utf16 char count
+        pool_data.push(s.len() as u8); // utf8 byte count
+        pool_data.extend_from_slice(s.as_bytes());
+        pool_data.push(0);
+    }
+    let str_count = pool_strs.len() as u32;
+    let offsets_len = str_count * 4;
+    let strings_start = 28 + offsets_len; // pool header(28) + offsets
+    let pool_size = strings_start + pool_data.len() as u32;
+
+    let mut pool = Vec::new();
+    pool.extend_from_slice(&0x0001u16.to_le_bytes()); // RES_STRING_POOL_TYPE
+    pool.extend_from_slice(&28u16.to_le_bytes()); // headerSize
+    pool.extend_from_slice(&pool_size.to_le_bytes());
+    pool.extend_from_slice(&str_count.to_le_bytes());
+    pool.extend_from_slice(&0u32.to_le_bytes()); // styleCount
+    pool.extend_from_slice(&0x100u32.to_le_bytes()); // UTF8 flag
+    pool.extend_from_slice(&strings_start.to_le_bytes());
+    pool.extend_from_slice(&0u32.to_le_bytes()); // stylesStart
+    for o in &offsets {
+        pool.extend_from_slice(&o.to_le_bytes());
+    }
+    pool.extend_from_slice(&pool_data);
+
+    // START_NAMESPACE chunk (24 bytes).
+    let mut start_ns = Vec::new();
+    start_ns.extend_from_slice(&0x0100u16.to_le_bytes());
+    start_ns.extend_from_slice(&16u16.to_le_bytes());
+    start_ns.extend_from_slice(&24u32.to_le_bytes());
+    start_ns.extend_from_slice(&0u32.to_le_bytes()); // lineNumber
+    start_ns.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes()); // comment
+    start_ns.extend_from_slice(&1u32.to_le_bytes()); // prefix "android"
+    start_ns.extend_from_slice(&0u32.to_le_bytes()); // uri
+
+    // START_ELEMENT "manifest" (36 bytes header) + 2 attrs (20 bytes each).
+    let attr = |ns: u32, name: u32, dtype: u8, data: u32| -> Vec<u8> {
+        let mut a = Vec::new();
+        a.extend_from_slice(&ns.to_le_bytes());
+        a.extend_from_slice(&name.to_le_bytes());
+        a.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes()); // rawValue
+        a.extend_from_slice(&8u16.to_le_bytes()); // size
+        a.push(0); // reserved
+        a.push(dtype);
+        a.extend_from_slice(&data.to_le_bytes());
+        a
+    };
+    let mut start_el = Vec::new();
+    start_el.extend_from_slice(&0x0102u16.to_le_bytes());
+    start_el.extend_from_slice(&16u16.to_le_bytes());
+    start_el.extend_from_slice(&(36u32 + 40).to_le_bytes());
+    start_el.extend_from_slice(&0u32.to_le_bytes()); // lineNumber
+    start_el.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes()); // comment
+    start_el.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes()); // ns (none)
+    start_el.extend_from_slice(&2u32.to_le_bytes()); // name "manifest"
+    start_el.extend_from_slice(&20u16.to_le_bytes()); // attributeStart
+    start_el.extend_from_slice(&20u16.to_le_bytes()); // attributeSize
+    start_el.extend_from_slice(&2u16.to_le_bytes()); // attributeCount
+    start_el.extend_from_slice(&0u16.to_le_bytes()); // idIndex
+    start_el.extend_from_slice(&0u16.to_le_bytes()); // classIndex
+    start_el.extend_from_slice(&0u16.to_le_bytes()); // styleIndex
+    start_el.extend_from_slice(&attr(0xFFFF_FFFF, 3, 3, 4)); // package="..."
+    start_el.extend_from_slice(&attr(0, 5, 3, 6)); // android:versionName="..."
+
+    // END_ELEMENT "manifest" (24 bytes).
+    let mut end_el = Vec::new();
+    end_el.extend_from_slice(&0x0103u16.to_le_bytes());
+    end_el.extend_from_slice(&16u16.to_le_bytes());
+    end_el.extend_from_slice(&24u32.to_le_bytes());
+    end_el.extend_from_slice(&0u32.to_le_bytes());
+    end_el.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+    end_el.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+    end_el.extend_from_slice(&2u32.to_le_bytes());
+
+    let total = 8 + pool.len() + start_ns.len() + start_el.len() + end_el.len();
+    let mut axml = Vec::new();
+    axml.extend_from_slice(&0x0003u16.to_le_bytes()); // RES_XML_TYPE
+    axml.extend_from_slice(&8u16.to_le_bytes());
+    axml.extend_from_slice(&(total as u32).to_le_bytes());
+    axml.extend_from_slice(&pool);
+    axml.extend_from_slice(&start_ns);
+    axml.extend_from_slice(&start_el);
+    axml.extend_from_slice(&end_el);
+    axml
+}
+
+#[test]
+fn apk_get_android_manifest_record_decodes_axml() {
+    let axml = make_axml_manifest("com.example.app", "1.2.3");
+    let zip = make_zip(&[("AndroidManifest.xml", &axml)]);
+    let host = Arc::new(BufferHost::new(zip, "test.apk".into()));
+    eprintln!("manifest: {}", host.android_manifest());
+    let mut rt = runtime_for(host);
+    let results = eval_rule(
+        &mut rt,
+        r#"function detect() {
+            var pkg = APK.getAndroidManifestRecord("package");
+            var ver = APK.getAndroidManifestRecord("android:versionName");
+            var missing = APK.getAndroidManifestRecord("nope");
+            if (pkg === "com.example.app" && ver === "1.2.3" && missing === "")
+                _setResult("apk", "decoded", "", "");
+        }"#,
+    );
+    assert_eq!(results.len(), 1, "APK manifest decode: {results:?}");
+}

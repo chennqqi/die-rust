@@ -153,6 +153,34 @@ pub fn zip_member_names(data: &[u8]) -> Vec<String> {
         .collect()
 }
 
+/// Decompress a single ZIP member by exact name and return raw bytes,
+/// bounded to `MAX_MEMBER_STRING_BYTES`.
+///
+/// Mirrors upstream `XArchive::decompress(record)`. Returns an empty
+/// vector when the member is absent or undecodable.
+pub fn zip_member_bytes(data: &[u8], name: &str) -> Vec<u8> {
+    if !is_zip(data) || name.is_empty() {
+        return Vec::new();
+    }
+    let cursor = std::io::Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return Vec::new(),
+    };
+    let mut file = match archive.by_name(name) {
+        Ok(f) => f,
+        Err(_) => return Vec::new(),
+    };
+    if file.is_dir() || file.size() > MAX_MEMBER_STRING_BYTES {
+        return Vec::new();
+    }
+    let mut buf = Vec::with_capacity(file.size() as usize);
+    if std::io::Read::read_to_end(&mut file, &mut buf).is_err() {
+        return Vec::new();
+    }
+    buf
+}
+
 /// Decompress a single ZIP member by exact name and return it as a
 /// lossy-UTF8 string, bounded to `MAX_MEMBER_STRING_BYTES`.
 ///
@@ -160,26 +188,7 @@ pub fn zip_member_names(data: &[u8]) -> Vec<String> {
 /// `META-INF/MANIFEST.MF` (JAR/APK) and `package/package.json` (NPM).
 /// Returns an empty string when the member is absent or undecodable.
 pub fn zip_member_string(data: &[u8], name: &str) -> String {
-    if !is_zip(data) || name.is_empty() {
-        return String::new();
-    }
-    let cursor = std::io::Cursor::new(data);
-    let mut archive = match zip::ZipArchive::new(cursor) {
-        Ok(a) => a,
-        Err(_) => return String::new(),
-    };
-    let mut file = match archive.by_name(name) {
-        Ok(f) => f,
-        Err(_) => return String::new(),
-    };
-    if file.is_dir() || file.size() > MAX_MEMBER_STRING_BYTES {
-        return String::new();
-    }
-    let mut buf = Vec::with_capacity(file.size() as usize);
-    if std::io::Read::read_to_end(&mut file, &mut buf).is_err() {
-        return String::new();
-    }
-    String::from_utf8_lossy(&buf).into_owned()
+    String::from_utf8_lossy(&zip_member_bytes(data, name)).into_owned()
 }
 
 /// Extract members from a 7Z archive with safety bounds (ADR 0030).
