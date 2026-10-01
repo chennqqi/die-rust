@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install qtbase5-dev qtscript5-dev qttools5-dev qttools5-dev-tools libqt5svg5-dev qtchooser qt5-qmake build-essential -y
+          sudo apt-get install qtbase5-dev qtscript5-dev qttools5-dev qttools5-dev-tools libqt5svg5-dev qtchooser build-essential -y
 
       - name: Build
         working-directory: ${{ env.SRC_PATH }}
@@ -58,12 +58,120 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install qtbase5-dev qtscript5-dev qttools5-dev qttools5-dev-tools libqt5svg5-dev qtchooser qt5-qmake build-essential -y
+          sudo apt-get install qtbase5-dev qtscript5-dev qttools5-dev qttools5-dev-tools libqt5svg5-dev qtchooser build-essential -y
 
       - name: Build
         working-directory: ${{ env.SRC_PATH }}
         run: |
           bash -ex build_dpkg.sh
+
+      - name: Upload Release as Download
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v3
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          tag_name: Beta
+          draft: false
+          prerelease: true
+          files: |
+            ${{ env.RELEASE_PATH }}/*.deb
+
+  build-ubuntu-24-ppc64le:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Install Dependencies
+        run: |
+          sudo dpkg --add-architecture ppc64el
+          
+          sudo sed -i 's/^Types: deb/Types: deb\nArchitectures: amd64/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo find /etc/apt/sources.list* -type f -name "*.list" -exec sed -i -E 's/^deb ([^\[])/deb [arch=amd64] \1/g' {} +
+          
+          cat <<EOF | sudo tee /etc/apt/sources.list.d/ubuntu-ports.sources
+          Types: deb
+          URIs: http://ports.ubuntu.com/ubuntu-ports/
+          Suites: noble noble-updates noble-backports noble-security
+          Components: main restricted universe multiverse
+          Architectures: ppc64el
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          
+          sudo apt-get update
+          
+          sudo apt-get install -y \
+            build-essential \
+            crossbuild-essential-ppc64el \
+            git \
+            cmake \
+            dpkg-dev
+            
+          sudo apt-get install -y \
+            qtbase5-dev-tools \
+            qttools5-dev-tools \
+            qtchooser
+            
+          sudo apt-get install -y \
+            qtbase5-dev:ppc64el \
+            qtscript5-dev:ppc64el \
+            qttools5-dev:ppc64el \
+            libqt5svg5-dev:ppc64el
+
+      - name: Build DIE-engine
+        run: |
+          git clone --recursive https://github.com/horsicq/DIE-engine.git
+          cd DIE-engine
+
+          export CC=powerpc64le-linux-gnu-gcc
+          export CXX=powerpc64le-linux-gnu-g++
+          export PKG_CONFIG_PATH=/usr/lib/powerpc64le-linux-gnu/pkgconfig
+          export CMAKE_PREFIX_PATH=/usr/lib/powerpc64le-linux-gnu
+          
+          sed -i '1i set(CMAKE_SYSTEM_NAME Linux)\nset(CMAKE_SYSTEM_PROCESSOR ppc64le)\nset(X_PROJECT_ARCH ppc64le)\nset(CPACK_DEBIAN_PACKAGE_ARCHITECTURE ppc64el)\n' CMakeLists.txt
+          
+          sed -i 's/ARCH=$(dpkg --print-architecture.*/ARCH="ppc64el"/g' build_dpkg.sh
+          
+          sed -i 's/--parallel $(nproc)/-j $(nproc)/g' build_dpkg.sh
+          
+          chmod a+x build_dpkg.sh
+          ./build_dpkg.sh
+
+      - name: Collect packages
+        run: |
+          mkdir -p "${{ env.RELEASE_PATH }}"
+
+          find DIE-engine \
+            -type f \
+            -name "*.deb" \
+            -exec cp {} "${{ env.RELEASE_PATH }}/" \;
+
+      - name: Verify package architecture
+        run: |
+          shopt -s nullglob
+          packages=("${{ env.RELEASE_PATH }}"/*.deb)
+
+          if [ ${#packages[@]} -eq 0 ]; then
+            echo "::error::No .deb packages found in the directory: ${{ env.RELEASE_PATH }}"
+            ls -la "${{ env.RELEASE_PATH }}" || echo "Directory does not exist."
+            exit 1
+          fi
+
+          echo "Found ${#packages[@]} package(s). Verifying architecture..."
+
+          for package in "${packages[@]}"; do
+            ARCH=$(dpkg-deb -f "$package" Architecture)
+            echo "Checking $package (Architecture: $ARCH)"
+            
+            if [ "$ARCH" != "ppc64el" ]; then
+              echo "::error::Architecture mismatch in $package! Expected 'ppc64el', but got '$ARCH'"
+              exit 1
+            fi
+          done
+          
+          echo "All packages verified successfully."
 
       - name: Upload Release as Download
         if: github.event_name != 'pull_request'
@@ -88,7 +196,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install qtbase5-dev qtscript5-dev qttools5-dev qttools5-dev-tools libqt5svg5-dev qtchooser qt5-qmake build-essential -y
+          sudo apt-get install qtbase5-dev qtscript5-dev qttools5-dev qttools5-dev-tools libqt5svg5-dev qtchooser build-essential -y
 
       - name: Build
         working-directory: ${{ env.SRC_PATH }}
@@ -106,7 +214,6 @@ jobs:
           prerelease: true
           files: |
             ${{ env.RELEASE_PATH }}/*.deb
-            
 
   build-appimage:
     runs-on: ubuntu-22.04
@@ -119,7 +226,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install qtbase5-dev qtscript5-dev qttools5-dev qttools5-dev-tools libqt5svg5-dev qtchooser qt5-qmake build-essential -y
+          sudo apt-get install qtbase5-dev qtscript5-dev qttools5-dev qttools5-dev-tools libqt5svg5-dev qtchooser build-essential -y
           wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           chmod +x linuxdeploy-x86_64.AppImage
           sudo mv linuxdeploy-x86_64.AppImage /usr/local/bin/linuxdeploy
@@ -127,7 +234,6 @@ jobs:
           wget https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
           chmod +x linuxdeploy-plugin-qt-x86_64.AppImage
           sudo mv linuxdeploy-plugin-qt-x86_64.AppImage /usr/local/bin/linuxdeploy-plugin-qt
-
 
       - name: Build
         working-directory: ${{ env.SRC_PATH }}
@@ -178,7 +284,7 @@ jobs:
         working-directory: ${{ env.SRC_PATH }}
         run: |
           set VSVARS_PATH="C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars32.bat"
-          set QMAKE_PATH="${{ github.workspace }}\Qt\5.15.2\msvc2019\bin\qmake.exe"
+          set QT_PREFIX_PATH=${{ github.workspace }}\Qt\5.15.2\msvc2019
           set SEVENZIP_PATH="C:\Program Files\7-Zip\7z.exe"
           set INNOSETUP_PATH="C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
@@ -236,7 +342,7 @@ jobs:
         working-directory: ${{ env.SRC_PATH }}
         run: |
           set VSVARS_PATH="C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          set QMAKE_PATH="${{ github.workspace }}\Qt\5.15.2\msvc2019_64\bin\qmake.exe"
+          set QT_PREFIX_PATH=${{ github.workspace }}\Qt\5.15.2\msvc2019_64
           set SEVENZIP_PATH="C:\Program Files\7-Zip\7z.exe"
           set INNOSETUP_PATH="C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
@@ -294,7 +400,7 @@ jobs:
         working-directory: ${{ env.SRC_PATH }}
         run: |
           set VSVARS_PATH="C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          set QMAKE_PATH="${{ github.workspace }}\Qt\6.10.2\msvc2022_64\bin\qmake.exe"
+          set QT_PREFIX_PATH=${{ github.workspace }}\Qt\6.10.2\msvc2022_64
           set SEVENZIP_PATH="C:\Program Files\7-Zip\7z.exe"
           set INNOSETUP_PATH="C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 
@@ -323,7 +429,62 @@ jobs:
           prerelease: true
           files: |
             ${{ env.RELEASE_PATH }}/*.zip
-            
+
+  build-windows-arm64:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+         submodules: 'recursive'
+
+      - name: Install Qt (Host x64)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.2'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_64'
+          dir: ${{ github.workspace }}
+          modules: qt5compat
+
+      - name: Install Qt (Target ARM64)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.2'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_arm64_cross_compiled'
+          dir: ${{ github.workspace }}
+          modules: qt5compat
+
+      - name: Build and Package ARM64
+        shell: cmd
+        run: |
+          set "QT_HOST_PATH=${{ github.workspace }}\Qt\6.8.2\msvc2022_64"
+          set "QT_TARGET_PATH=${{ github.workspace }}\Qt\6.8.2\msvc2022_arm64"
+          set "X_SOURCE_PATH=${{ github.workspace }}"
+
+          echo on
+          call "%X_SOURCE_PATH%\build_win_arm64.bat"
+
+          dir "%X_SOURCE_PATH%\release\*.zip" >nul 2>&1
+          if %ERRORLEVEL% neq 0 (
+            echo "ZIP file does not exist"
+            exit /b 1
+          )
+
+      - name: Upload Release as Download
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          tag_name: Beta
+          draft: false
+          prerelease: true
+          files: |
+            ${{ github.workspace }}\release\*.zip
             
   build-arch:
     runs-on: ubuntu-latest
@@ -332,7 +493,7 @@ jobs:
       - name: Install dependencies
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm qt5-base qt5-script qt5-svg qt5-tools base-devel git
+          pacman -S --noconfirm qt5-base qt5-script qt5-svg qt5-tools base-devel git cmake
           pacman -S --noconfirm imagemagick
 
       - name: Create user
@@ -621,13 +782,14 @@ jobs:
     runs-on: ubuntu-latest
 
     container:
-      image: opensuse/leap:latest
+      image: opensuse/leap:15.6
 
     steps:
       - name: Install dependencies
         run: |
+          zypper --non-interactive modifyrepo --disable repo-openh264 || true
           zypper refresh
-          zypper install -y \
+          zypper install -y --allow-downgrade \
             git \
             cmake \
             gcc-c++ \
@@ -691,13 +853,14 @@ jobs:
     runs-on: ubuntu-24.04-arm
 
     container:
-      image: opensuse/leap:latest
+      image: opensuse/leap:15.6
 
     steps:
       - name: Install dependencies
         run: |
+          zypper --non-interactive modifyrepo --disable repo-openh264 || true
           zypper refresh
-          zypper install -y \
+          zypper install -y --allow-downgrade \
             git \
             cmake \
             gcc-c++ \
@@ -754,3 +917,415 @@ jobs:
           prerelease: true
           files: |
             release/*.rpm
+
+  build-s390x:
+    name: build-s390x
+    needs: [build-termux]
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          path: ${{ env.SRC_PATH }}
+
+      - name: Install Dependencies
+        run: |
+          sudo dpkg --add-architecture s390x
+          
+          sudo sed -i 's/^Types: deb/Types: deb\nArchitectures: amd64/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo find /etc/apt/sources.list* -type f -name "*.list" -exec sed -i -E 's/^deb ([^\[])/deb [arch=amd64] \1/g' {} +
+          
+          cat <<EOF | sudo tee /etc/apt/sources.list.d/ubuntu-ports.sources
+          Types: deb
+          URIs: http://ports.ubuntu.com/ubuntu-ports/
+          Suites: noble noble-updates noble-backports noble-security
+          Components: main restricted universe multiverse
+          Architectures: s390x
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          
+          sudo apt-get update
+          
+          sudo apt-get install -y \
+            build-essential \
+            crossbuild-essential-s390x \
+            git \
+            cmake \
+            dpkg-dev
+            
+          sudo apt-get install -y \
+            qtbase5-dev-tools \
+            qttools5-dev-tools \
+            qtchooser
+            
+          sudo apt-get install -y \
+            qtbase5-dev:s390x \
+            qtscript5-dev:s390x \
+            qttools5-dev:s390x \
+            libqt5svg5-dev:s390x
+
+      - name: Build s390x
+        run: |
+          cd ${{ env.SRC_PATH }}
+
+          export CC=s390x-linux-gnu-gcc
+          export CXX=s390x-linux-gnu-g++
+          export PKG_CONFIG_PATH=/usr/lib/s390x-linux-gnu/pkgconfig
+          export CMAKE_PREFIX_PATH=/usr/lib/s390x-linux-gnu
+          
+          sed -i '1i set(CMAKE_SYSTEM_NAME Linux)\nset(CMAKE_SYSTEM_PROCESSOR s390x)\nset(X_PROJECT_ARCH s390x)\nset(CPACK_DEBIAN_PACKAGE_ARCHITECTURE s390x)\n' CMakeLists.txt
+          
+          sed -i 's/ARCH=$(dpkg --print-architecture.*/ARCH="s390x"/g' build_dpkg.sh
+          
+          sed -i 's/--parallel $(nproc)/-j$(nproc)/g' build_dpkg.sh
+          
+          chmod a+x build_dpkg.sh
+          ./build_dpkg.sh
+
+      - name: Upload Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v3
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          tag_name: Beta
+          draft: false
+          prerelease: true
+          files: |
+            ${{ env.SRC_PATH }}/release/*.deb
+
+  build-riscv64:
+    name: build-riscv64
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Install Dependencies
+        run: |
+          sudo dpkg --add-architecture riscv64
+          
+          sudo sed -i 's/^Types: deb/Types: deb\nArchitectures: amd64/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo find /etc/apt/sources.list* -type f -name "*.list" -exec sed -i -E 's/^deb ([^\[])/deb [arch=amd64] \1/g' {} +
+          
+          cat <<EOF | sudo tee /etc/apt/sources.list.d/ubuntu-ports.sources
+          Types: deb
+          URIs: http://ports.ubuntu.com/ubuntu-ports/
+          Suites: noble noble-updates noble-backports noble-security
+          Components: main restricted universe multiverse
+          Architectures: riscv64
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          
+          sudo apt-get update
+          
+          sudo apt-get install -y \
+            build-essential \
+            crossbuild-essential-riscv64 \
+            git \
+            cmake \
+            dpkg-dev
+            
+          sudo apt-get install -y \
+            qtbase5-dev-tools \
+            qttools5-dev-tools \
+            qtchooser
+            
+          sudo apt-get install -y \
+            qtbase5-dev:riscv64 \
+            qtscript5-dev:riscv64 \
+            qttools5-dev:riscv64 \
+            libqt5svg5-dev:riscv64
+
+      - name: Build risc64
+        run: |
+          git clone --recursive https://github.com/horsicq/DIE-engine.git
+          cd DIE-engine
+
+          export CC=riscv64-linux-gnu-gcc
+          export CXX=riscv64-linux-gnu-g++
+          export PKG_CONFIG_PATH=/usr/lib/riscv64-linux-gnu/pkgconfig
+          export CMAKE_PREFIX_PATH=/usr/lib/riscv64-linux-gnu
+          
+          sed -i '1i set(CMAKE_SYSTEM_NAME Linux)\nset(CMAKE_SYSTEM_PROCESSOR riscv64)\nset(X_PROJECT_ARCH riscv64)\nset(CPACK_DEBIAN_PACKAGE_ARCHITECTURE riscv64)\n' CMakeLists.txt
+          
+          sed -i 's/ARCH=$(dpkg --print-architecture.*/ARCH="riscv64"/g' build_dpkg.sh
+          
+          chmod a+x build_dpkg.sh
+          ./build_dpkg.sh
+
+      - name: Collect packages
+        run: |
+          mkdir -p "${{ env.RELEASE_PATH }}"
+
+          find DIE-engine \
+            -type f \
+            -name "*.deb" \
+            -exec cp {} "${{ env.RELEASE_PATH }}/" \;
+
+      - name: Verify package architecture
+        run: |
+          shopt -s nullglob
+          packages=("${{ env.RELEASE_PATH }}"/*.deb)
+
+          if [ ${#packages[@]} -eq 0 ]; then
+            echo "::error::No .deb packages found in the directory: ${{ env.RELEASE_PATH }}"
+            ls -la "${{ env.RELEASE_PATH }}" || echo "Directory does not exist."
+            exit 1
+          fi
+
+          echo "Found ${#packages[@]} package(s). Verifying architecture..."
+
+          for package in "${packages[@]}"; do
+            ARCH=$(dpkg-deb -f "$package" Architecture)
+            echo "Checking $package (Architecture: $ARCH)"
+            
+            if [ "$ARCH" != "riscv64" ]; then
+              echo "::error::Architecture mismatch in $package! Expected 'riscv64', but got '$ARCH'"
+              exit 1
+            fi
+          done
+          
+          echo "All packages verified successfully."
+
+      - name: Upload Release as Download
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v3
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          tag_name: Beta
+          draft: false
+          prerelease: true
+          files: |
+            ${{ env.RELEASE_PATH }}/*.deb
+
+  build-nix:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone DIE-engine
+        run: |
+          git clone --recursive \
+            https://github.com/horsicq/DIE-engine.git
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          extra_conf: |
+            experimental-features = nix-command flakes
+
+      - name: Build with Nix
+        run: |
+          nix-build DIE-engine/build.nix -o result
+
+      - name: Create Nix Release
+        run: |
+          mkdir -p release
+          nix-store --export $(nix-store -qR result) | xz -T0 > release/detect-it-easy-4.0.0-nix-closure.nar.xz
+
+      - name: Upload Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          tag_name: Beta
+          draft: false
+          prerelease: true
+          files: |
+            release/*.nar.xz
+
+  build-freebsd:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+
+      - name: Build DiE for FreeBSD
+        uses: cross-platform-actions/action@v0.25.0
+        with:
+          operating_system: freebsd
+          version: '14.0'
+          run: |
+            sudo env IGNORE_OSVERSION=yes pkg update
+            sudo env IGNORE_OSVERSION=yes pkg install -y git cmake qt5 qt5-script qt5-svg qt5-linguisttools pkgconf bash
+            
+            export PATH=$PATH:/usr/local/lib/qt5/bin
+            
+            mkdir build
+            cd build
+            cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local
+            cmake --build . --config Release -j $(sysctl -n hw.ncpu)
+            
+            DESTDIR=$(pwd)/../stage cmake --install .
+            cd ..
+            
+            mkdir -p stage/usr/local/bin
+            find build -type f -name "die" -exec cp -f {} stage/usr/local/bin/ \; || true
+            find build -type f -name "diec" -exec cp -f {} stage/usr/local/bin/ \; || true
+            
+            if [ -z "$(ls -A stage/usr/local/bin)" ]; then exit 1; fi
+            
+            mkdir -p release
+            find stage -type f | sed 's/^stage//' > plist
+            pkg create -M manifest.ucl -p plist -r stage -o release
+
+      - name: Upload Release as Download
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v3
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          tag_name: Beta
+          draft: false
+          prerelease: true
+          files: release/*.pkg
+
+  build-parrotos:
+    runs-on: ubuntu-latest
+    container:
+      image: parrotsec/core:rolling
+    steps:
+      - name: Install dependencies
+        run: |
+          echo "deb [trusted=yes] https://deb.parrot.sh/parrot parrot main contrib non-free" > /etc/apt/sources.list.d/parrot.list
+          apt-get update -y
+          apt-get install -y parrot-archive-keyring || true
+          
+          apt-get update -y
+          apt-get install -y git qtbase5-dev qtscript5-dev qttools5-dev qttools5-dev-tools libqt5svg5-dev build-essential cmake
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |          
+          bash -ex build_dpkg.sh
+          
+          for file in release/die_*_linux_amd64.deb; do
+            if [ -f "$file" ]; then
+              mv "$file" "${file/_linux_/_parrotos_}"
+            fi
+          done
+
+      - name: Upload Release as Download
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: Beta
+          draft: false
+          prerelease: true
+          files: |
+            ${{ github.workspace }}/release/*.deb
+
+
+  build-kali:
+    runs-on: ubuntu-latest
+    container:
+      image: kalilinux/kali-rolling
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update -y
+          apt-get install -y git qtbase5-dev qtscript5-dev qttools5-dev qttools5-dev-tools libqt5svg5-dev build-essential cmake
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |
+          bash -ex build_dpkg.sh
+          
+          for file in release/die_*_linux_amd64.deb; do
+            if [ -f "$file" ]; then
+              mv "$file" "${file/_linux_/_kalilinux_}"
+            fi
+          done
+
+      - name: Upload Release as Download
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: Beta
+          draft: false
+          prerelease: true
+          files: |
+            ${{ github.workspace }}/release/*.deb
+
+  build-termux:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Create Output Directory on Host
+        run: |
+          mkdir -p output_termux
+          chmod 777 output_termux
+
+      - name: Build DiE(c)
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -v ${{ github.workspace }}/output_termux:/output \
+            termux/termux-docker:aarch64 bash -c "
+            pkg update -y
+            pkg install -y x11-repo
+            pkg install -y clang cmake make tar qt6-qtbase qt6-qtsvg qt6-qtdeclarative qt6-qt5compat qt6-qttools
+            
+            mkdir -p /data/data/com.termux/files/usr/lib/qt6/plugins/platformthemes
+            touch /data/data/com.termux/files/usr/lib/qt6/plugins/platformthemes/libqgtk3.so
+            
+            cp -r /workspace ~/DIE-engine
+            
+            cd ~/DIE-engine
+            
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+            cmake --build build --target diec --parallel \$(nproc)
+            
+            mkdir -p release_termux/diec
+            
+            cp build/src/console/diec release_termux/diec/ 2>/dev/null || true
+            cp -r dep/Detect-It-Easy/db release_termux/diec/ 2>/dev/null || true
+            cp -r dep/Detect-It-Easy/db_custom release_termux/diec/ 2>/dev/null || true
+            cp -r dep/Detect-It-Easy/db_extra release_termux/diec/ 2>/dev/null || true
+            cp -r dep/Detect-It-Easy/info release_termux/diec/ 2>/dev/null || true
+            
+            tar -czvf /output/DetectItEasy_Termux_CLI_aarch64.tar.gz -C release_termux diec
+          "
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DetectItEasy-Termux-CLI-aarch64
+          path: output_termux/DetectItEasy_Termux_CLI_aarch64.tar.gz
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: Beta
+          draft: false
+          prerelease: true
+          files: output_termux/DetectItEasy_Termux_CLI_aarch64.tar.gz

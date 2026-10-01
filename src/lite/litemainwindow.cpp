@@ -20,6 +20,8 @@
  */
 #include "litemainwindow.h"
 
+#include <QFileInfo>
+
 #include "ui_litemainwindow.h"
 
 LiteMainWindow::LiteMainWindow(QWidget *pParent) : QMainWindow(pParent), ui(new Ui::LiteMainWindow)
@@ -40,7 +42,6 @@ LiteMainWindow::LiteMainWindow(QWidget *pParent) : QMainWindow(pParent), ui(new 
     g_xOptions.addID(XOptions::ID_SCAN_FLAG_VERBOSE, true);
     g_xOptions.addID(XOptions::ID_SCAN_FLAG_ALLTYPES, false);
     g_xOptions.addID(XOptions::ID_SCAN_DIE_DATABASE_MAIN_PATH, "$data/db");
-    g_xOptions.addID(XOptions::ID_SCAN_DIE_DATABASE_EXTRA_PATH, "$data/db_extra");
     g_xOptions.addID(XOptions::ID_SCAN_DIE_DATABASE_CUSTOM_PATH, "$data/db_custom");
 
     g_xOptions.load();
@@ -122,13 +123,11 @@ void LiteMainWindow::process()
         XScanEngine::SCAN_OPTIONS scanOptions = {};
 
         scanOptions.bUseCustomDatabase = true;
-        scanOptions.bUseExtraDatabase = true;
         scanOptions.bShowType = true;
         scanOptions.bShowVersion = true;
         scanOptions.bShowInfo = true;
         scanOptions.fileType = (XBinary::FT)(ui->comboBoxType->currentData().toInt());
         scanOptions.sMainDatabasePath = g_xOptions.getValue(XOptions::ID_SCAN_DIE_DATABASE_MAIN_PATH).toString();
-        scanOptions.sExtraDatabasePath = g_xOptions.getValue(XOptions::ID_SCAN_DIE_DATABASE_EXTRA_PATH).toString();
         scanOptions.sCustomDatabasePath = g_xOptions.getValue(XOptions::ID_SCAN_DIE_DATABASE_CUSTOM_PATH).toString();
 
         XScanEngine::setScanFlags(&scanOptions, ui->comboBoxFlags->getValue().toULongLong());
@@ -148,14 +147,35 @@ void LiteMainWindow::process()
     }
 }
 
+static bool _isLocalFileDrag(const QMimeData *pMimeData)
+{
+    bool bResult = false;
+
+    if (pMimeData->hasUrls()) {
+        QList<QUrl> urlList = pMimeData->urls();
+
+        if (urlList.count() && urlList.at(0).isLocalFile() && QFileInfo(urlList.at(0).toLocalFile()).isFile()) {
+            bResult = true;
+        }
+    }
+
+    return bResult;
+}
+
 void LiteMainWindow::dragEnterEvent(QDragEnterEvent *event)
 {
-    event->acceptProposedAction();
+    // Accepting unconditionally advertised a drop the window cannot service: dropping
+    // selected text or a remote URL showed the "copy" cursor and then did nothing.
+    if (_isLocalFileDrag(event->mimeData())) {
+        event->acceptProposedAction();
+    }
 }
 
 void LiteMainWindow::dragMoveEvent(QDragMoveEvent *event)
 {
-    event->acceptProposedAction();
+    if (_isLocalFileDrag(event->mimeData())) {
+        event->acceptProposedAction();
+    }
 }
 
 void LiteMainWindow::dropEvent(QDropEvent *event)
@@ -168,9 +188,13 @@ void LiteMainWindow::dropEvent(QDropEvent *event)
         if (urlList.count()) {
             QString sFileName = urlList.at(0).toLocalFile();
 
-            sFileName = XBinary::convertFileName(sFileName);
+            if (!sFileName.isEmpty()) {
+                sFileName = XBinary::convertFileName(sFileName);
 
-            processFile(sFileName);
+                event->acceptProposedAction();
+
+                processFile(sFileName);
+            }
         }
     }
 }

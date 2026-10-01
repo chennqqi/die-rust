@@ -1,5 +1,5 @@
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -13,15 +13,15 @@ if(MSVC)
     add_compile_options($<$<CONFIG:Debug>:/Z7> $<$<CONFIG:RelWithDebInfo>:/Z7>)
 endif()
 
-add_definitions(-DUSE_DEX)
-add_definitions(-DUSE_PDF)
-add_definitions(-DUSE_ARCHIVE)
+# Adds the xjs* sources to XPDF and defines USE_PDFJSEMUL (see xpdf.cmake)
+option(WITH_PDFJSEMUL "Use PDF JavaScript emulator" ON)
 add_definitions(-DUSE_XSIMD)
 
-include(${CMAKE_CURRENT_LIST_DIR}/../../die_script/die_script.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/../../XOptions/xoptions.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/../../XEntropyWidget/entropyprocess.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/../../XFileInfo/xfileinfo.cmake)
+include(${CMAKE_SOURCE_DIR}/dep/die_script/die_script.cmake)
+include(${CMAKE_SOURCE_DIR}/dep/XOptions/xoptions.cmake)
+include(${CMAKE_SOURCE_DIR}/dep/XEntropyWidget/entropyprocess.cmake)
+include(${CMAKE_SOURCE_DIR}/dep/XFileInfo/xfileinfo.cmake)
+include(${CMAKE_SOURCE_DIR}/dep/XScanEngine/xscanengineconsole.cmake)
 
 if(UNIX AND NOT APPLE)
     include(GNUInstallDirs)
@@ -32,9 +32,8 @@ set(DIEC_SOURCES
     ${XOPTIONS_SOURCES}
     ${ENTROPYPROCESS_SOURCES}
     ${XFILEINFO_SOURCES}
+    ${XSCANENGINECONSOLE_SOURCES}
     main_console.cpp
-    consoleoutput.cpp
-    consoleoutput.h
 )
 
 if(WIN32 AND EXISTS "${X_WINDOWS_RESOURCE_RC_IN}")
@@ -56,11 +55,7 @@ target_include_directories(diec PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(diec PRIVATE
     xsimd
-    bzip2
-    lzma
-    zlib
     capstone_x86
-    ppmd
     Qt${DIE_QT_MAJOR}::Core
     Qt${DIE_QT_MAJOR}::Concurrent
 )

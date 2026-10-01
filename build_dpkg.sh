@@ -32,9 +32,11 @@ mkdir -p "$WORK_DIR/usr/share/applications"
 mkdir -p "$WORK_DIR/usr/share/icons"
 mkdir -p "$WORK_DIR/usr/share/metainfo"
 
-# Copy assets not covered by cmake install (db, db_extra, peid, etc.)
-[ -d "$X_SOURCE_PATH/Detect-It-Easy/db_extra" ] && \
-    cp -Rf "$X_SOURCE_PATH/Detect-It-Easy/db_extra/." "$WORK_DIR/usr/lib/die/db_extra/"
+# Copy assets not covered by cmake install; fold db_extra into db
+if [ -d "$X_SOURCE_PATH/dep/Detect-It-Easy/db_extra" ]; then
+    mkdir -p "$WORK_DIR/usr/lib/die/db"
+    cp -Rf "$X_SOURCE_PATH/dep/Detect-It-Easy/db_extra"/*/ "$WORK_DIR/usr/lib/die/db/"
+fi
 
 # lang: cmake installs to prefix/lang; move to usr/lib/die/lang
 if [ -d "$STAGE_USR/lang" ]; then
@@ -43,9 +45,9 @@ if [ -d "$STAGE_USR/lang" ]; then
 fi
 
 # crypto.db
-if [ -f "$X_SOURCE_PATH/signatures/crypto.db" ]; then
+if [ -f "$X_SOURCE_PATH/dep/signatures/crypto.db" ]; then
     mkdir -p "$WORK_DIR/usr/lib/die/signatures"
-    cp -f "$X_SOURCE_PATH/signatures/crypto.db" "$WORK_DIR/usr/lib/die/signatures/"
+    cp -f "$X_SOURCE_PATH/dep/signatures/crypto.db" "$WORK_DIR/usr/lib/die/signatures/"
 fi
 
 # Build DEBIAN/control

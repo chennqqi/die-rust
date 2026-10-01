@@ -1,4 +1,4 @@
-include(${CMAKE_CURRENT_LIST_DIR}/../../build_tools/cmake/cpp_standart_setup.cmake)
+include(${CMAKE_SOURCE_DIR}/dep/build_tools/cmake/cpp_standart_setup.cmake)
 
 if(MSVC)
     add_compile_options(/FS)
@@ -9,10 +9,9 @@ if(WIN32)
     add_compile_definitions(UNICODE _UNICODE)
 endif()
 
-add_definitions(-DUSE_DEX)
-add_definitions(-DUSE_PDF)
-add_definitions(-DUSE_ARCHIVE)
-add_definitions(-DUSE_DIE)
+if(USE_DIE)
+    add_definitions(-DUSE_DIE)
+endif()
 add_definitions(-DUSE_XSIMD)
 
 option(WITH_YARA "Use Yara" ON)
@@ -20,10 +19,12 @@ if(WITH_YARA)
     add_definitions(-DUSE_YARA)
 endif()
 
-include(${CMAKE_CURRENT_LIST_DIR}/../../XMIMEWidget/xmimewidget.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/../../FormatWidgets/formatwidgets.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/../../XSingleApplication/xsingleapplication.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/../../XAboutWidget/xaboutwidget.cmake)
+# Adds the xjs* sources to XPDF and defines USE_PDFJSEMUL (see xpdf.cmake)
+option(WITH_PDFJSEMUL "Use PDF JavaScript emulator" ON)
+
+# The widget sources live in diegui.cmake so ../../tests can build the very same
+# list; only main() and the resources are added on top of it here.
+include(${CMAKE_CURRENT_LIST_DIR}/diegui.cmake)
 
 if(UNIX AND NOT APPLE)
     include(GNUInstallDirs)
@@ -31,31 +32,22 @@ endif()
 
 set(DIE_GUI_TARGET DetectItEasy)
 set(DIE_GUI_SOURCES
-    ${XMIMEWIDGET_SOURCES}
-    ${FORMATWIDGETS_SOURCES}
-    ${XSINGLEAPPLICATION_SOURCES}
-    ${XABOUTWIDGET_SOURCES}
-    dialogabout.cpp
-    dialogabout.h
-    dialogabout.ui
-    dialogoptions.cpp
-    dialogoptions.h
-    dialogoptions.ui
-    dialogselectstyle.cpp
-    dialogselectstyle.h
-    dialogselectstyle.ui
-    desktopintegrationhelper.cpp
-    desktopintegrationhelper.h
-    guimainwindow.cpp
-    guimainwindow.h
-    guimainwindow.ui
+    ${DIEGUI_SOURCES}
     main_gui.cpp
     rsrc.qrc
     res.qrc
 )
 
-if(WIN32 AND EXISTS "${X_WINDOWS_RESOURCE_ICON_RC}")
-    list(APPEND DIE_GUI_SOURCES "${X_WINDOWS_RESOURCE_ICON_RC}")
+if(WIN32 AND EXISTS "${X_WINDOWS_RESOURCE_ICON_RC_IN}")
+    # X_ORIGINAL_FILENAME ("die") and X_WINDOWS_ICON (icons/main.ico) already carry the GUI's
+    # values from src/CMakeLists.txt, so unlike diec/diel nothing has to be overridden here.
+    # The manifest is copied beside the generated .rc because RT_MANIFEST resolves relative to
+    # the .rc file's own directory.
+    configure_file("${X_WINDOWS_RESOURCE_ICON_RC_IN}"
+                   "${CMAKE_CURRENT_BINARY_DIR}/resource_die.rc" @ONLY)
+    configure_file("${X_RESOURCE_DIR}/windows/windows.manifest.xml"
+                   "${CMAKE_CURRENT_BINARY_DIR}/windows.manifest.xml" COPYONLY)
+    list(APPEND DIE_GUI_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/resource_die.rc")
 endif()
 
 if(APPLE AND EXISTS "${X_MACOS_ICON}")
@@ -73,18 +65,23 @@ set_target_properties(${DIE_GUI_TARGET} PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE    TRUE
     MACOSX_BUNDLE_GUI_IDENTIFIER "${MACOSX_BUNDLE_GUI_IDENTIFIER}"
+    MACOSX_BUNDLE_BUNDLE_NAME "Detect It Easy"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_ICON_FILE "main.icns"
     OUTPUT_NAME "die"
 )
+
+if(MSVC)
+    # The .rc already supplies RT_MANIFEST; keep the linker from embedding a competing one.
+    target_link_options(${DIE_GUI_TARGET} PRIVATE /MANIFEST:NO)
+endif()
 
 target_include_directories(${DIE_GUI_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(${DIE_GUI_TARGET} PRIVATE
-    bzip2
-    lzma
-    zlib
     capstone
     cppfilt
-    ppmd
     xsimd
     Qt${DIE_QT_MAJOR}::Widgets
     Qt${DIE_QT_MAJOR}::Concurrent
@@ -155,16 +152,29 @@ if(UNIX AND NOT APPLE)
         DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/metainfo"
         OPTIONAL
     )
-    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../XStyles/qss"
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/die" OPTIONAL)
-    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../XInfoDB/info"
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/die" OPTIONAL)
-    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../Detect-It-Easy/db"
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/die" OPTIONAL)
-    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../XYara/yara_rules"
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/die" OPTIONAL)
+    # X_RESOURCES, never CMAKE_INSTALL_LIBDIR. With -DCMAKE_INSTALL_PREFIX=/usr on
+    # Debian/Ubuntu the latter is the multiarch lib/x86_64-linux-gnu, and
+    # XOptions::convertPathName("$data/...") searches only /usr/lib/die,
+    # /usr/local/lib/die and /app/lib/die - so the database, styles, info and yara
+    # rules shipped in a .deb were invisible to the application that packaged them.
+    #
+    # Four of these five are also installed to ${X_RESOURCES} by the _mylibs
+    # fragments (XStyles/xstyles.cmake, XInfoDB/xinfodb.cmake,
+    # Detect-It-Easy/detectiteasy.cmake, XYara/xyara.cmake), each guarded by
+    # `if (DEFINED X_RESOURCES)` - which holds here, since cpp_standart_setup.cmake
+    # is included at the top of this file. They are kept rather than deleted so the
+    # install does not depend on which fragments a given option set pulls in; the
+    # duplicate lands on the same path. Only "images" has no fragment.
+    install(DIRECTORY "${CMAKE_SOURCE_DIR}/dep/XStyles/qss"
+        DESTINATION "${X_RESOURCES}" OPTIONAL)
+    install(DIRECTORY "${CMAKE_SOURCE_DIR}/dep/XInfoDB/info"
+        DESTINATION "${X_RESOURCES}" OPTIONAL)
+    install(DIRECTORY "${CMAKE_SOURCE_DIR}/dep/Detect-It-Easy/db"
+        DESTINATION "${X_RESOURCES}" OPTIONAL)
+    install(DIRECTORY "${CMAKE_SOURCE_DIR}/dep/XYara/yara_rules"
+        DESTINATION "${X_RESOURCES}" OPTIONAL)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../images"
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/die" OPTIONAL)
+        DESTINATION "${X_RESOURCES}" OPTIONAL)
 else()
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/../../LICENSE"
@@ -182,10 +192,10 @@ else()
 endif()
 
 if(APPLE)
-    include(${CMAKE_CURRENT_LIST_DIR}/../../build_tools/cmake/macdeployqt.cmake)
+    include(${CMAKE_SOURCE_DIR}/dep/build_tools/cmake/macdeployqt.cmake)
 endif()
 
 if(WIN32)
-    include(${CMAKE_CURRENT_LIST_DIR}/../../build_tools/cmake/deploy_qt_windows.cmake)
-    include(${CMAKE_CURRENT_LIST_DIR}/../../build_tools/cmake/deploy_msvc.cmake)
+    include(${CMAKE_SOURCE_DIR}/dep/build_tools/cmake/deploy_qt_windows.cmake)
+    include(${CMAKE_SOURCE_DIR}/dep/build_tools/cmake/deploy_msvc.cmake)
 endif()
