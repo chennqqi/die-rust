@@ -1,8 +1,8 @@
 // Detect It Easy: detection rule file
 
 // Author: DosX
-// E-Mail: collab@kay-software.ru
 // GitHub: https://github.com/DosX-dev
+// Website: https://dosx.su
 // Telegram: @DosX_dev
 
 // https://github.com/xiph/opus
@@ -11,7 +11,7 @@ meta("library", "Opus Audio");
 function detect() {
     if (PE.isLibraryPresentExp(/^(opus(enc)?\.)|(ms|lib)opus|bass(_)?opus/i)) {
         bDetected = true;
-    } else if (PE.isExportFunctionPresentExp(/^opus_(de|en)code/)) {
+    } else if (PE.isExportFunctionPresentExpFastAnchor("opus_", /^opus_(de|en)code/)) {
         sOptions = "static"; // EAT
         bDetected = true;
     }

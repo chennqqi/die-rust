@@ -1,1 +1,2 @@
-function detect(){return PE.isSectionNamePresent(".MaskPE")&&PE.compareEP("60")&&PE.isSignaturePresent(PE.getEntryPointOffset(),256,"6160e8........8bc33e8b..40e8")&&(sVersion="2.0",bDetected=1),result()}meta("protector","MaskPE")
+function detect(){var e,t
+return X.isSectionNamePresent(".MaskPE")&&X.compareEP("60")&&(e=X.getEntryPointOffset(),t=-1!==(t=X.getEntryPointSection())?X.getSectionFileOffset(t)+X.getSectionFileSize(t):e,0<(t=Math.min(256,t-e)))&&X.isSignaturePresent(e,t,"6160e8........8bc33e8b..40e8")&&(sVersion="2.0",bDetected=1),result()}meta("protector","MaskPE")

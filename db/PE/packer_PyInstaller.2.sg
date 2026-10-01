@@ -1,8 +1,8 @@
 // Detect It Easy: detection rule file
 
 // Author: DosX
-// E-Mail: collab@kay-software.ru
 // GitHub: https://github.com/DosX-dev
+// Website: https://dosx.su
 // Telegram: @DosX_dev
 
 // https://pyinstaller.org/
@@ -66,7 +66,7 @@ function detect() {
                 PE.getOverlaySize(),
                 "70 79 74 68 6F 6E'" + [2, 3][i] + "'");
 
-            if (sign && PE.findString(sign, 15, ".") != -1) {
+            if (sign != -1 && PE.findString(sign, 15, ".") != -1) {
                 version = getPythonVersionByDll(PE.getString(sign - 1, 15));
             }
         }

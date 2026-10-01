@@ -1,0 +1,1 @@
+function detect(){return X.isNetObjectPresent("IDocument")&&X.isNetObjectPresent("IDocumentContainer")&&(bDetected=1),result()}meta("library","QuestPDF")

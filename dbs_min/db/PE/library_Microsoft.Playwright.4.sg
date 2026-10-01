@@ -1,0 +1,1 @@
+function detect(){return X.isNetObjectPresent("IPlaywright")&&(bDetected=1),result()}meta("library","Microsoft Playwright")

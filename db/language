@@ -2,8 +2,8 @@
 // Don't change anything unless you're sure about what you're doing
 
 // Author: DosX
-// E-Mail: collab@kay-software.ru
 // GitHub: https://github.com/DosX-dev
+// Website: https://dosx.su
 // Telegram: @DosX_dev
 
 function _isLangPresent(languageName) {
@@ -40,7 +40,7 @@ function _setLang(languageName, version) {
         return null;
     }
 
-    if (File.isVerbose() && !_isLangPresent(languageName)) {
+    if (File.isVerbose() && !_isLangPresent(languageName) && _getNumberOfResults("language") < 3) {
         var isHeurResult = (version == "HEUR");
 
         _setResult((isHeurResult ? "~" : "") + "language", languageName, (version && !isHeurResult ? version : ""), "");

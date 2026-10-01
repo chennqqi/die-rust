@@ -11,10 +11,14 @@ meta("protection", "Denuvo");
 function detect() {
     if (PE.isNet()) return; // Native code only
 
-    if (PE.getNumberOfSections() > 10 &&
-        PE.isSectionNamePresentExp(/^\.[ex](text|code)$/) &&
-        PE.isSectionNamePresentExp(/^\.([eu]|my|s[xr]|x[pd])data$/) || PE.isSectionNamePresent(".arch") || PE.isSectionNamePresent(".xtls")) {
+    const isSectionsLikeDenuvo = PE.isSectionNamePresentExp(/^\.[ex](text|code)$/) || PE.isSectionNamePresentExp(/^\.([eu]|my|s[xr]|x[pd])data$/) || PE.isSectionNamePresent(".arch") || PE.isSectionNamePresent(".xtls");
+
+    if (PE.getNumberOfSections() > 10) {
         if (PE.is64()) {
+            var firstSectionOffset = PE.section[0].FileOffset,
+                imageEndOffset = PE.getSize() - PE.getOverlaySize(),
+                imageSearchSize = imageEndOffset - firstSectionOffset;
+
             /*
             - Mad Max
             - Metal Gear Solid
@@ -52,10 +56,13 @@ function detect() {
             - Atomic Heart
             - Deathloop
             - Immortals Fenyx Rising
-            - Evil Genius
-            - Yakuza Like A Dragon
+            - Evil Genius 2
+            - Yakuza: Like a Dragon
+            - Tekken 7
+            - Jurassic World Evolution
             */
-            else if (PE.compareEP("48 8D 64 24 .. 50 51 52 80 3D .. .. .. .. .. 75 .. 48 8D 05 .. .. .. .. 48 8D 0D .. .. .. ..")) {
+            else if (PE.compareEP("48 8D 64 24 .. 50 51 52 80 3D .. .. .. .. .. 75 .. 48 8D 05 .. .. .. .. 48 8D 0D .. .. .. ..") ||
+                PE.compareEP("48 8D A4 24 .. .. .. .. 50 51 52 80 3D .. .. .. .. .. 75 .. 48 8D 05 .. .. .. .. 48 8D 0D .. .. .. ..")) {
                 sVersion = "12.0-17.0+";
                 bDetected = true;
             }
@@ -68,28 +75,49 @@ function detect() {
             else if (PE.compareEP("47 61 6D 65 41 73 73 65 6D 62 6C 79 44 65 6E 75 76 6F 44 72 6D 2E 64 6C 6C")) {
                 sOptions = "Unity"; // The actual game exe won't show up as Denuvo because it only loads the GameAssembly.dll which is the one protected by Denuvo
                 bDetected = true;
-                /*
-                - Doom The Dark Ages
-                - Dragon Quest XI
-                - Resident Evil 4
-                - South Park
-                - Tekken 7
-                - Trials of Mana
-                - Total War: Warhammer 2
-                */
-            } else if (PE.isSignaturePresent(PE.section[0].FileOffset, PE.getSize() - PE.getOverlaySize(), "64 65 6E 75 76 6F 5F 61 74 64 00 00 00 00 00 00")) {
+            }
+            /*
+            - Avatar: Frontiers of Pandora
+            - Assassin's Creed Shadows
+            - Hogwarts Legacy
+            - Mafia: The Old Country
+            - Crimson Desert
+            - Sonic Frontiers
+            - Black Myth: Wukong
+            - DOOM: The Dark Ages
+            */
+            else if (PE.compareEP("48 83 EC .. 48 8D 0D .. .. .. .. FF 15 .. .. .. .. 83 F8 00 74 .. 48 83 C4 58 48 89 25 .. .. .. .. E9 .. .. .. .. 48 31 C9") ||
+                PE.compareEP("48 83 EC 28 48 8D 0D .. .. .. .. FF 15 .. .. .. .. 83 F8 00 74 .. 48 83 C4 28 48 89 25 .. .. .. .. E9 .. .. .. .. 48 31 C9")) {
+                sVersion = "18.0-19.0";
+                bDetected = true;
+            }
+            /*
+            - Dragon Quest XI
+            - Resident Evil 4
+            - South Park
+            - Tekken 7
+            - Trials of Mana
+            - Total War: Warhammer 2
+            */
+            else if (isSectionsLikeDenuvo && imageSearchSize > 0 && PE.isSignaturePresent(firstSectionOffset, imageSearchSize, "64 65 6E 75 76 6F 5F 61 74 64 00 00 00 00 00 00")) {
                 bDetected = true;
             }
 
             // Check if steam_api64.dll present
-            if (PE.isLibraryPresent("steam_api64.dll")) {
+            if (isSectionsLikeDenuvo && PE.isLibraryPresent("steam_api64.dll")) {
                 sOptions = "Steam";
                 bDetected = true;
             }
 
             // Check if eossdk-win32-shipping.dll present
-            if (PE.isLibraryPresent("eossdk-win64-shipping.dll")) {
+            if (isSectionsLikeDenuvo && PE.isLibraryPresent("eossdk-win64-shipping.dll")) {
                 sOptions = "Epic Games";
+                bDetected = true;
+            }
+
+            // Check if denuvo64.dll present
+            if (isSectionsLikeDenuvo && PE.isLibraryPresent("denuvo64.dll")) {
+                sOptions = "x64";
                 bDetected = true;
             }
 
@@ -115,13 +143,13 @@ function detect() {
             }
 
             // Check if eossdk-win64-shipping.dll present
-            if (PE.isLibraryPresent("eossdk-win32-shipping.dll")) {
+            if (isSectionsLikeDenuvo && PE.isLibraryPresent("eossdk-win32-shipping.dll")) {
                 sOptions = "Epic Game Store";
                 bDetected = true;
             }
 
             // Check if uplay_r1_loader.dll present
-            if (PE.isLibraryPresent("uplay_r1_loader.dll")) {
+            if (isSectionsLikeDenuvo && PE.isLibraryPresent("uplay_r1_loader.dll")) {
                 sOptions = "uPlay";
                 bDetected = true;
             }
@@ -130,14 +158,14 @@ function detect() {
     }
 
     if (!bDetected) {
-        if (PE.isLibraryPresent("dbdata.dll")) {
+        if (isSectionsLikeDenuvo && PE.isLibraryPresent("dbdata.dll")) {
             // Override additional info
             sOptions = "FIFA23 series";
             bDetected = true;
         }
 
         // Check if uplay_r1_loader64.dll present
-        if (PE.isLibraryPresent("uplay_r1_loader64.dll")) {
+        if (isSectionsLikeDenuvo && PE.isLibraryPresent("uplay_r1_loader64.dll")) {
             sOptions = "uPlay";
             bDetected = true;
         }
@@ -148,12 +176,12 @@ function detect() {
             bDetected = true;
         }
 
-        if (PE.getNumberOfImports() > 10 && PE.isLibraryPresentExp(/^d3d/i) && PE.isExportFunctionPresentExp(/^GetDenuvo(TimeTicketRequest|TicketLocation)$/)) {
+        if (PE.getNumberOfImports() > 10 && PE.isLibraryPresentExp(/^d3d/i) && PE.isExportFunctionPresentExpFastAnchor("getdenuvo", /^GetDenuvo(TimeTicketRequest|TicketLocation)$/)) {
             bDetected = true;
         }
     }
 
-    if (PE.isExportFunctionPresentExp(/^ANTICHEAT_OBFUSCATE_(?:.+_)?CODEMARKER$/)) {
+    if (PE.isExportFunctionPresentExpFastAnchor("anticheat_obfuscate_", /^ANTICHEAT_OBFUSCATE_(?:.+_)?CODEMARKER$/)) {
         _setResult("marker", "Denuvo", String(), String());
     }
 

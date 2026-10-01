@@ -1,8 +1,8 @@
 // Detect It Easy: detection rule file
 
 // Author: DosX
-// E-Mail: collab@kay-software.ru
 // GitHub: https://github.com/DosX-dev
+// Website: https://dosx.su
 // Telegram: @DosX_dev
 
 // https://www.intel.com/content/www/us/en/developer/topic-technology/gamedev/xess2.html
@@ -11,8 +11,8 @@ meta("library", "Intel XeSS");
 function detect() {
     if (PE.isLibraryPresentExp(/(lib|ig)xess/) || PE.isFunctionPresent("xessGetVersion") || PE.isFunctionPresent("xessDestroyContext")) {
         bDetected = true;
-    } else if (PE.isExportFunctionPresentExp(/^xess(?:D3D|Destroy|Get|Set)/)) {
-        sOptions = "static";
+    } else if (PE.isExportFunctionPresentExpFastAnchor("xess", /^xess(?:D3D|Destroy|Get|Set)/)) {
+        sOptions = "static"; // EAT
         bDetected = true;
     }
 

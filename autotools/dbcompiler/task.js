@@ -7,7 +7,11 @@ const archiver = require('archiver');
 const inputDirs = ["db", "db_custom", "db_extra"];
 const outputDir = "dbs_min";
 const CACHE_FILE = path.join(outputDir, '.compiler_cache');
+const COMPILER_CACHE_KEY = '@compiler';
 const MAX_PARALLEL = 16;
+const PRESERVED_OUTPUT_FILES = [
+    path.join(outputDir, 'timestamp.log')
+];
 
 const stats = {
     total: 0,
@@ -61,6 +65,20 @@ function computeKeyForPath(p) {
     return big.toString(16);
 }
 
+function computeCompilerFingerprint() {
+    const compilerFiles = [
+        path.join(__dirname, 'worker.js'),
+        path.join(__dirname, 'package-lock.json')
+    ];
+    let source = '';
+
+    for (const filePath of compilerFiles) {
+        source += fs.readFileSync(filePath, 'utf8');
+    }
+
+    return crc32(source).toString(16);
+}
+
 function loadCache() {
     const map = new Map();
     try {
@@ -79,17 +97,9 @@ function loadCache() {
         const parts = txt.split(';');
         for (const p of parts) {
             if (!p) continue;
-            const kv = p.split('=');
-            if (kv.length !== 2) continue;
-            // Decode hex to number
-            try {
-                const val = parseInt(kv[1], 16);
-                if (!isNaN(val)) {
-                    map.set(kv[0], val);
-                }
-            } catch (e) {
-                // skip invalid entry
-            }
+            const separator = p.indexOf('=');
+            if (separator === -1) continue;
+            map.set(p.substring(0, separator), p.substring(separator + 1));
         }
     } catch (e) {
         // ignore parsing errors
@@ -106,7 +116,7 @@ function saveCache(map) {
 
         const parts = [];
         for (const [k, v] of sorted) {
-            parts.push(`${k}=${v.toString(16)}`);
+            parts.push(`${k}=${v}`);
         }
         const txt = parts.join(';');
 
@@ -138,8 +148,6 @@ function processFile(srcFile, dstFile) {
         const once = (fn) => (...args) => { if (!settled) { settled = true; fn(...args); } };
 
         worker.on('message', once((result) => {
-            stats.total++;
-
             if (result.type === 'minified') {
                 stats.minified++;
                 console.log("[MINIFIED] " + result.srcFile);
@@ -162,6 +170,7 @@ function processFile(srcFile, dstFile) {
             } else if (result.type === 'failed-skip') {
                 stats.failed++;
                 stats.skipped++;
+                failedFiles.push({ file: result.srcFile, reason: result.error });
                 console.log("[SKIP/FAIL] " + result.srcFile);
             } else {
                 stats.failed++;
@@ -180,14 +189,16 @@ function processFile(srcFile, dstFile) {
         }));
 
         worker.on('exit', (code) => {
-            if (code !== 0) {
-                once(() => {
-                    stats.failed++;
-                    failedFiles.push({ file: srcFile, reason: `Worker stopped with exit code ${code}` });
-                    console.warn("[ERROR] " + srcFile + " — Worker stopped with exit code " + code);
-                    resolve();
-                })();
-            }
+            once(() => {
+                const reason = code === 0 ?
+                    'Worker stopped without returning a result' :
+                    `Worker stopped with exit code ${code}`;
+
+                stats.failed++;
+                failedFiles.push({ file: srcFile, reason });
+                console.warn("[ERROR] " + srcFile + " — " + reason);
+                resolve();
+            })();
         });
     });
 }
@@ -217,9 +228,15 @@ async function processFilesInParallel(files) {
 function collectFiles(srcDir, relBase, dstBase, fileList = []) {
     const items = fs.readdirSync(srcDir);
     for (const item of items) {
-        const
-            srcPath = path.join(srcDir, item),
+        const srcPath = path.join(srcDir, item);
+        let stat;
+
+        try {
             stat = fs.statSync(srcPath);
+        } catch (e) {
+            if (e.code === 'ENOENT') continue;
+            throw e;
+        }
 
         if (stat.isDirectory()) {
             collectFiles(srcPath, relBase, dstBase, fileList);
@@ -236,11 +253,25 @@ function collectFiles(srcDir, relBase, dstBase, fileList = []) {
 function getAllFilesInDir(dir, fileList = []) {
     if (!fs.existsSync(dir)) return fileList;
 
-    const items = fs.readdirSync(dir);
+    let items;
+
+    try {
+        items = fs.readdirSync(dir);
+    } catch (e) {
+        if (e.code === 'ENOENT') return fileList;
+        throw e;
+    }
+
     for (const item of items) {
-        const
-            fullPath = path.join(dir, item),
+        const fullPath = path.join(dir, item);
+        let stat;
+
+        try {
             stat = fs.statSync(fullPath);
+        } catch (e) {
+            if (e.code === 'ENOENT') continue;
+            throw e;
+        }
 
         if (stat.isDirectory()) {
             getAllFilesInDir(fullPath, fileList);
@@ -255,6 +286,16 @@ function syncDeleteOldFiles(expectedFiles) {
     const
         expectedSet = new Set(expectedFiles.map(f => path.normalize(f.dst))),
         existingFiles = getAllFilesInDir(outputDir);
+
+    for (const filePath of PRESERVED_OUTPUT_FILES) {
+        expectedSet.add(path.normalize(filePath));
+    }
+
+    for (const dir of inputDirs) {
+        if (fs.existsSync(dir)) {
+            expectedSet.add(path.normalize(path.join(outputDir, path.basename(dir) + '.die-db')));
+        }
+    }
 
     let deletedCount = 0;
     for (const existingFile of existingFiles) {
@@ -290,6 +331,7 @@ function createDieDb(srcDir, archivePath) {
         });
 
         output.on('close', () => resolve(archive.pointer()));
+        output.on('error', reject);
         archive.on('error', reject);
 
         archive.pipe(output);
@@ -301,16 +343,37 @@ function createDieDb(srcDir, archivePath) {
 function deleteEmptyDirs(dir) {
     if (!fs.existsSync(dir)) return;
 
-    const items = fs.readdirSync(dir);
+    let items;
+
+    try {
+        items = fs.readdirSync(dir);
+    } catch (e) {
+        if (e.code === 'ENOENT') return;
+        throw e;
+    }
+
     for (const item of items) {
         const fullPath = path.join(dir, item);
-        if (fs.statSync(fullPath).isDirectory()) {
+        let stat;
+
+        try {
+            stat = fs.statSync(fullPath);
+        } catch (e) {
+            if (e.code === 'ENOENT') continue;
+            throw e;
+        }
+
+        if (stat.isDirectory()) {
             deleteEmptyDirs(fullPath);
         }
     }
 
-    if (fs.readdirSync(dir).length === 0 && dir !== outputDir) {
-        fs.rmdirSync(dir);
+    try {
+        if (fs.readdirSync(dir).length === 0 && dir !== outputDir) {
+            fs.rmdirSync(dir);
+        }
+    } catch (e) {
+        if (e.code !== 'ENOENT' && e.code !== 'ENOTEMPTY') throw e;
     }
 }
 
@@ -329,6 +392,7 @@ function deleteEmptyDirs(dir) {
     }
 
     console.log(`[i] Found ${allFiles.length} files to process\n`);
+    stats.total = allFiles.length;
 
     // Delete obsolete files FIRST (before any other output)
     stats.deleted = syncDeleteOldFiles(allFiles);
@@ -342,19 +406,22 @@ function deleteEmptyDirs(dir) {
         newCache = new Map(),
         toProcess = [];
 
+    const compilerFingerprint = computeCompilerFingerprint();
+    const isCompilerCacheValid = cache.get(COMPILER_CACHE_KEY) === compilerFingerprint;
+
+    newCache.set(COMPILER_CACHE_KEY, compilerFingerprint);
+
     for (const f of allFiles) {
         try {
             const st = fs.statSync(f.src);
-            const mtime = Math.floor(st.mtimeMs);
+            const fingerprint = `${Math.floor(st.mtimeMs)}:${st.size}`;
             const key = computeKeyForPath(f.src);
 
-            // Always update cache with current mtime
-            newCache.set(key, mtime);
+            newCache.set(key, fingerprint);
 
             // Check if file unchanged
-            if (cache.has(key) && cache.get(key) === mtime) {
+            if (isCompilerCacheValid && cache.get(key) === fingerprint && fs.existsSync(f.dst)) {
                 stats.skipped++;
-                console.log("[SKIP] " + f.src);
                 continue;
             }
         } catch (e) {
@@ -369,8 +436,38 @@ function deleteEmptyDirs(dir) {
 
     await processFilesInParallel(toProcess);
 
-    // Update cache with current mtime values
-    saveCache(newCache);
+    for (const failedFile of failedFiles) {
+        newCache.delete(computeKeyForPath(failedFile.file));
+    }
+
+    // A complete cache hit already has exactly the cache state we need. Avoid the
+    // relatively expensive maximum-quality Brotli pass when nothing has changed.
+    if (toProcess.length > 0 || stats.deleted > 0 || !isCompilerCacheValid) {
+        saveCache(newCache);
+    }
+
+    // Create .die-db archives for each processed directory
+    console.log("[i] Creating .die-db archives...\n");
+    for (const dir of inputDirs) {
+        const srcDir = path.join(outputDir, path.basename(dir));
+        if (!fs.existsSync(srcDir)) continue;
+
+        const archivePath = path.join(outputDir, path.basename(dir) + '.die-db');
+
+        if (toProcess.length === 0 && stats.deleted === 0 && fs.existsSync(archivePath)) {
+            console.log(`[SKIP] ${archivePath}`);
+            continue;
+        }
+
+        try {
+            const bytes = await createDieDb(srcDir, archivePath);
+            console.log(`[PACKED] ${archivePath} (${(bytes / 1024).toFixed(1)} KB)`);
+        } catch (e) {
+            stats.failed++;
+            failedFiles.push({ file: archivePath, reason: e.message });
+            console.warn(`[PACK FAILED] ${archivePath} — ${e.message}`);
+        }
+    }
 
     let report = "\n[V] Done!\n" +
         `— Total:     ${stats.total}\n` +
@@ -385,24 +482,14 @@ function deleteEmptyDirs(dir) {
     }
 
     if (failedFiles.length > 0) {
-        report += "\n[X] Failed to minify:\n" + failedFiles.map((f) => ` • ${f.file} — ${f.reason}`).join("\n") + "\n";
+        report += "\n[X] Failed:\n" + failedFiles.map((f) => ` • ${f.file} — ${f.reason}`).join("\n") + "\n";
     }
 
     console.log(report);
 
-    // Create .die-db archives for each processed directory
-    console.log("[i] Creating .die-db archives...\n");
-    for (const dir of inputDirs) {
-        const srcDir = path.join(outputDir, path.basename(dir));
-        if (!fs.existsSync(srcDir)) continue;
-
-        const archivePath = path.join(outputDir, path.basename(dir) + '.die-db');
-        try {
-            const bytes = await createDieDb(srcDir, archivePath);
-            console.log(`[PACKED] ${archivePath} (${(bytes / 1024).toFixed(1)} KB)`);
-        } catch (e) {
-            console.warn(`[PACK FAILED] ${archivePath} — ${e.message}`);
-        }
+    if (stats.failed > 0) {
+        process.exitCode = 1;
     }
+
     console.log('');
 })();

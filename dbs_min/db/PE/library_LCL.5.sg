@@ -1,2 +1,2 @@
-function detect(){var e
-return bFPC&&-1!=(e=PE.findSignature(PE.section[0].FileOffset,PE.isOverlayPresent()?PE.getOverlayOffset():PE.getSize(),"'LCLVersion' ?? ?? %% '.' %%"))&&(sVersion=PE.getString(e+12),bDetected=1),result()}includeScript("FPC"),meta("library","LCL")
+function detect(){var e,t
+return bFPC&&(t=X.section[0].FileOffset,-1!=(t=0<(e=(X.isOverlayPresent()?X.getOverlayOffset():X.Sz())-t)?X.fSig(t,e,"'LCLVersion' ?? ?? %% '.' %%"):-1))&&(sVersion=X.getString(t+12),bDetected=1),result()}includeScript("FPC"),meta("library","LCL")

@@ -3,7 +3,34 @@ const fs = require("fs");
 const path = require("path");
 const UglifyJS = require("uglify-js");
 
+const TRANSIENT_FILE_SYSTEM_ERRORS = new Set([
+    "EACCES",
+    "EBUSY",
+    "EMFILE",
+    "ENFILE",
+    "EPERM",
+    "UNKNOWN"
+]);
+
+function runFileSystemOperation(operation) {
+    const retryDelays = [10, 25, 50, 100, 200];
+
+    for (let attempt = 0; ; attempt++) {
+        try {
+            return operation();
+        } catch (e) {
+            if (!TRANSIENT_FILE_SYSTEM_ERRORS.has(e.code) || attempt === retryDelays.length) {
+                throw e;
+            }
+
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, retryDelays[attempt]);
+        }
+    }
+}
+
 function writeIfChanged(filePath, newContent) {
+    newContent = newContent.replace(/[\r\n]+$/, "");
+
     if (fs.existsSync(filePath)) {
         try {
             const existingContent = fs.readFileSync(filePath, "utf8");
@@ -12,8 +39,12 @@ function writeIfChanged(filePath, newContent) {
             }
         } catch (e) { }
     }
-    fs.writeFileSync(filePath, newContent, "utf8");
+    runFileSystemOperation(() => fs.writeFileSync(filePath, newContent, "utf8"));
     return true;
+}
+
+function createDirectory(directoryPath) {
+    runFileSystemOperation(() => fs.mkdirSync(directoryPath, { recursive: true }));
 }
 
 function shouldMinify(filePath) {
@@ -21,8 +52,311 @@ function shouldMinify(filePath) {
     return ext === ".sg" || ext === "";
 }
 
+function isSignature(filePath) {
+    return path.extname(filePath).toLowerCase() === ".sg";
+}
+
 function isJson(filePath) {
     return path.extname(filePath).toLowerCase() === ".json";
+}
+
+function getShortPropertyName(index) {
+    const firstCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$_";
+
+    if (index < firstCharacters.length) {
+        return firstCharacters[index];
+    }
+
+    return firstCharacters[index % firstCharacters.length] + Math.floor(index / firstCharacters.length);
+}
+
+function manglePrivateConstructorPropertiesSafe(ast) {
+    ast.figure_out_scope();
+
+    const constructors = [],
+        constructorsByDefinition = new Map(),
+        instancesByDefinition = new Map();
+
+    ast.walk(new UglifyJS.TreeWalker(function (node) {
+        if (node instanceof UglifyJS.AST_Defun) {
+            const candidate = {
+                definition: node.name.definition(),
+                functionNode: node,
+                instanceDefinitions: [],
+                propertyNames: new Set(),
+                isSafe: true
+            };
+
+            constructors.push(candidate);
+            constructorsByDefinition.set(candidate.definition, candidate);
+        }
+    }));
+
+    ast.walk(new UglifyJS.TreeWalker(function (node) {
+        if (!(node instanceof UglifyJS.AST_VarDef) ||
+            !(node.name instanceof UglifyJS.AST_SymbolDeclaration) ||
+            !(node.value instanceof UglifyJS.AST_New) ||
+            !(node.value.expression instanceof UglifyJS.AST_SymbolRef)) {
+            return;
+        }
+
+        const candidate = constructorsByDefinition.get(node.value.expression.definition());
+
+        if (!candidate) return;
+
+        const instanceDefinition = node.name.definition();
+        candidate.instanceDefinitions.push(instanceDefinition);
+        instancesByDefinition.set(instanceDefinition, candidate);
+    }));
+
+    for (const candidate of constructors) {
+        candidate.functionNode.walk(new UglifyJS.TreeWalker(function (node) {
+            if (node instanceof UglifyJS.AST_This &&
+                this.find_parent(UglifyJS.AST_Lambda) !== candidate.functionNode) {
+                candidate.isSafe = false;
+            }
+        }));
+    }
+
+    ast.walk(new UglifyJS.TreeWalker(function (node) {
+        if (node instanceof UglifyJS.AST_SymbolRef) {
+            const constructor = constructorsByDefinition.get(node.definition());
+
+            if (constructor) {
+                const parent = this.parent();
+
+                if (!(parent instanceof UglifyJS.AST_New) || parent.expression !== node) {
+                    constructor.isSafe = false;
+                }
+                return;
+            }
+
+            const instance = instancesByDefinition.get(node.definition());
+
+            if (!instance || !instance.isSafe) return;
+
+            const parent = this.parent();
+
+            if (parent instanceof UglifyJS.AST_Dot && parent.expression === node) {
+                instance.propertyNames.add(parent.property);
+            } else if (parent instanceof UglifyJS.AST_Sub && parent.expression === node &&
+                parent.property instanceof UglifyJS.AST_String) {
+                instance.propertyNames.add(parent.property.value);
+            } else {
+                instance.isSafe = false;
+            }
+        } else if (node instanceof UglifyJS.AST_This) {
+            const functionNode = this.find_parent(UglifyJS.AST_Lambda),
+                candidate = constructors.find(item => item.functionNode === functionNode);
+
+            if (!candidate || !candidate.isSafe) return;
+
+            const parent = this.parent();
+
+            if (parent instanceof UglifyJS.AST_Dot && parent.expression === node) {
+                candidate.propertyNames.add(parent.property);
+            } else if (parent instanceof UglifyJS.AST_Sub && parent.expression === node &&
+                parent.property instanceof UglifyJS.AST_String) {
+                candidate.propertyNames.add(parent.property.value);
+            } else {
+                candidate.isSafe = false;
+            }
+        }
+    }));
+
+    for (const candidate of constructors) {
+        if (!candidate.isSafe || !candidate.instanceDefinitions.length || !candidate.propertyNames.size) {
+            continue;
+        }
+
+        const propertyMap = {},
+            usedNames = new Set(candidate.propertyNames);
+        let aliasIndex = 0;
+
+        for (const propertyName of candidate.propertyNames) {
+            let alias;
+
+            do {
+                alias = getShortPropertyName(aliasIndex++);
+            } while (usedNames.has(alias));
+
+            propertyMap[propertyName] = alias;
+        }
+
+        const instanceDefinitions = new Set(candidate.instanceDefinitions);
+
+        ast = ast.transform(new UglifyJS.TreeTransformer(function (node) {
+            if (!(node instanceof UglifyJS.AST_Dot) && !(node instanceof UglifyJS.AST_Sub)) return;
+
+            const isConstructorProperty = node.expression instanceof UglifyJS.AST_This &&
+                this.find_parent(UglifyJS.AST_Lambda) === candidate.functionNode,
+                isInstanceProperty = node.expression instanceof UglifyJS.AST_SymbolRef &&
+                    instanceDefinitions.has(node.expression.definition());
+
+            if (!isConstructorProperty && !isInstanceProperty) return;
+
+            if (node instanceof UglifyJS.AST_Dot && propertyMap[node.property]) {
+                node.property = propertyMap[node.property];
+            } else if (node instanceof UglifyJS.AST_Sub &&
+                node.property instanceof UglifyJS.AST_String &&
+                propertyMap[node.property.value]) {
+                node.property.value = propertyMap[node.property.value];
+            }
+        }));
+    }
+
+    return ast;
+}
+
+/**
+ * Mangle properties of private objects whose complete ownership can be proven
+ * inside one signature. Native objects and ordinary JavaScript properties are
+ * intentionally excluded.
+ * @param {string} text - Signature source code.
+ * @param {string} filePath - Signature file path.
+ * @returns {string} Source with private property names shortened.
+ */
+function manglePrivatePropertiesSafe(text, filePath) {
+    if (!isSignature(filePath) ||
+        (text.indexOf("logType") === -1 &&
+            (text.indexOf("PE_Cached") === -1 || text.indexOf("cacheMap") === -1))) {
+        return text;
+    }
+
+    let ast = UglifyJS.parse(text, {
+        bare_returns: true
+    });
+
+    ast.figure_out_scope();
+
+    const definitions = {},
+        objectLiterals = {},
+        privateObjectCandidates = [];
+
+    ast.walk(new UglifyJS.TreeWalker(function (node) {
+        if (!(node instanceof UglifyJS.AST_VarDef) ||
+            !(node.name instanceof UglifyJS.AST_SymbolDeclaration) ||
+            !(node.value instanceof UglifyJS.AST_Object)) {
+            return;
+        }
+
+        privateObjectCandidates.push({
+            definition: node.name.definition(),
+            object: node.value,
+            isSafe: true
+        });
+
+        if (node.name.name === "logType" || node.name.name === "cacheMap" || node.name.name === "PE_Cached") {
+            definitions[node.name.name] = node.name.definition();
+            objectLiterals[node.name.name] = node.value;
+        }
+    }));
+
+    const namespaces = [],
+        candidatesByDefinition = new Map();
+
+    for (const candidate of privateObjectCandidates) {
+        if (candidate.definition === definitions.PE_Cached || candidate.definition === definitions.cacheMap) {
+            continue;
+        }
+
+        const propertyNames = new Set();
+
+        for (const property of candidate.object.properties) {
+            if (!(property instanceof UglifyJS.AST_ObjectKeyVal) || propertyNames.has(property.key)) {
+                candidate.isSafe = false;
+                break;
+            }
+
+            propertyNames.add(property.key);
+
+            property.value.walk(new UglifyJS.TreeWalker(function (node) {
+                if (node instanceof UglifyJS.AST_This) candidate.isSafe = false;
+            }));
+        }
+
+        candidate.propertyNames = propertyNames;
+        candidatesByDefinition.set(candidate.definition, candidate);
+    }
+
+    // A private object must never escape and may only be accessed through its
+    // statically known own properties. Any ambiguous use disqualifies it.
+    ast.walk(new UglifyJS.TreeWalker(function (node) {
+        if (!(node instanceof UglifyJS.AST_SymbolRef)) return;
+
+        const candidate = candidatesByDefinition.get(node.definition());
+
+        if (!candidate || !candidate.isSafe) return;
+
+        const parent = this.parent();
+
+        if (parent instanceof UglifyJS.AST_Dot && parent.expression === node) {
+            if (!candidate.propertyNames.has(parent.property)) candidate.isSafe = false;
+        } else if (parent instanceof UglifyJS.AST_Sub && parent.expression === node &&
+            parent.property instanceof UglifyJS.AST_String) {
+            if (!candidate.propertyNames.has(parent.property.value)) candidate.isSafe = false;
+        } else {
+            candidate.isSafe = false;
+        }
+    }));
+
+    for (const candidate of privateObjectCandidates) {
+        if (candidate.isSafe && candidate.propertyNames && candidate.propertyNames.size) {
+            namespaces.push(candidate);
+        }
+    }
+
+    // cacheMap owns every PE_Cached slot and copies the slots by the same key.
+    // Require that exact structure before treating the names as private.
+    if (definitions.PE_Cached && definitions.cacheMap && objectLiterals.cacheMap &&
+        /for\s*\([^)]*\bin\s+cacheMap\s*\)/.test(text) &&
+        /cacheMap\s*\[\s*key\s*\]/.test(text) &&
+        /PE_Cached\s*\[\s*key\s*\]/.test(text)) {
+        namespaces.push({
+            definition: definitions.PE_Cached,
+            object: objectLiterals.cacheMap
+        });
+    }
+
+    for (const namespace of namespaces) {
+        const propertyMap = {},
+            usedNames = new Set(namespace.object.properties.map(property => property.key));
+        let aliasIndex = 0;
+
+        for (const property of namespace.object.properties) {
+            let alias;
+
+            do {
+                alias = getShortPropertyName(aliasIndex++);
+            } while (usedNames.has(alias));
+
+            propertyMap[property.key] = alias;
+            property.key = alias;
+        }
+
+        ast = ast.transform(new UglifyJS.TreeTransformer(function (node) {
+            if (node instanceof UglifyJS.AST_Dot &&
+                node.expression instanceof UglifyJS.AST_SymbolRef &&
+                node.expression.definition() === namespace.definition &&
+                propertyMap[node.property]) {
+                node.property = propertyMap[node.property];
+            } else if (node instanceof UglifyJS.AST_Sub &&
+                node.expression instanceof UglifyJS.AST_SymbolRef &&
+                node.expression.definition() === namespace.definition &&
+                node.property instanceof UglifyJS.AST_String &&
+                propertyMap[node.property.value]) {
+                node.property.value = propertyMap[node.property.value];
+            }
+        }));
+    }
+
+    ast = manglePrivateConstructorPropertiesSafe(ast);
+
+    return ast.print_to_string({
+        beautify: false,
+        comments: false,
+        semicolons: false
+    });
 }
 
 /**
@@ -306,6 +640,130 @@ function replaceConstructorsSafe(text) {
     });
 }
 
+const fileApiMethodAliases = {
+    getSize: "Sz",
+    findSignature: "fSig",
+    findString: "fStr",
+    compare: "c",
+    readBytes: "BA",
+    read_uint8: "U8",
+    read_int8: "I8",
+    read_uint16: "U16",
+    read_int16: "I16",
+    read_float16: "F16",
+    read_uint24: "U24",
+    read_int24: "I24",
+    read_uint32: "U32",
+    read_int32: "I32",
+    read_float32: "F32",
+    read_uint64: "U64",
+    read_int64: "I64",
+    read_float64: "F64",
+    read_ansiString: "SA",
+    read_codePageString: "SC",
+    read_ucsdString: "UCSD",
+    read_utf8String: "SU8",
+    read_unicodeString: "SU16"
+};
+
+/**
+ * Get the global file-format API name from a database file path.
+ * @param {string} filePath - Source database file path.
+ * @returns {string|null}
+ */
+function getFileApiName(filePath) {
+    if (path.basename(filePath) === "_init") {
+        return null;
+    }
+
+    const relativePath = path.relative(process.cwd(), filePath),
+        pathParts = relativePath.split(path.sep),
+        databaseRoot = pathParts[0],
+        formatName = pathParts[1];
+
+    if ((databaseRoot !== "db" && databaseRoot !== "db_custom" && databaseRoot !== "db_extra") ||
+        !formatName) {
+        return null;
+    }
+
+    const initFilePath = path.join(process.cwd(), "db", formatName, "_init");
+
+    if (!fs.existsSync(initFilePath)) {
+        return null;
+    }
+
+    const initText = fs.readFileSync(initFilePath, "utf8"),
+        aliasMatch = initText.match(/\bvar\s+X\s*=\s*([a-zA-Z_$][\w$]*)\s*;/);
+
+    return aliasMatch ? aliasMatch[1] : null;
+}
+
+/**
+ * Replace the verbose format API name with the X alias initialized by the format `_init`.
+ * Base-file methods use the short aliases exposed through the same X object.
+ * @param {string} text - Minified JavaScript code.
+ * @param {string} filePath - Source database file path.
+ * @returns {string}
+ */
+function replaceFileApiCallsSafe(text, filePath) {
+    const fileApiName = getFileApiName(filePath);
+
+    if (!fileApiName) {
+        return text;
+    }
+
+    let ast = UglifyJS.parse(text, {
+        bare_returns: true
+    });
+
+    if (path.basename(filePath) === "_init") {
+        return text;
+    }
+
+    ast.figure_out_scope();
+
+    ast = ast.transform(new UglifyJS.TreeTransformer(function (node) {
+        if (node instanceof UglifyJS.AST_Dot &&
+            node.expression instanceof UglifyJS.AST_SymbolRef &&
+            node.expression.definition().undeclared) {
+            const objectName = node.expression.name;
+
+            if (objectName === fileApiName || objectName === "File" || objectName === "X") {
+                const parent = this.parent(),
+                    alias = fileApiMethodAliases[node.property];
+
+                if (alias && parent instanceof UglifyJS.AST_Call && parent.expression === node) {
+                    node.property = alias;
+                    node.expression = new UglifyJS.AST_SymbolRef({
+                        name: "X",
+                        start: node.expression.start,
+                        end: node.expression.end
+                    });
+
+                    return node;
+                }
+
+                if (objectName === fileApiName) {
+                    node.expression = new UglifyJS.AST_SymbolRef({
+                        name: "X",
+                        start: node.expression.start,
+                        end: node.expression.end
+                    });
+                }
+
+                return node;
+            }
+        }
+
+    }));
+
+    return ast.print_to_string({
+        beautify: false,
+        comments: false,
+        semicolons: false
+    });
+}
+
 // Main
 const { srcFile, dstFile } = workerData;
 
@@ -322,12 +780,15 @@ try {
     if (shouldMinify(srcFile)) {
         try {
             // Step 1: fix delete statements BEFORE minification
-            const fixedText = fixDeleteStatements(text);
+            const fixedText = manglePrivatePropertiesSafe(fixDeleteStatements(text), srcFile);
 
             // Step 2: Minification
             const uglifyResult = UglifyJS.minify(fixedText, {
                 compress: true,
-                mangle: true,
+                mangle: {
+                    toplevel: isSignature(srcFile),
+                    reserved: ["detect", "main", "X"]
+                },
                 parse: {
                     bare_returns: true,
                 },
@@ -341,21 +802,24 @@ try {
             if (uglifyResult.error) throw uglifyResult.error;
 
             // Step 3: Post-processing for legacy compatibility
-            const legacyCompatibleCode = replaceConstructorsSafe(
-                replaceBDetectedSafe(
-                    replaceArrowFunctions(
-                        replaceLetWithVarSafe(uglifyResult.code.trim())
+            const legacyCompatibleCode = replaceFileApiCallsSafe(
+                replaceConstructorsSafe(
+                    replaceBDetectedSafe(
+                        replaceArrowFunctions(
+                            replaceLetWithVarSafe(uglifyResult.code.trim())
+                        )
                     )
-                )
+                ),
+                srcFile
             );
 
-            fs.mkdirSync(path.dirname(dstFile), { recursive: true });
+            createDirectory(path.dirname(dstFile));
             const wasWritten = writeIfChanged(dstFile, legacyCompatibleCode);
 
             result.success = true;
             result.type = wasWritten ? 'minified' : 'skipped';
         } catch (e) {
-            fs.mkdirSync(path.dirname(dstFile), { recursive: true });
+            createDirectory(path.dirname(dstFile));
             const wasWritten = writeIfChanged(dstFile, text);
 
             result.success = false;
@@ -365,13 +829,13 @@ try {
     } else if (isJson(srcFile)) {
         try {
             const minified = JSON.stringify(JSON.parse(text));
-            fs.mkdirSync(path.dirname(dstFile), { recursive: true });
+            createDirectory(path.dirname(dstFile));
             const wasWritten = writeIfChanged(dstFile, minified);
 
             result.success = true;
             result.type = wasWritten ? 'minified' : 'skipped';
         } catch (e) {
-            fs.mkdirSync(path.dirname(dstFile), { recursive: true });
+            createDirectory(path.dirname(dstFile));
             const wasWritten = writeIfChanged(dstFile, text);
 
             result.success = false;
@@ -379,7 +843,7 @@ try {
             result.error = e.message;
         }
     } else {
-        fs.mkdirSync(path.dirname(dstFile), { recursive: true });
+        createDirectory(path.dirname(dstFile));
         const wasWritten = writeIfChanged(dstFile, text);
 
         result.success = true;

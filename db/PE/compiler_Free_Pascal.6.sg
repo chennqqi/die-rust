@@ -45,10 +45,13 @@ function detect() {
         var nVersionOffset = PE.findString(nOffset, 0x1024, "FPC ");
 
         if (nVersionOffset !== -1) {
-            sVersion = PE.getString(nVersionOffset + 4);
+            sVersion = PE.getString(nVersionOffset + 4).trim().substring(0, 36);
         }
 
-        bDetected = true;
+        if (sVersion.match(/^\d+\.\d+\.\d+/) && sVersion.indexOf(" for ") !== -1) {
+            bDetected = true;
+        }
+
         // Gui Lazarus ?
         if (PE.getResourceNameOffset("LAZ_PIC_DIALOG_TEMPLATE") != -1) {
             sOptions = "Lazarus";
