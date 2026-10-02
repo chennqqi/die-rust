@@ -65,3 +65,17 @@
 7. 修 clippy `collapsible_if`/`manual_is_multiple_of` 若干；
    `cargo fmt/clippy/test` 全绿，前端 `npm run build` 通过，
    `diec --struct "Hash"` 实测输出 17 算法。
+
+## 追加：遗留项规划（2026-10-02）
+
+用户要求为 deferred 项制定新计划。规划逻辑：按阻塞原因分三层 ——
+无阻塞纯 Rust 项立即排期（Phase 18），依赖/许可证未决项先评估出
+ADR（18.C/18.D），架构级项各自 Gate 化（19/20/21）。关键取舍：
+
+- demangle 8 模式全部走自实现精简解码（上游自身部分模式也只输出
+  name+args），Swift 可评估 `symbolic-demangle`；不追求 100% 语义。
+- CAB 用 `cab` crate 或自实现，ISO9660 自实现目录遍历；probe 层已有
+  CabProbe/Iso9660Probe，落地后前端零改动。
+- SSDeep/TLSH/BZ2/XZ/capstone 一律"评估→ADR"，不先写代码。
+- NFD 维持 Gate：specabstract 许可证审计 + 独立 Phase 预算（Phase 3
+  级别工作量）。

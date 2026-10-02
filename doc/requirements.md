@@ -1279,3 +1279,12 @@ git submodule foreach/status 本地验证通过。
 - 17.F：ADR 0035–0038 产出
 - 验证：fmt/clippy/workspace test 全绿，前端 build 通过，
   COMPATIBILITY.md 已更新
+
+## 2026-10-02 遗留 deferred 项规划
+
+用户询问 Phase 17 deferred 项原因后，要求制定新计划。产出
+`docs/design/phase18-deferred-parity.md`：按阻塞原因分层 ——
+Phase 18（纯 Rust 无阻塞：demangle 8 模式/CAB+ISO9660/SSDeep-TLSH
+与裸流评估/反汇编架构评估）、Phase 19（InfoDB，gate=ADR0037 复审）、
+Phase 20（静态脱壳 UPX 先行，gate=真实样本 oracle）、Phase 21
+（NFD，gate=specabstract 许可证审计）；ROADMAP 追加 Phase 18+ 表。

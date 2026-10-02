@@ -1846,3 +1846,20 @@ BZ2/XZ/LZMA 裸压缩流、MIPS/PPC/RISCV 反汇编、XStyles 主题生态。
   字节编辑入口 ✅
 - 17.F：ADR 0035–0038 产出 ✅（0035/0036/0037 Deferred，0038 Accepted）
 - `cargo fmt/clippy/test` 全绿，前端 `npm run build` 通过 ✅
+
+## Phase 18+：上游遗留差距补齐路线 — PLANNED
+
+Phase 17 显式 deferred 的项目按"阻塞原因 × 可落地性"重新分层，
+设计文档：`docs/design/phase18-deferred-parity.md`。
+
+| Phase | 范围 | 状态 | Gate |
+|-------|------|------|------|
+| 18.A | Demangle 剩余 8 模式（Swift/Go/GNAT/GNU v2/Haskell/OCaml/Tru64/SunPro） | PLANNED | 无 |
+| 18.B | CAB/ISO9660 归档列表+提取 | PLANNED | 无 |
+| 18.C | SSDeep/TLSH/BZ2/XZ/LZMA 依赖评估 → ADR | PLANNED | 纯 Rust 成熟度评审 |
+| 18.D | 反汇编新架构评估（capstone-rs vs yaxpeax-*）| PLANNED | 需求确认 + ADR |
+| 19 | InfoDB 注释/书签基础设施 | GATED | ADR 0037 复审 |
+| 20 | 静态脱壳（UPX 先行，逐 packer） | GATED | 真实样本 oracle |
+| 21 | NFD/SpecAbstract 第二引擎 | GATED | 规则库许可证审计 + 独立预算 |
+
+持续项：多语言增量（ADR 0038）；XStyles 主题不移植。

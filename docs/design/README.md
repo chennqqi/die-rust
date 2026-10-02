@@ -41,7 +41,11 @@ Phase 0 计划形成：
   100% 上游对齐设计（In Progress 对应实现）。
 - [`phase17-gui-parity.md`](phase17-gui-parity.md)：Phase 17 GUI 差距 v4
   补齐设计，demangle 20 模式、归档列表复用引擎接口、哈希算法扩展、
-  DEX 深视图、交互细节与 NFD/Unpacker/InfoDB ADR 决策项（Draft）。
+  DEX 深视图、交互细节与 NFD/Unpacker/InfoDB ADR 决策项（Implemented）。
+- [`phase18-deferred-parity.md`](phase18-deferred-parity.md)：Phase 18+
+  遗留差距路线规划 — demangle 剩余 8 模式、CAB/ISO9660、模糊哈希/
+  裸压缩流/反汇编架构评估，以及 InfoDB/静态脱壳/NFD 的 Gate 条件
+  （Draft）。
 - [`decisions/`](decisions/)：重大决策的 ADR。
 
 设计文档必须链接所依据的 `docs/research/` 文档。被后续设计取代时保留历史内容并将状态改为 `Superseded`，同时链接替代文档或 ADR。
