@@ -25,6 +25,7 @@ pub mod limits;
 pub mod node;
 pub mod report;
 pub mod request;
+pub mod signature;
 
 pub use cancel::CancellationToken;
 pub use diagnostic::{Diagnostic, DiagnosticCode, DiagnosticId, ScanStage, Severity};
