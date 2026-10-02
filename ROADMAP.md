@@ -1959,9 +1959,25 @@ nrv 单测），前端 `npm run build` 通过。
   `handle_PETools`（VMUNPACKER/XVOLKOLAK/HOODLUM 节名转发）、
   `handle_Joiners`（BladeJoiner/ExeJoiner import+EP+overlay，
   Celesty/NJoiner import+RBIND/NJ/NJOY 资源名）。
-- 仍未移植（显式 deferred）：Rich→工具描述链、`handle_Borland`
-  （需 export 名 + TObject/Boolean/string 深扫）、installers/SFX/
-  VB-cryptors/Delphi-cryptors/未知 protection 与其余 `handle_*`；
+- PE 语义 handler 第三批：`handle_Borland`（TurboLinker MZ@0x1E vi、
+  `.text` Pascal 元数据数组 TObject/Boolean/string/String、TControl
+  VA 反查 VCL 指纹（off,val）15 行表、PACKAGEINFO flags producer
+  位覆盖、Borland/CodeGear/Embarcadero 版权串 → C++Builder 版本、
+  `__CPPdebugHook` export、Embarcadero Delphi compiler version 串
+  → Delphi 发布名表；VCL 记录版本恒空——上游赋值全注释，如实复刻）、
+  `handle_Tools`（Rust=TLS+EP+Local\RustBacktraceMutex、Go="go1."
+  最大版本、Zig=ZIG_* ansi/utf16、Nim=io.nim/fatal.nim、AutoIt3
+  SCRIPT 资源、TinyC msvcrt+6.0+节形、CPADinfo 0x43506164、
+  ExcelsiorJET、VisualObjects@0x312、FASM/IExpress/LLD .buildid/
+  VALVE/UNILINK/DMD32/GoLink+GoAsm/Lahey@0x200/FlexLM/FlexNet、
+  Qt4-6 导入库±Debug、FPC+Lazarus LCL、PYTHONxx/LIBPYTHONx.y/
+  PERLxx 导入名版本、VirtualPascal/PowerBASIC/PureBasic/LCC-Win）。
+  新增 PeInfo.export_names/tls_present、ResourceEntry data_off/
+  data_size（level-3 leaf）、va_to_off、find_utf16le 等原语。
+- 仍未移植（显式 deferred）：version-resource FileDescription 链
+  （AutoIt 2.XX）、dotAnsiStrings 门控分支、Rich→工具描述链、
+  installers/SFX/VB-cryptors/Delphi-cryptors/PrivateEXEProtector/
+  UnknownProtection 与完整 handle_Protection/handle_FixDetects；
   JavaClass/PDF/JPEG/CFBF/Amiga/JAR 与 Mach-O FAT 专属 handler，
   走 generic binary 兜底。
 
