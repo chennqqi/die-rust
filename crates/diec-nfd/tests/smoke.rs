@@ -573,3 +573,161 @@ fn elf_debug_sections() {
         "{out:?}"
     );
 }
+
+/// Build a thin Mach-O 64-bit (little-endian, x86_64) fixture with a
+/// `__TEXT.__cstring` section containing the Zig marker, a Foundation
+/// `LC_LOAD_DYLIB`, `LC_VERSION_MIN_MACOSX`, and `LC_CODE_SIGNATURE`.
+fn macho64_fixture() -> Vec<u8> {
+    let mut cmds: Vec<u8> = Vec::new();
+
+    // LC_SEGMENT_64 with one __cstring section. Data placed right after
+    // the command area (offset filled below).
+    let path = b"/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation\0";
+    let dylib_sz = ((24 + path.len()) + 7) & !7;
+    let seg_sz = 72 + 80;
+    let data_off = 32 + seg_sz + dylib_sz + 16 + 16;
+    let cstring = b"ZIG_DEBUG_COLOR\0padding";
+
+    let mut seg = vec![0u8; seg_sz];
+    seg[0..4].copy_from_slice(&0x19u32.to_le_bytes()); // LC_SEGMENT_64
+    seg[4..8].copy_from_slice(&(seg_sz as u32).to_le_bytes());
+    seg[8..14].copy_from_slice(b"__TEXT");
+    seg[64..68].copy_from_slice(&1u32.to_le_bytes()); // nsects
+    // section_64 at +72: sectname[16], segname[16], addr8, size8, offset4.
+    seg[72..81].copy_from_slice(b"__cstring");
+    seg[88..94].copy_from_slice(b"__TEXT");
+    seg[72 + 40..72 + 48].copy_from_slice(&(cstring.len() as u64).to_le_bytes());
+    seg[72 + 48..72 + 52].copy_from_slice(&(data_off as u32).to_le_bytes());
+    cmds.extend(seg);
+
+    // LC_LOAD_DYLIB: Foundation current_version 1255.0.0 → SDK 10.11.0.
+    let mut dl = vec![0u8; dylib_sz];
+    dl[0..4].copy_from_slice(&0x0Cu32.to_le_bytes()); // LC_LOAD_DYLIB
+    dl[4..8].copy_from_slice(&(dylib_sz as u32).to_le_bytes());
+    dl[8..12].copy_from_slice(&24u32.to_le_bytes()); // name rel offset
+    dl[16..20].copy_from_slice(&(1255u32 << 16).to_le_bytes()); // current_version
+    dl[24..24 + path.len()].copy_from_slice(path);
+    cmds.extend(dl);
+
+    // LC_VERSION_MIN_MACOSX: version/sdk = 10.14.0.
+    let mut vm = vec![0u8; 16];
+    vm[0..4].copy_from_slice(&0x24u32.to_le_bytes());
+    vm[4..8].copy_from_slice(&16u32.to_le_bytes());
+    vm[8..12].copy_from_slice(&((10u32 << 16) | (14 << 8)).to_le_bytes());
+    vm[12..16].copy_from_slice(&((10u32 << 16) | (14 << 8)).to_le_bytes());
+    cmds.extend(vm);
+
+    // LC_CODE_SIGNATURE.
+    let mut cs = vec![0u8; 16];
+    cs[0..4].copy_from_slice(&0x1Du32.to_le_bytes());
+    cs[4..8].copy_from_slice(&16u32.to_le_bytes());
+    cmds.extend(cs);
+
+    let mut d = Vec::new();
+    d.extend(&0xFEEDFACFu32.to_le_bytes()); // MH_MAGIC_64 (LE view)
+    d.extend(&0x0100_0007u32.to_le_bytes()); // cputype x86_64
+    d.extend(&3u32.to_le_bytes()); // cpusubtype
+    d.extend(&2u32.to_le_bytes()); // filetype MH_EXECUTE
+    d.extend(&4u32.to_le_bytes()); // ncmds
+    d.extend(&(cmds.len() as u32).to_le_bytes()); // sizeofcmds
+    d.extend(&0u32.to_le_bytes()); // flags
+    d.extend(&0u32.to_le_bytes()); // reserved
+    d.extend(cmds);
+    d.resize(data_off, 0);
+    d.extend_from_slice(cstring);
+    d
+}
+
+#[test]
+fn macho64_load_command_semantics() {
+    let d = macho64_fixture();
+    let (ft, out) = show("macho64-synth", &d);
+    assert_eq!(ft_name(ft), "FT_MACHO64");
+    assert!(
+        out.iter()
+            .any(|r| r.record_type == "Operation system" && r.record_name == "macOS"),
+        "no macOS OS record: {out:?}"
+    );
+    assert!(
+        out.iter().any(|r| r.record_name == "codesign"),
+        "no codesign: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Foundation" && r.version == "1255.0.0"),
+        "no Foundation: {out:?}"
+    );
+    // LC_VERSION_MIN_MACOSX sdk=10.14.0 overwrites the Foundation-derived
+    // SDK version (upstream writes recordSDK later in handle_Tools);
+    // SDK 10.14 → Xcode 10.0 → clang 10.0.0 / swift 4.2 toolchain records.
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "macOS SDK" && r.version == "10.14.0"),
+        "no SDK record: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Xcode" && r.version == "10.0"),
+        "no Xcode: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "clang" && r.version == "10.0.0"),
+        "no clang: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Swift" && r.version == "4.2"),
+        "no Swift: {out:?}"
+    );
+    assert!(
+        out.iter().any(|r| r.record_name == "Zig"),
+        "no Zig: {out:?}"
+    );
+}
+
+#[test]
+fn macho_fat_disambiguates_java_class() {
+    // FAT header (CAFEBABE, nfat_arch=1, valid arch record) → FT_MACHOFAT;
+    // the same magic with u32be@4 > 10 stays JAVACLASS.
+    let mut fat = Vec::new();
+    fat.extend(&[0xCA, 0xFE, 0xBA, 0xBE]); // FAT_MAGIC
+    fat.extend(&1u32.to_be_bytes()); // nfat_arch
+    fat.extend(&0x0100_0007u32.to_be_bytes()); // cputype
+    fat.extend(&3u32.to_be_bytes()); // cpusubtype
+    fat.extend(&0x100u32.to_be_bytes()); // offset (>= table end 28)
+    fat.extend(&0x40u32.to_be_bytes()); // size
+    fat.extend(&8u32.to_be_bytes()); // align
+    fat.resize(0x100, 0);
+    fat.resize(0x140, 0);
+    assert_eq!(ft_name(sniff_ft(&fat)), "FT_MACHOFAT");
+
+    let mut cls = Vec::new();
+    cls.extend(&[0xCA, 0xFE, 0xBA, 0xBE]);
+    cls.extend(&52u32.to_be_bytes()); // minor<<16|major = 52 > 10
+    cls.resize(64, 0);
+    assert_eq!(ft_name(sniff_ft(&cls)), "FT_JAVACLASS");
+}
+
+#[test]
+fn macho_truncated_inputs_do_not_panic() {
+    let full = macho64_fixture();
+    for cut in [1, 4, 16, 28, 31, 32, 33, 100, 300, 350] {
+        let d = &full[..cut.min(full.len())];
+        let ft = sniff_ft(d);
+        let _ = scan(d, ft, ScanOptions { deep_scan: true });
+    }
+    // Big-endian thin Mach-O and a FAT header truncated mid-table.
+    let mut be = full.clone();
+    be[0..4].copy_from_slice(&[0xFE, 0xED, 0xFA, 0xCF]);
+    let _ = scan(
+        &be[..32],
+        sniff_ft(&be[..32]),
+        ScanOptions { deep_scan: true },
+    );
+    let _ = scan(
+        &[0xCA, 0xFE, 0xBA, 0xBE],
+        sniff_ft(&[0xCA, 0xFE, 0xBA, 0xBE]),
+        ScanOptions { deep_scan: true },
+    );
+}

@@ -16,6 +16,8 @@
 
 mod elf;
 mod engine;
+mod mach;
+mod mach_tables;
 pub mod parse;
 mod pe;
 mod records;

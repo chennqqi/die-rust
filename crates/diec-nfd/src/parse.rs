@@ -12,7 +12,8 @@ fn rd_u16(d: &[u8], off: usize) -> Option<u16> {
 }
 
 /// Read a little-endian `u32` at `off`, or `None` when out of bounds.
-fn rd_u32(d: &[u8], off: usize) -> Option<u32> {
+/// LE u32 at `off`.
+pub fn rd_u32(d: &[u8], off: usize) -> Option<u32> {
     d.get(off..off + 4)
         .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
 }
@@ -305,6 +306,79 @@ pub fn rd_u64_be_le(d: &[u8], off: usize, big: bool) -> Option<u64> {
     } else {
         u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])
     })
+}
+
+/// Mach-O FAT header validity check (`XBinary::getFileTypeId` fat
+/// branch): `CAFEBABE`/`CAFEBABF` magic, plausible arch count, and every
+/// `fat_arch`/`fat_arch_64` record passing the upstream field checks.
+pub fn macho_fat_valid(d: &[u8]) -> bool {
+    let Some(magic) = d.get(..4) else {
+        return false;
+    };
+    let is64 = magic == [0xCA, 0xFE, 0xBA, 0xBF];
+    if !(magic == [0xCA, 0xFE, 0xBA, 0xBE] || is64) {
+        return false;
+    }
+    let be32 = |o: usize| -> Option<u32> {
+        d.get(o..o + 4)
+            .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    };
+    let be64 = |o: usize| -> Option<u64> {
+        d.get(o..o + 8)
+            .map(|b| u64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+    };
+    let Some(n) = be32(4).map(|v| v as usize) else {
+        return false;
+    };
+    let rec_sz = if is64 { 32 } else { 20 };
+    let Some(rows) = n.checked_mul(rec_sz) else {
+        return false;
+    };
+    let Some(table_end) = 8usize.checked_add(rows) else {
+        return false;
+    };
+    if n == 0 || n > 1_000_000 || table_end > d.len() {
+        return false;
+    }
+    for i in 0..n {
+        let r = 8 + i * rec_sz;
+        let (Some(cpu), Some(aoff), Some(asz), Some(align)) = (
+            be32(r),
+            if is64 {
+                be64(r + 8)
+            } else {
+                be32(r + 8).map(|v| v as u64)
+            },
+            if is64 {
+                be64(r + 16)
+            } else {
+                be32(r + 12).map(|v| v as u64)
+            },
+            be32(r + if is64 { 24 } else { 16 }),
+        ) else {
+            return false;
+        };
+        let reserved_ok = !is64 || be32(r + 28) == Some(0);
+        let mask = if align > 63 {
+            0
+        } else if align > 0 {
+            (1u64 << align) - 1
+        } else {
+            0
+        };
+        let ok = cpu != 0
+            && asz != 0
+            && align <= 63
+            && reserved_ok
+            && aoff >= table_end as u64
+            && (aoff & mask) == 0
+            && aoff <= d.len() as u64
+            && asz <= d.len() as u64 - aoff;
+        if !ok {
+            return false;
+        }
+    }
+    true
 }
 
 /// Find an ANSI byte string inside `[offset, offset+size)`

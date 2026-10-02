@@ -173,8 +173,31 @@ pub fn sniff_ft(data: &[u8]) -> u16 {
         if data.starts_with(b"dex\n") {
             return ft::FT_DEX;
         }
-        if data.starts_with(b"\xCA\xFE\xBA\xBE") {
-            return ft::FT_JAVACLASS;
+        match data.get(..4) {
+            // Thin Mach-O (stored byte order).
+            Some([0xCE, 0xFA, 0xED, 0xFE]) | Some([0xFE, 0xED, 0xFA, 0xCE]) => {
+                return ft::FT_MACHO32;
+            }
+            Some([0xCF, 0xFA, 0xED, 0xFE]) | Some([0xFE, 0xED, 0xFA, 0xCF]) => {
+                return ft::FT_MACHO64;
+            }
+            _ => {}
+        }
+        if data.starts_with(b"\xCA\xFE\xBA\xBE") || data.starts_with(b"\xCA\xFE\xBA\xBF") {
+            // Mach-O FAT vs Java Class — `XBinary::getFileTypeId` runs
+            // the FAT record validity walk first, then falls back to the
+            // JAVACLASS u32be@4 > 10 check.
+            if parse::macho_fat_valid(data) {
+                return ft::FT_MACHOFAT;
+            }
+            if data
+                .get(4..8)
+                .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+                .is_some_and(|v| v > 10)
+            {
+                return ft::FT_JAVACLASS;
+            }
+            return ft::FT_BINARY;
         }
         if data.starts_with(b"%PDF") {
             return ft::FT_PDF;
@@ -376,6 +399,10 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
                 );
             }
             crate::elf::elf_semantic_scan(data, ft::FT_ELF, &mut misc);
+        }
+        x if x == ft::FT_MACHO32 || x == ft::FT_MACHO64 || x == ft::FT_MACHO => {
+            // NFD_MACH::getInfo — load-command driven semantic handlers.
+            crate::mach::mach_semantic_scan(data, ft::FT_MACHO, &mut misc);
         }
         x if x == ft::FT_DEX => {
             // NFD_DEX::getInfo — string-id contents and type descriptors.
@@ -959,6 +986,8 @@ pub fn supported_ft(file_type: u16) -> bool {
         || file_type == ft::FT_APK
         || file_type == ft::FT_ELF32
         || file_type == ft::FT_ELF64
+        || file_type == ft::FT_MACHO32
+        || file_type == ft::FT_MACHO64
         || file_type == ft::FT_DEX
         || file_type == ft::FT_JAVACLASS
         || file_type == ft::FT_PDF
