@@ -198,13 +198,11 @@ fn detect_rule_types(data: &[u8], file_name: &str) -> Vec<&'static str> {
         // non-generic records after the Binary results.
         if com_image_valid(data.len()) && has_com_suffix(file_name) {
             types.push("COM");
+        } else if com_image_valid(data.len()) {
+            types.push("Binary");
+            types.push("COM");
         } else {
-            if com_image_valid(data.len()) {
-                types.push("Binary");
-                types.push("COM");
-            } else {
-                types.push("Binary");
-            }
+            types.push("Binary");
         }
     }
 

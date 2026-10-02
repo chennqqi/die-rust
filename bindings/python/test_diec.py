@@ -140,7 +140,10 @@ class TestReusableScanner(unittest.TestCase):
         with self.db.new_scanner() as scanner:
             result = scanner.scan_path(str(corpus_zip))
             try:
-                self.assertIn("Zip", result.json)
+                # Upstream (DIE-engine 23fec32) emits only the ZIP file type
+                # with an "Unknown" record in non-verbose mode; assert the
+                # file type surfaced rather than a Binary-group record.
+                self.assertIn('"file_type":"ZIP"', result.json)
             finally:
                 result.close()
 
