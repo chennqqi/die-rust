@@ -1,7 +1,21 @@
 # ADR 0035: Defer NFD (SpecAbstract) Engine Porting
 
 **Date**: 2026-10-02  
-**Status**: Deferred
+**Status**: Accepted (partial) — superseded 2026-10-07
+
+> **Update (Phase 21, 2026-10-07)**: the license gate cleared (SpecAbstract
+> is MIT) and a bounded port shipped. `crates/diec-nfd` re-implements the
+> matching core in pure Rust; signature tables are generated from the C
+> arrays by `tools/nfd_codegen.py` (35 tables / 1730 records @ 5188e047,
+> MIT attribution in generated headers). Ported dispatch: BINARY
+> header/archive scans, MSDOS, PE32/PE64 (header, entry-point chain
+> incl. NOP/JZ/E9-follow, import hashes, resources, section names, Rich
+> records, deep section scans). Integration: `ScanFlags::nfd` /
+> CLI `--nfd` / GUI engine checkbox; records carry `engine="nfd"`.
+> Not yet ported: heuristic `handle_*` version enrichment, and the
+> ELF/Mach-O/LE/LX/NE/APK/JAR/JavaClass/DEX/Amiga/PDF/JPEG/CFBF/COM
+> per-format `getInfo` bodies (their tables are generated; dispatch is
+> stubbed to the generic binary path).
 
 ## Context
 

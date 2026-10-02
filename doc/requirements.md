@@ -1304,3 +1304,10 @@ SSDeep/TLSH/BZ2/XZ/LZMA → ADR 0039/0040，其中 BZ2/XZ/LZMA 用
 Phase 19 InfoDB 注释/书签（旁车 JSON + Tauri 命令 + Hex/Disasm UI）；
 Phase 20 UPX 静态脱壳（NRV2B/2D/2E+LZMA+DEFLATE+PE 重建，CLI/GUI）；
 Phase 21 NFD/SpecAbstract 第二引擎（待立项）。
+
+## 继续推进 Phase 21 落地（"需要启动"）
+
+Phase 21 NFD/SpecAbstract 第二引擎实际实施：diec-nfd crate（纯 Rust
+匹配核心）+ tools/nfd_codegen.py 签名表生成（35 表/1730 条 @5188e047）+
+BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
+勾选集成（engine=nfd 标记）。

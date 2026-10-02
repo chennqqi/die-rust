@@ -79,8 +79,10 @@
   成员数 20/100000、递归深度 32，比上游更严格的安全改进
   （Accepted, 2026-08-15）。
 - [`0035-nfd-engine.md`](0035-nfd-engine.md)：
-  NFD/SpecAbstract 第二扫描引擎移植 deferred（工作量等同 DIE 引擎本体，
-  且规则库许可证未审计）（Deferred, 2026-10-02）。
+  NFD/SpecAbstract 第二扫描引擎：许可证审计通过（MIT），Phase 21 落地
+  `diec-nfd` crate + codegen 签名表（35 表 / 1730 条）+ `engine=nfd`
+  第二 pass（CLI `--nfd` / GUI engine 勾选）；启发式 enrich 与多数
+  格式 `getInfo` 仍 deferred（Accepted partial, 2026-10-07）。
 - [`0036-static-unpacker.md`](0036-static-unpacker.md)：
   静态脱壳器逐 packer 移植；UPX 已在 Phase 20 实现（NRV2B/2D/2E、
   LZMA、DEFLATE + PE 重建），其余壳 deferred（Accepted UPX, 2026-10-07）。

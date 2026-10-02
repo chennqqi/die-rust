@@ -357,7 +357,7 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 
 ### Deferred（17.F ADR）
 
-- ADR 0035：NFD/SpecAbstract 引擎 — Deferred
+- ADR 0035：NFD/SpecAbstract 引擎 — Accepted (partial, Phase 21)
 - ADR 0036：XStaticUnpacker 静态脱壳 — Deferred
 - ADR 0037：InfoDB 注释/书签 — Deferred
 - ADR 0038：i18n 增量覆盖，不做 .ts 批量转换 — Accepted
@@ -422,3 +422,15 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 | PE filter | `_applyFilter` 小端 call/jmp | ✅ 0x06/0x26/0x36/0x46/0x49 + CTO | |
 | PE 重建 | `_unpackPE` | ✅ headers/节/imports/relocs/exports/resources/overlay | `upx -d` 节级字节差分通过 |
 | 其他壳 | ASPack/PECompact/… | ❌ deferred | ADR 0036 |
+
+## Phase 21: NFD/SpecAbstract 第二引擎（2026-10-07）
+
+| 能力 | 上游 | diec-rust | 备注 |
+|------|------|-----------|------|
+| 签名表 | C 数组（~1.5MB C++ 内嵌） | `tools/nfd_codegen.py` → Rust 静态表（35 表 / 1730 条） | @ 5188e047，MIT 归属保留 |
+| 通用 pass | signature/string/const/resources/memory/exp scan | ✅ 对齐（ft 过滤、记录名去重） | |
+| BINARY dispatch | `NFD_Binary::getInfo` | ✅ header + archive 表 | |
+| MSDOS | `NFD_MSDOS::getInfo` | ✅ header + entrypoint + exp scan | |
+| PE32/PE64 | `NFD_PE::getInfo` | ⚠ partial | header/EP 链(NOP/JZ/E9-follow)/import hash/resources/section names/Rich/deep section；heuristic `handle_*` 未移植 |
+| ELF/Mach-O/LE/LX/NE/APK/JAR/JavaClass/DEX/Amiga/PDF/JPEG/CFBF/COM | 各自 `getInfo` | ❌ deferred | 表已生成，dispatch 走 generic binary 路径 |
+| 引擎接入 | GUI scan-engine 选择器 | ✅ `ScanFlags::nfd` + CLI `--nfd` + GUI checkbox | 记录带 `engine=nfd` 标记，与 DIE 结果共存不去重 |

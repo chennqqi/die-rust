@@ -1900,10 +1900,23 @@ ADR 0036 按"逐 packer"条件实施 UPX。
 Phase 20 交付验证：`cargo fmt/clippy/test` 全绿（upx_unpack 7 测试、
 nrv 单测），前端 `npm run build` 通过。
 
-## Phase 21：NFD/SpecAbstract 第二引擎 — GATED
+## Phase 21：NFD/SpecAbstract 第二引擎 — PARTIAL (2026-10-07)
 
-Gate 条件（均未满足即不立项）：specabstract 规则库 MIT 许可证已审计
-通过（✅），但移植工作量等同 DIE 引擎本体（~1.5 MB C++、60+ 文件），
-需独立预算。计划路径：`diec-nfd` crate + 签名表 codegen
-（C 数组 → Rust 静态表）+ 第二扫描 pass（`engine=nfd` 标记）+
-GUI 引擎选择器。
+许可证 Gate 通过（MIT），按"读 C++ 写 Rust + 签名表 codegen"路径
+落地了有界切片：
+
+- `crates/diec-nfd`：纯 Rust 匹配核心（signature/string/const/
+  resources/memory/exp scan，记录级去重与 ft 过滤对齐上游）。
+- `tools/nfd_codegen.py`：SpecAbstract C 签名数组 → Rust 静态表
+  （35 表 / 1730 条记录 @ 5188e047，生成头含 MIT 归属）。
+- 已接通 dispatch：BINARY header/archive、MSDOS、PE32/PE64
+  （header、entry-point 链含 NOP/JZ/E9-follow、import hash、
+  resources、section names、Rich、deep section scans）。
+- 集成：`ScanFlags::nfd`、CLI `--nfd`、GUI engine 勾选；
+  NFD 记录在 JSON/GUI 中带 `engine=nfd` 标记。
+- 仍未移植（显式 deferred）：heuristic `handle_*` 版本补全；
+  ELF/Mach-O/LE/LX/NE/APK/JAR/JavaClass/DEX/Amiga/PDF/JPEG/CFBF/COM
+  的 per-format `getInfo` 主体（表已生成，dispatch 走 generic 路径）。
+
+验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
+workspace 44 套件全绿、clippy `-D warnings` 零警告。
