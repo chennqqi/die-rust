@@ -89,3 +89,12 @@
   （Deferred, 2026-10-02）。
 - [`0038-i18n-coverage.md`](0038-i18n-coverage.md)：
   不做上游 .ts 批量转换，语言按需增量补齐（Accepted, 2026-10-02）。
+- [`0039-fuzzy-hashes.md`](0039-fuzzy-hashes.md)：
+  SSDeep 因 libfuzzy GPL-2.0 许可证拒绝，TLSH 暂缓（纯 Rust 移植版停更）
+  （Deferred, 2026-10-05）。
+- [`0040-bz2-xz-lzma-streams.md`](0040-bz2-xz-lzma-streams.md)：
+  BZ2/XZ/LZMA 裸流通过纯 Rust `bzip2-rs`+`lzma-rs` 实现解码，
+  拒绝 native `bzip2`/`xz2`（Accepted, 2026-10-05）。
+- [`0041-disasm-architectures.md`](0041-disasm-architectures.md)：
+  MIPS/PPC/RISC-V 等反汇编架构 deferred——纯 Rust 覆盖不完整，
+  capstone native 绑定是唯一完整路径但增加构建负担（Deferred, 2026-10-05）。

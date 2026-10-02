@@ -1288,3 +1288,13 @@ Phase 18（纯 Rust 无阻塞：demangle 8 模式/CAB+ISO9660/SSDeep-TLSH
 与裸流评估/反汇编架构评估）、Phase 19（InfoDB，gate=ADR0037 复审）、
 Phase 20（静态脱壳 UPX 先行，gate=真实样本 oracle）、Phase 21
 （NFD，gate=specabstract 许可证审计）；ROADMAP 追加 Phase 18+ 表。
+
+## 2026-10-05 顺序完成 Phase 18
+
+按 `docs/design/phase18-deferred-parity.md` 顺序实施全部批次：
+18.A demangle 剩余 8 模式精简解码器（Swift/Go/GNAT/GNUv2/Haskell/
+OCaml/Tru64/SunPro）+ 前端模式下拉；18.B CAB（`cab` crate）与
+ISO9660（自实现 base-spec reader）归档 list/extract；18.C 评估
+SSDeep/TLSH/BZ2/XZ/LZMA → ADR 0039/0040，其中 BZ2/XZ/LZMA 用
+`bzip2-rs`+`lzma-rs` 实现单流解码；18.D 反汇编架构评估 → ADR 0041
+（deferred，无完整纯 Rust 路径）。更新 COMPATIBILITY/ROADMAP。

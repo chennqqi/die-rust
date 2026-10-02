@@ -305,7 +305,7 @@ scanning:
 | Watcom | ✅ | ✅ `W?..$..`/`W?...$_` 模式 |
 | D (DMD `_D`) | ✅ | ✅ 类型码表 + `FZ` 签名 |
 | Java | ✅ | ✅ 内部名/描述符 |
-| GNU v2 / GNAT / Swift / Go / Haskell / OCaml / Tru64 / SunPro | ✅ | ❌ deferred（模式枚举存在，返回未解码） |
+| GNU v2 / GNAT / Swift / Go / Haskell / OCaml / Tru64 / SunPro | ✅ | ✅ 精简解码（Phase 18.A，详见 Phase 18 节） |
 
 ### Archive 格式矩阵（17.B）
 
@@ -317,7 +317,10 @@ GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
 | 7Z | ✅ | ✅ list + extract |
 | RAR | ✅ | ✅ list + extract |
 | TAR/GZIP-TAR | ✅ | ✅ list（legacy 路径保留） |
-| CAB/ISO9660/ARJ/BZ2/XZ/LZMA/SFX… | ✅ | ❌ deferred（引擎无实现） |
+| CAB | ✅ | ✅ list + extract（`cab` crate，Phase 18.B） |
+| ISO9660 | ✅ | ✅ list + extract（base spec；Joliet/RockRidge 名不解码，Phase 18.B） |
+| BZ2/XZ/LZMA | ✅ | ✅ 单流解压（`bzip2-rs`/`lzma-rs`，伪成员 `data`，Phase 18.C） |
+| ARJ/SFX/其它 | ✅ | ❌ deferred |
 
 ### Hash 算法矩阵（17.C）
 
@@ -330,7 +333,9 @@ GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
 | SHA3-224/256/384/512 | ✅ | ✅ |
 | BLAKE2b512, BLAKE2s256, BLAKE3 | ✅ | ✅ |
 | Adler32, CRC32, CRC64(ECMA-182) | ✅ | ✅ |
-| SSDeep, TLSH, GOST, Tiger, Whirlpool, RIPEMD… | ✅ | ❌ deferred（native 依赖） |
+| SSDeep | ✅ | ❌ rejected（libfuzzy 为 GPL-2.0，ADR 0039） |
+| TLSH | ✅ | ❌ deferred（纯 Rust 移植版停更，ADR 0039） |
+| GOST, Tiger, Whirlpool, RIPEMD… | ✅ | ❌ deferred（低优先级） |
 
 ### DEX 深视图（17.D）
 
@@ -356,3 +361,41 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 - ADR 0036：XStaticUnpacker 静态脱壳 — Deferred
 - ADR 0037：InfoDB 注释/书签 — Deferred
 - ADR 0038：i18n 增量覆盖，不做 .ts 批量转换 — Accepted
+
+## Phase 18: Deferred Parity（2026-10-05）
+
+按 `docs/design/phase18-deferred-parity.md` 实施，除另行标注外全部为
+精简实现（不追求上游 100% ABI 语义；无法解码时原样返回符号）。
+
+### Demangle 补齐（18.A）
+
+`demangle.rs` 全部 20 种上游模式均有解码路径：
+
+| Mode | 实现 | 说明 |
+|------|------|------|
+| Swift | ✅ 精简 | `$s`/`_$s`/`$S` 前缀 + 长度前缀段 + `yF`/`Si` 等类型码；复杂泛型/替换回退原名 |
+| Go | ✅ 精简 | `%XX` 解码 + `·`/`∕` → `.`；Go 符号本身多为明文 |
+| GNAT (Ada) | ✅ 精简 | `_ada_` 前缀 + `__` 段切分 + `O<op>` 操作符表 |
+| GNU v2 | ✅ 精简 | `__vt_`/`_$_`/`name__class F<sig>` 形 + 单字母类型码 |
+| Haskell | ✅ 精简 | `Module.function`/`ZC`/`zi` 等 GHC 前缀去除 |
+| OCaml | ✅ 精简 | `caml<Mod>__<name>_<id>` → `Mod.name` |
+| Tru64 | ✅ 精简 | `__X`/`__vtbl__`/`name__X<sig>` 形 |
+| SunPro | ✅ 精简 | `__1c<len><name><sig>` ARM/CC 方言 |
+
+### Archive 补齐（18.B/18.C）
+
+- **CAB**：`cab` 0.6（纯 Rust，MIT，MSZIP/LZX/Quantum 解码经 `lzxd`），
+  list + extract 走 `cabinet.folder_entries()`/`read_file`。
+- **ISO9660**：自实现 base-spec reader（PVD@sector16 + 目录记录遍历，
+  深度 ≤8、条目 ≤65536、范围全检查）；Joliet/RockRidge 名不解码。
+- **BZ2/XZ/LZMA**：`bzip2-rs`（纯 Rust 解码）+ `lzma-rs`（xz/lzma），
+  单流伪成员 `data`，输出上限 `MAX_SINGLE_MEMBER_BYTES`。
+- 全部格式接入 `is_archive`/`extract_archive`/`list_archive_members`/
+  `extract_member`，GUI ArchiveViewer 与嵌套扫描自动生效。
+
+### 评估性 ADR（18.C/18.D）
+
+- ADR 0039：SSDeep 拒绝（libfuzzy GPL-2.0）；TLSH 暂缓。
+- ADR 0040：BZ2/XZ/LZMA 纯 Rust 解码（本 Phase 已实现）。
+- ADR 0041：MIPS/PPC/RISC-V 反汇编 deferred——无完整纯 Rust 覆盖，
+  capstone native 绑定是唯一全架构路径但增加构建负担。
