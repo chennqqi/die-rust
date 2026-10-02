@@ -52,6 +52,9 @@ fn print_usage() {
     eprintln!("  --profiling               Profile signatures during scan");
     eprintln!("  --messages                Display scan messages and warnings");
     eprintln!("  --entropy                 Show entropy information");
+    eprintln!(
+        "  --unpack                  Statically unpack UPX-packed files (writes <file>.unpacked)"
+    );
     eprintln!("  --info                    Show file info");
     eprintln!("  --struct, -S <value>      Show structure info (e.g., Hash#MD5, Info, Entropy)");
     eprintln!("  --showdatabase            Show database paths and rule counts");
@@ -138,6 +141,7 @@ fn main() -> ExitCode {
     let mut messages = false;
     let mut entropy_mode = false;
     let mut info_mode = false;
+    let mut unpack_mode = false;
     let mut struct_value: Option<String> = None;
     let mut extra_db_path = String::new();
     let mut custom_db_path = String::new();
@@ -204,6 +208,9 @@ fn main() -> ExitCode {
             }
             "--info" => {
                 info_mode = true;
+            }
+            "--unpack" => {
+                unpack_mode = true;
             }
             "--struct" | "-S" => {
                 i += 1;
@@ -318,6 +325,48 @@ fn main() -> ExitCode {
     if files.is_empty() && !show_database {
         eprintln!("error: no files to scan");
         return ExitCode::from(EXIT_INPUT);
+    }
+
+    // --unpack mode: statically unpack UPX-packed executables; writes
+    // "<file>.unpacked" next to the input. No rule database needed.
+    if unpack_mode {
+        let mut failed = false;
+        for file in &files {
+            let data = match std::fs::read(file) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("error: reading {file}: {e}");
+                    failed = true;
+                    continue;
+                }
+            };
+            let Some(info) = diec_engine::detect_upx(&data) else {
+                eprintln!("{file}: not UPX packed");
+                failed = true;
+                continue;
+            };
+            match diec_engine::unpack_static(&data) {
+                Ok(out) => {
+                    let out_path = format!("{file}.unpacked");
+                    if let Err(e) = std::fs::write(&out_path, &out) {
+                        eprintln!("error: writing {out_path}: {e}");
+                        failed = true;
+                        continue;
+                    }
+                    println!(
+                        "{file}: unpacked -> {out_path} ({} bytes, method {}, level {})",
+                        out.len(),
+                        info.method_name(),
+                        info.level
+                    );
+                }
+                Err(e) => {
+                    eprintln!("{file}: unpack failed: {e}");
+                    failed = true;
+                }
+            }
+        }
+        return ExitCode::from(if failed { EXIT_INPUT } else { EXIT_OK });
     }
 
     // --entropy mode: compute and display file entropy, no rule database needed.
