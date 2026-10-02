@@ -120,6 +120,10 @@ Phase 16 的 7 条根因和改进建议见
   - `cargo fmt --check`
   - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
   - `cargo test --workspace --all-features`
+  - MSRV 工具链（clippy lint 集合随版本变化，1.97 不报不代表 1.88 不报）：
+    `cargo +1.88.0 clippy --workspace --exclude die-gui --all-targets --all-features --locked -- -D warnings -A clippy::uninlined_format_args`
+  - fuzz crate 不在 workspace 内（独立 `fuzz/Cargo.lock`），提交前必须单独验证：
+    `cd fuzz && cargo test --no-default-features --features replay`
 - 兼容行为运行固定上游版本的对应差分测试；ABI 变更运行 C 链接和生命周期测试。
 - 更新相关调研/设计文档、能力矩阵和基线记录。
 - 规则同步、实现、FFI 和 CLI 变更尽量分别提交。
