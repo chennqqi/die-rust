@@ -1946,9 +1946,24 @@ nrv 单测），前端 `npm run build` 通过。
   major.minor 兜底、mapVersions 链、VS build 版本表 158 条+
   linker 版本表 46 条、.NET BSJB 元数据版本）。上游 quirk
   已记录至 doc/upstream-bugs.md（mapVersions (0,1) 死键）。
-- 仍未移植（显式 deferred）：Rich→工具描述链与其余 `handle_*`
-  protection/installer/SFX 启发式；JavaClass/PDF/JPEG/CFBF/Amiga/
-  JAR 与 Mach-O FAT 专属 handler，走 generic binary 兜底。
+- PE 语义 handler 第二批：`handle_GCC`（.rdata "GCC:"/`gcc-` 版本
+  串、Cygwin DLL `^CYGWIN` 数字版本、`.stabstr` 的
+  `/gcc/mingw32/`、`/gcc/i686-pc-cygwin/` 标记、generic linker
+  major=2 && minor∈{22..36,56} 启发、linker-minor→MinGW 版本表
+  {23:4.7-4.8, 24:4.8.2-4.9.2, 25:5.3.0, 29/30:7.3.0}、GCC→GNU ld
+  填充）、`handle_Watcom`（"Open Watcom"/` 2002-`/`WATCOM`/`. 1988-`
+  EP 区 vi 串 + linker/compiler 互推）、`handle_Signtools`
+  （security dir 首证书 rev 0x200/type 2 → WinAuth 2.0 PKCS#7）、
+  `handle_DongleProtection`（单 NOVEX* 导入 → Guardian Stealth）、
+  `handle_NeoLite`（EP 段 "NeoLite Executable File Compressor"）、
+  `handle_PETools`（VMUNPACKER/XVOLKOLAK/HOODLUM 节名转发）、
+  `handle_Joiners`（BladeJoiner/ExeJoiner import+EP+overlay，
+  Celesty/NJoiner import+RBIND/NJ/NJOY 资源名）。
+- 仍未移植（显式 deferred）：Rich→工具描述链、`handle_Borland`
+  （需 export 名 + TObject/Boolean/string 深扫）、installers/SFX/
+  VB-cryptors/Delphi-cryptors/未知 protection 与其余 `handle_*`；
+  JavaClass/PDF/JPEG/CFBF/Amiga/JAR 与 Mach-O FAT 专属 handler，
+  走 generic binary 兜底。
 
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。

@@ -1315,3 +1315,5 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 - 2026-10-07: 继续 Phase 21 —— 实现 Mach-O 语义切片（解析器+版本映射表+OS/SDK/工具链识别），更新兼容矩阵。
 
 - 2026-10-07: continue — Phase 21 PE handle_* 首批（OS/import/DebugData/Microsoft 非 Rich 子集）。
+
+- [2026-10-02] continue：Phase 21 续——第二批 PE handle_*（GCC/Watcom/Signtools/Dongle/NeoLite/PETools/Joiners）。
