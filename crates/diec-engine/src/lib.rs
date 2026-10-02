@@ -19,6 +19,7 @@ mod nested_scan;
 mod scanner;
 pub mod struct_mode;
 
+pub use archive_unpack::{ArchiveKind, ArchiveMemberInfo, extract_member, list_archive_members};
 pub use database::{Database, DatabaseBuilder, DatabaseError, DatabaseVersion};
 pub use host::{BufferHost, ScanFlags};
 pub use scanner::{ScanDetection, ScanError, ScanResult, Scanner, scan_bytes, scan_once};

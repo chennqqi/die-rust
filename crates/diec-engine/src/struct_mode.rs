@@ -124,9 +124,10 @@ impl StructSelector {
     }
 }
 
-/// Compute all 7 hash algorithms and return as child nodes.
+/// Compute the supported hash algorithms and return them as child nodes.
 ///
-/// Algorithms: MD4, MD5, SHA1, SHA224, SHA256, SHA384, SHA512.
+/// Algorithms: MD4, MD5, SHA1, SHA224/256/384/512, SHA3-224/256/384/512,
+/// BLAKE2b512/BLAKE2s256, BLAKE3, Adler32, CRC32, CRC64 (17 total).
 ///
 /// **Edge case**: Empty file `Hash#MD5` returns empty string (not the
 /// standard empty-input MD5 `d41d8cd98f00b204e9800998ecf8427e`).
@@ -152,6 +153,9 @@ fn compute_hash_nodes(data: &[u8], selector: &StructSelector) -> Vec<StructNode>
 }
 
 /// Returns the list of hash algorithm names and their compute functions.
+///
+/// Names follow upstream `XHash::METHOD` naming (e.g. `SHA3_256`,
+/// `BLAKE2B512`, `CRC64`). CRC64 is CRC-64/ECMA-182.
 fn hash_algorithms() -> &'static [(&'static str, HashFn)] {
     use md5::Digest as _;
     &[
@@ -162,6 +166,42 @@ fn hash_algorithms() -> &'static [(&'static str, HashFn)] {
         ("SHA256", |d: &[u8]| hex::encode(sha2::Sha256::digest(d))),
         ("SHA384", |d: &[u8]| hex::encode(sha2::Sha384::digest(d))),
         ("SHA512", |d: &[u8]| hex::encode(sha2::Sha512::digest(d))),
+        ("SHA3_224", |d: &[u8]| {
+            use sha3::Digest as _;
+            hex::encode(sha3::Sha3_224::digest(d))
+        }),
+        ("SHA3_256", |d: &[u8]| {
+            use sha3::Digest as _;
+            hex::encode(sha3::Sha3_256::digest(d))
+        }),
+        ("SHA3_384", |d: &[u8]| {
+            use sha3::Digest as _;
+            hex::encode(sha3::Sha3_384::digest(d))
+        }),
+        ("SHA3_512", |d: &[u8]| {
+            use sha3::Digest as _;
+            hex::encode(sha3::Sha3_512::digest(d))
+        }),
+        ("BLAKE2B512", |d: &[u8]| {
+            use blake2::Digest as _;
+            hex::encode(blake2::Blake2b512::digest(d))
+        }),
+        ("BLAKE2S256", |d: &[u8]| {
+            use blake2::Digest as _;
+            hex::encode(blake2::Blake2s256::digest(d))
+        }),
+        ("BLAKE3", |d: &[u8]| blake3::hash(d).to_hex().to_string()),
+        ("ADLER32", |d: &[u8]| {
+            use std::hash::Hasher as _;
+            let mut h = adler2::Adler32::new();
+            h.write(d);
+            format!("{:08X}", h.checksum())
+        }),
+        ("CRC32", |d: &[u8]| format!("{:08X}", crc32fast::hash(d))),
+        ("CRC64", |d: &[u8]| {
+            let crc = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
+            format!("{:016X}", crc.checksum(d))
+        }),
     ]
 }
 
@@ -534,8 +574,9 @@ mod tests {
         let node =
             evaluate_struct(&selector, "test.bin", data, &ProbeTable::default_phase2()).unwrap();
         assert_eq!(node.name, "Hash");
-        // All 7 algorithms should be present.
-        assert_eq!(node.children.len(), 7);
+        // All algorithms should be present.
+        assert_eq!(node.children.len(), hash_algorithms().len());
+        assert_eq!(node.children.len(), 17);
         // Check MD5.
         let md5_child = node.children.iter().find(|c| c.name == "MD5").unwrap();
         assert_eq!(

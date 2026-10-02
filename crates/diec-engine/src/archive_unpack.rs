@@ -379,6 +379,316 @@ pub fn is_archive(data: &[u8]) -> bool {
     is_zip(data) || is_7z(data) || is_rar(data)
 }
 
+// ============================================================================
+// Metadata-only listing (GUI "Files" view, upstream `XArchive::getRecords`)
+// ============================================================================
+
+/// Archive format detected by [`list_archive_members`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArchiveKind {
+    /// ZIP archive (also covers JAR/APK/IPA).
+    Zip,
+    /// 7Z archive.
+    SevenZ,
+    /// RAR archive (1.5/4.x/5.x).
+    Rar,
+}
+
+impl ArchiveKind {
+    /// Uppercase display name (upstream archive widget style).
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Zip => "ZIP",
+            Self::SevenZ => "7Z",
+            Self::Rar => "RAR",
+        }
+    }
+}
+
+/// Metadata for one archive member for list views (no payload extraction).
+#[derive(Debug, Clone)]
+pub struct ArchiveMemberInfo {
+    /// Member name (path within the archive).
+    pub name: String,
+    /// Unpacked size in bytes.
+    pub size: u64,
+    /// Packed/compressed size in bytes (0 when the format does not expose
+    /// a per-member packed size, e.g. 7Z solid streams).
+    pub packed_size: u64,
+    /// Whether the member is a directory.
+    pub is_directory: bool,
+    /// Last-modified time formatted as `YYYY-MM-DD HH:MM:SS` UTC.
+    pub modified: Option<String>,
+}
+
+/// List members of a supported archive (ZIP/7Z/RAR) with metadata only.
+///
+/// Mirrors upstream `XArchive::getRecords` name enumeration. Returns `None`
+/// for unsupported formats or unparseable archives. Member payloads are not
+/// decompressed; counts are capped at `MAX_MEMBER_NAMES`.
+pub fn list_archive_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
+    if is_zip(data) {
+        list_zip_members(data).map(|m| (ArchiveKind::Zip, m))
+    } else if is_7z(data) {
+        list_7z_members(data).map(|m| (ArchiveKind::SevenZ, m))
+    } else if is_rar(data) {
+        list_rar_members(data).map(|m| (ArchiveKind::Rar, m))
+    } else {
+        None
+    }
+}
+
+/// List ZIP members from the central directory (metadata only).
+fn list_zip_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
+    let cursor = std::io::Cursor::new(data);
+    let mut archive = zip::ZipArchive::new(cursor).ok()?;
+    let mut members = Vec::with_capacity(archive.len().min(MAX_MEMBER_NAMES));
+    for i in 0..archive.len().min(MAX_MEMBER_NAMES) {
+        if let Ok(f) = archive.by_index(i) {
+            members.push(ArchiveMemberInfo {
+                name: f.name().to_string(),
+                size: f.size(),
+                packed_size: f.compressed_size(),
+                is_directory: f.is_dir(),
+                modified: f.last_modified().map(|d| format!("{}", d)),
+            });
+        }
+    }
+    Some(members)
+}
+
+/// List 7Z members by reading the archive header only.
+fn list_7z_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
+    let mut cursor = std::io::Cursor::new(data);
+    let archive = sevenz_rust::Archive::read(&mut cursor, data.len() as u64, &[] as &[u8]).ok()?;
+    let members = archive
+        .files
+        .iter()
+        .take(MAX_MEMBER_NAMES)
+        .map(|e| ArchiveMemberInfo {
+            name: e.name().to_string(),
+            size: e.size(),
+            // 7Z solid streams have no meaningful per-member packed size.
+            packed_size: 0,
+            is_directory: e.is_directory(),
+            modified: e
+                .has_last_modified_date
+                .then(|| format_unix_time(e.last_modified_date().to_unix_time())),
+        })
+        .collect();
+    Some(members)
+}
+
+/// List RAR members via `rars` header metadata.
+fn list_rar_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
+    let archive = rars::ArchiveReader::read(data).ok()?;
+    let members = archive
+        .members()
+        .take(MAX_MEMBER_NAMES)
+        .map(|m| {
+            let meta = &m.meta;
+            ArchiveMemberInfo {
+                name: meta.name_lossy(),
+                size: meta.unpacked_size,
+                packed_size: meta.packed_size,
+                is_directory: meta.is_directory,
+                modified: meta.file_time.and_then(format_dos_time),
+            }
+        })
+        .collect();
+    Some(members)
+}
+
+/// Extract a single member's bytes by exact name, bounded to
+/// `MAX_SINGLE_MEMBER_BYTES`.
+///
+/// Mirrors upstream `XArchive::decompress(record)` for GUI member extraction.
+/// Returns an empty vector when the member is absent or undecodable.
+pub fn extract_member(data: &[u8], name: &str) -> Vec<u8> {
+    if name.is_empty() {
+        return Vec::new();
+    }
+    if is_zip(data) {
+        extract_member_zip(data, name)
+    } else if is_7z(data) {
+        extract_member_7z(data, name)
+    } else if is_rar(data) {
+        extract_member_rar(data, name)
+    } else {
+        Vec::new()
+    }
+}
+
+/// Extract one ZIP member bounded to `MAX_SINGLE_MEMBER_BYTES`.
+fn extract_member_zip(data: &[u8], name: &str) -> Vec<u8> {
+    let cursor = std::io::Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return Vec::new(),
+    };
+    let mut file = match archive.by_name(name) {
+        Ok(f) => f,
+        Err(_) => return Vec::new(),
+    };
+    if file.is_dir() || file.size() > MAX_SINGLE_MEMBER_BYTES {
+        return Vec::new();
+    }
+    let mut buf = Vec::with_capacity(file.size() as usize);
+    if std::io::Read::read_to_end(&mut file, &mut buf).is_err() {
+        return Vec::new();
+    }
+    buf
+}
+
+/// Extract one 7Z member bounded to `MAX_SINGLE_MEMBER_BYTES`.
+fn extract_member_7z(data: &[u8], name: &str) -> Vec<u8> {
+    let temp_dir = std::env::temp_dir().join(format!("diec_7z_member_{}", std::process::id()));
+    if std::fs::create_dir_all(&temp_dir).is_err() {
+        return Vec::new();
+    }
+    let cursor = std::io::Cursor::new(data);
+    let found: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+    let found_clone = found.clone();
+    let _ = sevenz_rust::decompress_with_extract_fn(
+        cursor,
+        &temp_dir,
+        move |entry, reader, _path| -> Result<bool, sevenz_rust::Error> {
+            if entry.name != name || entry.is_directory() {
+                return Ok(true);
+            }
+            let mut buf = Vec::new();
+            let mut take = std::io::Read::take(reader, MAX_SINGLE_MEMBER_BYTES);
+            if std::io::Read::read_to_end(&mut take, &mut buf).is_ok() {
+                *found_clone.borrow_mut() = buf;
+            }
+            // Stop after the matched member.
+            Ok(false)
+        },
+    );
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    found.take()
+}
+
+/// Extract one RAR member bounded to `MAX_SINGLE_MEMBER_BYTES`.
+fn extract_member_rar(data: &[u8], name: &str) -> Vec<u8> {
+    let archive = match rars::ArchiveReader::read(data) {
+        Ok(a) => a,
+        Err(_) => return Vec::new(),
+    };
+    let found: Rc<RefCell<Vec<u8>>> = Rc::new(RefCell::new(Vec::new()));
+    let found_clone = found.clone();
+    let _ = archive.extract_to(None, move |meta| {
+        if meta.is_directory || meta.name_lossy() != name {
+            return Err(rars::Error::from(std::io::Error::other("skip member")));
+        }
+        Ok(Box::new(SingleMemberWriter {
+            buf: Vec::new(),
+            out: found_clone.clone(),
+        }) as Box<dyn Write>)
+    });
+    found.take()
+}
+
+/// Writer that collects bytes and stores them into `out` on drop.
+struct SingleMemberWriter {
+    buf: Vec<u8>,
+    out: Rc<RefCell<Vec<u8>>>,
+}
+
+impl Write for SingleMemberWriter {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        if (self.buf.len() + data.len()) as u64 > MAX_SINGLE_MEMBER_BYTES {
+            return Err(std::io::Error::other("single member size limit exceeded"));
+        }
+        self.buf.extend_from_slice(data);
+        Ok(data.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Drop for SingleMemberWriter {
+    fn drop(&mut self) {
+        *self.out.borrow_mut() = std::mem::take(&mut self.buf);
+    }
+}
+
+/// Format a DOS packed timestamp (`0xYYYYMMDD HHMMSS` split form) as
+/// `YYYY-MM-DD HH:MM:SS`. Returns `None` for zero/out-of-range fields.
+fn format_dos_time(dos: u32) -> Option<String> {
+    let date = dos >> 16;
+    let time = dos & 0xFFFF;
+    let year = ((date >> 9) & 0x7F) + 1980;
+    let month = (date >> 5) & 0x0F;
+    let day = date & 0x1F;
+    let hour = (time >> 11) & 0x1F;
+    let min = (time >> 5) & 0x3F;
+    let sec = (time & 0x1F) * 2;
+    if year < 1980 || month == 0 || month > 12 || day == 0 || day > 31 {
+        return None;
+    }
+    Some(format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        year, month, day, hour, min, sec
+    ))
+}
+
+/// Format Unix seconds since epoch as `YYYY-MM-DD HH:MM:SS` UTC
+/// (no chrono dependency; civil-from-days algorithm).
+fn format_unix_time(secs: i64) -> String {
+    if secs < 0 {
+        return String::new();
+    }
+    let secs = secs as u64;
+    let days = secs / 86400;
+    let rem = secs % 86400;
+    let (year, month, day) = days_to_date(days);
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        year,
+        month,
+        day,
+        rem / 3600,
+        (rem % 3600) / 60,
+        rem % 60
+    )
+}
+
+/// Convert days since 1970-01-01 to (year, month, day).
+fn days_to_date(days: u64) -> (u64, u64, u64) {
+    let mut year = 1970u64;
+    let mut remaining = days;
+    loop {
+        let dy = if is_leap_year(year) { 366 } else { 365 };
+        if remaining < dy {
+            break;
+        }
+        remaining -= dy;
+        year += 1;
+    }
+    let month_lengths = if is_leap_year(year) {
+        [31u64, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31u64, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    let mut month = 1u64;
+    for &mlen in &month_lengths {
+        if remaining < mlen {
+            break;
+        }
+        remaining -= mlen;
+        month += 1;
+    }
+    (year, month, remaining + 1)
+}
+
+/// Check if a year is a leap year.
+fn is_leap_year(year: u64) -> bool {
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -465,5 +775,82 @@ mod tests {
     #[test]
     fn is_archive_not() {
         assert!(!is_archive(b"not an archive"));
+    }
+
+    // -- list_archive_members / extract_member --
+
+    /// Build a minimal in-memory ZIP with two members for testing.
+    fn make_test_zip() -> Vec<u8> {
+        use zip::write::SimpleFileOptions;
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let opts = SimpleFileOptions::default();
+        w.start_file("dir/hello.txt", opts).unwrap();
+        std::io::Write::write_all(&mut w, b"hello world").unwrap();
+        w.start_file("dir/", opts).unwrap();
+        w.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn list_zip_members_roundtrip() {
+        let data = make_test_zip();
+        let (kind, members) = list_archive_members(&data).unwrap();
+        assert_eq!(kind, ArchiveKind::Zip);
+        assert!(members.iter().any(|m| m.name == "dir/hello.txt"));
+        let file = members.iter().find(|m| m.name == "dir/hello.txt").unwrap();
+        assert_eq!(file.size, 11);
+        assert!(file.packed_size > 0);
+        assert!(!file.is_directory);
+    }
+
+    #[test]
+    fn extract_member_zip_roundtrip() {
+        let data = make_test_zip();
+        let bytes = extract_member(&data, "dir/hello.txt");
+        assert_eq!(bytes, b"hello world");
+        assert!(extract_member(&data, "missing").is_empty());
+    }
+
+    #[test]
+    fn extract_member_zip_directory_is_empty() {
+        let data = make_test_zip();
+        assert!(extract_member(&data, "dir/").is_empty());
+    }
+
+    #[test]
+    fn list_archive_members_rejects_non_archive() {
+        assert!(list_archive_members(b"not an archive").is_none());
+    }
+
+    #[test]
+    fn extract_member_rejects_non_archive() {
+        assert!(extract_member(b"not an archive", "x").is_empty());
+        assert!(extract_member(b"PK\x03\x04", "").is_empty());
+    }
+
+    #[test]
+    fn list_archive_members_malformed_does_not_panic() {
+        // Truncated ZIP header — must not panic.
+        assert!(
+            list_archive_members(b"PK\x03\x04\xff\xff").is_none()
+                || list_archive_members(b"PK\x03\x04\xff\xff").is_some()
+        );
+        assert!(list_archive_members(b"Rar!\x1a\x07\x00\xff").is_none());
+        assert!(list_archive_members(b"7z\xbc\xaf\x27\x1c\x00\xff\xff\xff\xff").is_none());
+    }
+
+    #[test]
+    fn format_dos_time_decodes() {
+        // 2024-01-15 10:30:00 -> date 0x582F, time 0x53C0.
+        let s = format_dos_time((0x582F << 16) | 0x53C0).unwrap();
+        assert_eq!(&s[..10], "2024-01-15");
+        assert_eq!(&s[11..], "10:30:00");
+        assert!(format_dos_time(0).is_none());
+    }
+
+    #[test]
+    fn format_unix_time_epoch() {
+        assert_eq!(format_unix_time(0), "1970-01-01 00:00:00");
+        assert_eq!(format_unix_time(1704067200), "2024-01-01 00:00:00");
+        assert_eq!(format_unix_time(-1), "");
     }
 }

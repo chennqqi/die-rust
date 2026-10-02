@@ -23,6 +23,12 @@ zip = { version = ">=2.6,<10", default-features = false, features = ["deflate"] 
 sevenz-rust = "0.6"
 rars = "0.6"
 crc32fast = "1.5.1"
+# Extended hash set for `Hash#*` struct mode and GUI parity (Phase 17.C).
+sha3 = "0.10"
+blake2 = "0.10"
+blake3 = "1.8"
+adler2 = "2.0"
+crc = "3.4"
 
 [dev-dependencies]
 criterion = { workspace = true }
