@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { followInHex } from '../follow';
 
 /**
  * Mach-O-specific views: header, load commands, segments, sections,
@@ -302,7 +303,11 @@ function Sections({ sections }: { sections: MachSection[] }) {
               <td className="px-2 py-0.5 font-mono">{sec.segname || '—'}</td>
               <td className="px-2 py-0.5 text-right font-mono">{hex(sec.addr)}</td>
               <td className="px-2 py-0.5 text-right font-mono">{hex(sec.size)}</td>
-              <td className="px-2 py-0.5 text-right font-mono">{sec.offset}</td>
+              <td className="px-2 py-0.5 text-right font-mono">
+                <button className="hover:underline" title="Follow in Hex" onClick={() => followInHex(sec.offset)}>
+                  {sec.offset}
+                </button>
+              </td>
               <td className="px-2 py-0.5 text-right font-mono">{sec.align}</td>
             </tr>
           ))}

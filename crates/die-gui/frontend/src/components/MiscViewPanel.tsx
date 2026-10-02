@@ -120,6 +120,146 @@ function KeyValueTable({ rows }: { rows: [string, string][] }) {
   );
 }
 
+interface DexDeepView {
+  strings: string[];
+  types: string[];
+  protos: { shorty: string; return_type: string; parameters: string[] }[];
+  fields: { class: string; field_type: string; name: string }[];
+  methods: { class: string; name: string; proto: string }[];
+  class_defs: { class: string; access_flags: number; superclass: string; source_file: string }[];
+  map_items: { item_type: number; type_name: string; size: number; offset: number }[];
+  truncated: boolean;
+}
+
+type DexTab = 'strings' | 'types' | 'protos' | 'fields' | 'methods' | 'classes' | 'map';
+
+const MAX_ROWS = 5000;
+
+/** Generic capped table renderer for DEX deep views. */
+function DexTable({ headers, rows, truncated }: { headers: string[]; rows: string[][]; truncated?: boolean }) {
+  const shown = rows.slice(0, MAX_ROWS);
+  return (
+    <div className="border border-border rounded text-xs overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="text-left border-b border-border">
+            <th className="px-2 py-0.5 font-mono text-muted-foreground">#</th>
+            {headers.map((h) => (
+              <th key={h} className="px-2 py-0.5 font-mono text-muted-foreground">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((r, i) => (
+            <tr key={i} className="border-b border-border/30">
+              <td className="px-2 py-0.5 font-mono text-muted-foreground">{i}</td>
+              {r.map((c, j) => (
+                <td key={j} className="px-2 py-0.5 font-mono break-all">{c}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {(truncated || rows.length > MAX_ROWS) && (
+        <p className="px-2 py-1 text-muted-foreground">
+          Showing {shown.length} of {rows.length} rows{truncated ? ' (parser-truncated)' : ''}.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Deep DEX tables panel (strings/types/protos/fields/methods/classes/map),
+ *  mirroring upstream DEX widget sub-views. */
+function DexDeepPanel({ filePath }: { filePath: string }) {
+  const [deep, setDeep] = useState<DexDeepView | null>(null);
+  const [tab, setTab] = useState<DexTab>('strings');
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<DexDeepView | null>('get_dex_deep_view', { path: filePath })
+      .then(setDeep)
+      .catch((e) => setErr(String(e)));
+  }, [filePath]);
+
+  if (err) return <p className="text-xs text-red-500">{err}</p>;
+  if (!deep) return null;
+
+  const TABS: { key: DexTab; label: string; count: number }[] = [
+    { key: 'strings', label: 'Strings', count: deep.strings.length },
+    { key: 'types', label: 'Types', count: deep.types.length },
+    { key: 'protos', label: 'Protos', count: deep.protos.length },
+    { key: 'fields', label: 'Fields', count: deep.fields.length },
+    { key: 'methods', label: 'Methods', count: deep.methods.length },
+    { key: 'classes', label: 'Classes', count: deep.class_defs.length },
+    { key: 'map', label: 'Map', count: deep.map_items.length },
+  ];
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 flex-wrap">
+        {TABS.map((tb) => (
+          <button
+            key={tb.key}
+            onClick={() => setTab(tb.key)}
+            className={`px-2 py-0.5 text-xs border border-border rounded ${
+              tab === tb.key ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+            }`}
+          >
+            {tb.label} ({tb.count})
+          </button>
+        ))}
+      </div>
+      {tab === 'strings' && <DexTable headers={['Value']} rows={deep.strings.map((s) => [s])} truncated={deep.truncated} />}
+      {tab === 'types' && <DexTable headers={['Descriptor']} rows={deep.types.map((x) => [x])} truncated={deep.truncated} />}
+      {tab === 'protos' && (
+        <DexTable
+          headers={['Shorty', 'Return', 'Parameters']}
+          rows={deep.protos.map((p) => [p.shorty, p.return_type, p.parameters.join(' ')])}
+          truncated={deep.truncated}
+        />
+      )}
+      {tab === 'fields' && (
+        <DexTable
+          headers={['Class', 'Type', 'Name']}
+          rows={deep.fields.map((f) => [f.class, f.field_type, f.name])}
+          truncated={deep.truncated}
+        />
+      )}
+      {tab === 'methods' && (
+        <DexTable
+          headers={['Class', 'Name', 'Proto']}
+          rows={deep.methods.map((m) => [m.class, m.name, m.proto])}
+          truncated={deep.truncated}
+        />
+      )}
+      {tab === 'classes' && (
+        <DexTable
+          headers={['Class', 'Access', 'Superclass', 'Source']}
+          rows={deep.class_defs.map((c) => [
+            c.class,
+            `0x${c.access_flags.toString(16)}`,
+            c.superclass,
+            c.source_file,
+          ])}
+          truncated={deep.truncated}
+        />
+      )}
+      {tab === 'map' && (
+        <DexTable
+          headers={['Type', 'Name', 'Size', 'Offset']}
+          rows={deep.map_items.map((m) => [
+            `0x${m.item_type.toString(16).padStart(4, '0')}`,
+            m.type_name,
+            String(m.size),
+            `0x${m.offset.toString(16)}`,
+          ])}
+        />
+      )}
+    </div>
+  );
+}
+
 function DexViewPanel({ view }: { view: DexView }) {
   return (
     <KeyValueTable rows={[
@@ -276,7 +416,12 @@ export default function MiscViewPanel({ filePath }: { filePath: string | null })
         ))}
       </div>
       {!data && <p className="text-xs text-muted-foreground">Not a {format.toUpperCase()} file.</p>}
-      {data && format === 'dex' && <DexViewPanel view={data as DexView} />}
+      {data && format === 'dex' && (
+        <>
+          <DexViewPanel view={data as DexView} />
+          <DexDeepPanel filePath={filePath} />
+        </>
+      )}
       {data && format === 'msdos' && <MsdosViewPanel view={data as MsdosView} />}
       {data && format === 'ne' && <NeViewPanel view={data as NeView} />}
       {data && format === 'le' && <LeViewPanel view={data as LeView} />}

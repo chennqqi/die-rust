@@ -58,6 +58,9 @@ pub struct FileInfo {
     /// Number of detected formats (sections count for binary files).
     #[serde(default)]
     pub format_count: u32,
+    /// Labeled format counts for the info bar (upstream `groupBox*` counts).
+    #[serde(default)]
+    pub format_counts: Vec<CountItem>,
 }
 
 /// A single field in a structured header tree.
@@ -216,6 +219,81 @@ fn compute_hashes(data: &[u8]) -> FileHashes {
 pub fn compute_md5(data: &[u8]) -> String {
     use md5::Digest as _;
     hex::encode(md5::Md5::digest(data))
+}
+
+/// Hash algorithms selectable in the GUI hash panel, mirrors upstream
+/// `XHashWidget`/`XBinary::HASH` naming. All implementations are pure Rust.
+/// SSDeep/TLSH are excluded (native dependencies, deferred).
+pub const HASH_ALGORITHMS: &[&str] = &[
+    "MD4", "MD5", "SHA1", "SHA224", "SHA256", "SHA384", "SHA512", "SHA3_224", "SHA3_256",
+    "SHA3_384", "SHA3_512", "BLAKE2B", "BLAKE2S", "BLAKE3", "ADLER32", "CRC32", "CRC64",
+];
+
+/// Compute a named hash hex digest (uppercase hex for CRC/Adler32,
+/// lowercase hex for cryptographic digests — same convention as the
+/// existing `compute_hashes`). Returns `None` for unknown algorithms.
+pub fn compute_named_hash(data: &[u8], algorithm: &str) -> Option<String> {
+    match algorithm {
+        "MD4" => {
+            use md4::Digest as _;
+            Some(hex::encode(md4::Md4::digest(data)))
+        }
+        "MD5" => Some(compute_md5(data)),
+        "SHA1" => {
+            use sha1::Digest as _;
+            Some(hex::encode(sha1::Sha1::digest(data)))
+        }
+        "SHA224" => {
+            use sha2::Digest as _;
+            Some(hex::encode(sha2::Sha224::digest(data)))
+        }
+        "SHA256" => Some(compute_sha256(data)),
+        "SHA384" => {
+            use sha2::Digest as _;
+            Some(hex::encode(sha2::Sha384::digest(data)))
+        }
+        "SHA512" => {
+            use sha2::Digest as _;
+            Some(hex::encode(sha2::Sha512::digest(data)))
+        }
+        "SHA3_224" => {
+            use sha3::Digest as _;
+            Some(hex::encode(sha3::Sha3_224::digest(data)))
+        }
+        "SHA3_256" => {
+            use sha3::Digest as _;
+            Some(hex::encode(sha3::Sha3_256::digest(data)))
+        }
+        "SHA3_384" => {
+            use sha3::Digest as _;
+            Some(hex::encode(sha3::Sha3_384::digest(data)))
+        }
+        "SHA3_512" => {
+            use sha3::Digest as _;
+            Some(hex::encode(sha3::Sha3_512::digest(data)))
+        }
+        "BLAKE2B" => {
+            use blake2::Digest as _;
+            Some(hex::encode(blake2::Blake2b512::digest(data)))
+        }
+        "BLAKE2S" => {
+            use blake2::Digest as _;
+            Some(hex::encode(blake2::Blake2s256::digest(data)))
+        }
+        "BLAKE3" => Some(blake3::hash(data).to_hex().to_string()),
+        "ADLER32" => {
+            use std::hash::Hasher as _;
+            let mut h = adler2::Adler32::new();
+            h.write(data);
+            Some(format!("{:08X}", h.checksum()))
+        }
+        "CRC32" => Some(format!("{:08X}", crc32fast::hash(data))),
+        "CRC64" => {
+            let crc = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
+            Some(format!("{:016X}", crc.checksum(data)))
+        }
+        _ => None,
+    }
 }
 
 /// Compute the SHA-256 hex digest of a byte slice.
@@ -1681,6 +1759,7 @@ pub fn gather_file_info(path: &str) -> Result<FileInfo, String> {
     let mime_type = detect_mime_type(&format, &data);
     let (base_address, entry_point) = extract_base_and_entry(&format, &data);
     let format_count = sections.len() as u32;
+    let format_counts = extract_format_counts(&format, &data);
 
     Ok(FileInfo {
         path: path.to_string(),
@@ -1697,7 +1776,18 @@ pub fn gather_file_info(path: &str) -> Result<FileInfo, String> {
         base_address,
         entry_point,
         format_count,
+        format_counts,
     })
+}
+
+/// A single labeled entry count for the format info bar
+/// (e.g. "Sections: 5", "Imports: 23").
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CountItem {
+    /// Display label ("Sections", "Imports", ...).
+    pub label: String,
+    /// Entry count.
+    pub count: u32,
 }
 
 /// Extract base address and entry point from PE/ELF/Mach-O headers.
@@ -1718,7 +1808,7 @@ fn extract_base_and_entry(format: &str, data: &[u8]) -> (u64, u64) {
             }
             (0, 0)
         }
-        "MACH-O" | "Mach-O" | "MACHO" => {
+        "Mach-O 32" | "Mach-O 64" => {
             if let Some(view) = crate::macho_viewer::parse_macho_view(data) {
                 // Mach-O entry is in the entry_point field or from LC_MAIN.
                 let entry = view.entry_point.map(|ep| ep.entryoff).unwrap_or(0);
@@ -1727,6 +1817,42 @@ fn extract_base_and_entry(format: &str, data: &[u8]) -> (u64, u64) {
             (0, 0)
         }
         _ => (0, 0),
+    }
+}
+
+/// Collect format-specific entry counts for the info bar
+/// (PE: sections/imports/exports; ELF: phdr/shdr; Mach-O: cmd/seg/sect/lib).
+fn extract_format_counts(format: &str, data: &[u8]) -> Vec<CountItem> {
+    let item = |label: &str, count: usize| CountItem {
+        label: label.to_string(),
+        count: count as u32,
+    };
+    match format {
+        "PE32" | "PE32+" | "PE" => match crate::pe_viewer::parse_pe_view(data) {
+            Some(v) => vec![
+                item("Sections", v.section_details.len()),
+                item("Imports", v.imports.len()),
+                item("Exports", v.exports.len()),
+            ],
+            None => Vec::new(),
+        },
+        "ELF32" | "ELF64" | "ELF" => match crate::elf_viewer::parse_elf_view(data) {
+            Some(v) => vec![
+                item("Programs", v.program_headers.len()),
+                item("Sections", v.section_headers.len()),
+            ],
+            None => Vec::new(),
+        },
+        "Mach-O 32" | "Mach-O 64" => match crate::macho_viewer::parse_macho_view(data) {
+            Some(v) => vec![
+                item("Commands", v.load_commands.len()),
+                item("Segments", v.segments.len()),
+                item("Sections", v.sections.len()),
+                item("Libraries", v.libraries.len()),
+            ],
+            None => Vec::new(),
+        },
+        _ => Vec::new(),
     }
 }
 
@@ -1818,6 +1944,62 @@ pub fn compute_entropy_graph(path: &str, block_size: Option<u64>) -> Result<Entr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_named_hash_known_vectors() {
+        let abc = b"abc";
+        // RFC 1320 MD4 test vector.
+        assert_eq!(
+            compute_named_hash(abc, "MD4").unwrap(),
+            "a448017aaf21d8525fc10ae87aa6729d"
+        );
+        assert_eq!(
+            compute_named_hash(abc, "MD5").unwrap(),
+            "900150983cd24fb0d6963f7d28e17f72"
+        );
+        assert_eq!(
+            compute_named_hash(abc, "SHA256").unwrap(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        // SHA3-256("abc") NIST vector.
+        assert_eq!(
+            compute_named_hash(abc, "SHA3_256").unwrap(),
+            "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532"
+        );
+        // BLAKE3("abc") official test vector.
+        assert_eq!(
+            compute_named_hash(abc, "BLAKE3").unwrap(),
+            "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85"
+        );
+        // Adler-32("Wikipedia") = 0x11E60398.
+        assert_eq!(
+            compute_named_hash(b"Wikipedia", "ADLER32").unwrap(),
+            "11E60398"
+        );
+        // CRC-64/ECMA-182("123456789") = 0x6C40DF5F0B497347.
+        assert_eq!(
+            compute_named_hash(b"123456789", "CRC64").unwrap(),
+            "6C40DF5F0B497347"
+        );
+        // CRC-32("123456789") = 0xCBF43926.
+        assert_eq!(
+            compute_named_hash(b"123456789", "CRC32").unwrap(),
+            "CBF43926"
+        );
+        assert!(compute_named_hash(abc, "NOPE").is_none());
+    }
+
+    #[test]
+    fn test_hash_algorithms_all_implemented() {
+        // Every advertised algorithm must produce a value.
+        for a in HASH_ALGORITHMS {
+            assert!(
+                compute_named_hash(b"x", a).is_some(),
+                "algorithm {} not implemented",
+                a
+            );
+        }
+    }
 
     #[test]
     fn test_detect_format_macho_fat_be() {

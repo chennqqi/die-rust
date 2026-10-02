@@ -40,6 +40,7 @@ import {
   Grid3x3,
   Scissors,
 } from "lucide-react";
+import { setFollowInHexHandler } from "./follow";
 import { HexViewer } from "./components/HexViewer";
 import { Disassembler } from "./components/Disassembler";
 import { DemangleTool } from "./components/DemangleTool";
@@ -234,7 +235,7 @@ export default function App() {
   const [flags, setFlags] = useState<ScanFlagsDto>(defaultFlags);
   const [selectedDatabase, setSelectedDatabase] = useState<string>("main");
   const [dirProgress, setDirProgress] = useState<{ current: number; total: number } | null>(null);
-  const [fileInfo, setFileInfo] = useState<{ format: string; base_address: string; entry_point: string; format_count: number } | null>(null);
+  const [fileInfo, setFileInfo] = useState<{ format: string; base_address: number; entry_point: number; format_count: number; format_counts?: { label: string; count: number }[] } | null>(null);
   const [ctxMenuStatus, setCtxMenuStatus] = useState<"installed" | "not_installed" | "checking" | "unsupported">("checking");
   const [ctxMenuMsg, setCtxMenuMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("scan");
@@ -246,6 +247,7 @@ export default function App() {
   const [showRecent, setShowRecent] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; detection: ScanDetectionDto } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  const [showExtraInfo, setShowExtraInfo] = useState(false);
   const dragCounter = useRef(0);
 
   // Load settings on mount.
@@ -270,10 +272,19 @@ export default function App() {
       setFileInfo(null);
       return;
     }
-    invoke<{ format: string; base_address: string; entry_point: string; format_count: number }>("get_file_info", { path: filePath })
+    invoke<{ format: string; base_address: number; entry_point: number; format_count: number; format_counts?: { label: string; count: number }[] }>("get_file_info", { path: filePath })
       .then((info) => setFileInfo(info))
       .catch(() => setFileInfo(null));
   }, [filePath]);
+
+  // Register the global follow-in-hex handler for nested format tables.
+  useEffect(() => {
+    setFollowInHexHandler((off) => {
+      setHexJumpOffset(off);
+      setActiveTab("hex");
+    });
+    return () => setFollowInHexHandler(null);
+  }, []);
 
   // Listen for scan progress events from the backend.
   useEffect(() => {
@@ -585,6 +596,20 @@ export default function App() {
     setTimeout(() => setCopyFeedback(false), 1500);
   }, [result]);
 
+  // Upstream-style "Extra Information" text: one line per detection in
+  // `<type>: <name> <version> [<options>]` form (ScanItemModel flattening).
+  const extraInfoText = useCallback((): string => {
+    if (!result) return "";
+    const lines: string[] = [];
+    for (const d of result.detections) {
+      let line = `${d.type_name}: ${d.name}`;
+      if (d.version) line += ` (${d.version})`;
+      if (d.options) line += ` [${d.options}]`;
+      lines.push(line);
+    }
+    return lines.join("\n");
+  }, [result]);
+
   // Clear all results.
   const clearResults = useCallback(() => {
     setResult(null);
@@ -792,6 +817,14 @@ export default function App() {
         >
           <Save size={14} />
         </button>
+        <button
+          onClick={() => setShowExtraInfo(true)}
+          disabled={!result || result.detections.length === 0}
+          className="btn"
+          title="Extra Information"
+        >
+          <FileText size={14} />
+        </button>
         <div className="flex-1" />
         <div className="relative">
           <button
@@ -949,6 +982,39 @@ export default function App() {
         </div>
       )}
 
+      {/* Extra Information modal (upstream pushButtonDieExtraInformation) */}
+      {showExtraInfo && result && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => setShowExtraInfo(false)}
+        >
+          <div
+            className="panel max-w-2xl w-full mx-4 max-h-96 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border-c">
+              <span className="text-xs font-medium">Extra Information</span>
+              <div className="flex items-center gap-1">
+                <button
+                  className="btn"
+                  onClick={() => navigator.clipboard.writeText(extraInfoText())}
+                  title="Copy"
+                >
+                  <Copy size={12} />
+                </button>
+                <button className="btn" onClick={() => setShowExtraInfo(false)} title="Close">
+                  <XCircle size={12} />
+                </button>
+              </div>
+            </div>
+            <pre className="flex-1 overflow-auto p-3 text-xs mono selectable whitespace-pre-wrap">
+              {extraInfoText()}
+            </pre>
+          </div>
+        </div>
+      )}
+
       {/* Tab bar */}
       <div
         className="flex items-center gap-0 px-1 border-b border-border-c"
@@ -1061,15 +1127,19 @@ export default function App() {
                 style={{ background: "rgb(var(--bg-panel))" }}
               >
                 <span>Format: <span className="text-fg-secondary font-mono">{fileInfo.format}</span></span>
-                {fileInfo.base_address !== "0" && (
-                  <span>Base: <span className="text-fg-secondary font-mono">0x{BigInt(fileInfo.base_address).toString(16)}</span></span>
+                {fileInfo.base_address !== 0 && (
+                  <span>Base: <span className="text-fg-secondary font-mono">0x{fileInfo.base_address.toString(16)}</span></span>
                 )}
-                {fileInfo.entry_point !== "0" && (
-                  <span>Entry: <span className="text-fg-secondary font-mono">0x{BigInt(fileInfo.entry_point).toString(16)}</span></span>
+                {fileInfo.entry_point !== 0 && (
+                  <span>Entry: <span className="text-fg-secondary font-mono">0x{fileInfo.entry_point.toString(16)}</span></span>
                 )}
-                {fileInfo.format_count > 0 && (
-                  <span>Sections: <span className="text-fg-secondary font-mono">{fileInfo.format_count}</span></span>
-                )}
+                {fileInfo.format_counts && fileInfo.format_counts.length > 0
+                  ? fileInfo.format_counts.map((c) => (
+                      <span key={c.label}>{c.label}: <span className="text-fg-secondary font-mono">{c.count}</span></span>
+                    ))
+                  : fileInfo.format_count > 0 && (
+                      <span>Sections: <span className="text-fg-secondary font-mono">{fileInfo.format_count}</span></span>
+                    )}
               </div>
             )}
 

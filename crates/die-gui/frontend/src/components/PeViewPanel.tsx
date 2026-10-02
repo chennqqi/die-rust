@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { followInHex } from '../follow';
 
 // --- PE view data types (mirror Rust PeView struct) ---
 
@@ -842,7 +843,15 @@ function SectionsDetailView({ sections }: { sections: PeSectionDetail[] }) {
             <td>{s.name}</td>
             <td>0x{s.virtual_address.toString(16).padStart(8, '0')}</td>
             <td>0x{s.virtual_size.toString(16)}</td>
-            <td>0x{s.pointer_to_raw_data.toString(16).padStart(8, '0')}</td>
+            <td>
+              <button
+                className="hover:underline text-accent-blue"
+                title="Follow in Hex"
+                onClick={() => followInHex(s.pointer_to_raw_data)}
+              >
+                0x{s.pointer_to_raw_data.toString(16).padStart(8, '0')}
+              </button>
+            </td>
             <td>0x{s.size_of_raw_data.toString(16)}</td>
             <td>{s.entropy !== null ? s.entropy.toFixed(4) : '—'}</td>
             <td>{s.characteristics}</td>

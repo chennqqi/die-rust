@@ -1010,7 +1010,22 @@ pub async fn list_extractable(path: String) -> Result<crate::extractor::ExtractI
     result.map_err(|e| GuiError::new("EXTRACTOR_ERROR", e))
 }
 
-/// Get DEX view data for a file.
+/// Get deep DEX tables (strings/types/protos/fields/methods/class_defs/map)
+/// for the DEX viewer sub-tabs, mirroring upstream DEX widget.
+#[tauri::command]
+pub async fn get_dex_deep_view(
+    path: String,
+) -> Result<Option<crate::misc_viewer::DexDeepView>, GuiError> {
+    tokio::task::spawn_blocking(move || {
+        std::fs::read(&path)
+            .ok()
+            .and_then(|data| crate::misc_viewer::parse_dex_deep_view(&data))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))
+}
+
+/// Get the DEX header view.
 #[tauri::command]
 pub async fn get_dex_view(path: String) -> Result<Option<crate::misc_viewer::DexView>, GuiError> {
     let result = tokio::task::spawn_blocking(move || {
@@ -1183,6 +1198,21 @@ pub async fn edit_string_at_offset(
     .await
     .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
     result.map_err(|e| GuiError::new("STRING_EDIT_ERROR", e))
+}
+
+/// Write raw bytes at a file offset (hex-viewer edit entry; creates .bak).
+#[tauri::command]
+pub async fn edit_bytes_at_offset(
+    path: String,
+    offset: usize,
+    bytes: Vec<u8>,
+) -> Result<(), GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        crate::string_extractor::edit_bytes_at_offset(&path, offset, &bytes)
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("BYTE_EDIT_ERROR", e))
 }
 
 /// Extract an item from a file to an output directory.
@@ -1358,34 +1388,29 @@ pub struct ArchiveResultDto {
     pub total_entries: usize,
 }
 
-/// List the contents of an archive file (ZIP format).
+/// List the contents of an archive file.
+/// ZIP/7Z/RAR go through `diec_engine::list_archive_members` (upstream
+/// `XArchive::getRecords` equivalent); TAR/GZIP+TAR stay GUI-side.
 /// For unsupported formats, returns an error.
 #[tauri::command]
 pub async fn list_archive(path: String) -> Result<ArchiveResultDto, GuiError> {
     let result = tokio::task::spawn_blocking(move || -> Result<ArchiveResultDto, String> {
         let data = std::fs::read(&path).map_err(|e| e.to_string())?;
 
-        // Detect archive format by magic bytes.
-        if data.len() >= 4 && &data[0..4] == b"PK\x03\x04" {
-            // ZIP archive.
-            let cursor = std::io::Cursor::new(data);
-            let mut archive = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
-            let mut entries = Vec::with_capacity(archive.len());
-            for i in 0..archive.len() {
-                let entry = match archive.by_index(i) {
-                    Ok(e) => e,
-                    Err(_) => continue,
-                };
-                entries.push(ArchiveEntryDto {
-                    name: entry.name().to_string(),
-                    size: entry.size(),
-                    compressed_size: entry.compressed_size(),
-                    is_directory: entry.is_dir(),
-                    modified: entry.last_modified().map(|d| format!("{}", d)),
-                });
-            }
+        // ZIP/7Z/RAR: engine metadata listing (upstream XArchive::getRecords).
+        if let Some((kind, members)) = diec_engine::list_archive_members(&data) {
+            let entries: Vec<ArchiveEntryDto> = members
+                .into_iter()
+                .map(|m| ArchiveEntryDto {
+                    name: m.name,
+                    size: m.size,
+                    compressed_size: m.packed_size,
+                    is_directory: m.is_directory,
+                    modified: m.modified,
+                })
+                .collect();
             return Ok(ArchiveResultDto {
-                format: "ZIP".to_string(),
+                format: kind.display_name().to_string(),
                 total_entries: entries.len(),
                 entries,
             });
@@ -1465,37 +1490,92 @@ pub async fn list_archive(path: String) -> Result<ArchiveResultDto, GuiError> {
             });
         }
 
-        // Fallback: try ZIP (some ZIP variants have different magic).
-        let cursor = std::io::Cursor::new(data);
-        if let Ok(mut archive) = zip::ZipArchive::new(cursor) {
-            let mut entries = Vec::with_capacity(archive.len());
-            for i in 0..archive.len() {
-                let entry = match archive.by_index(i) {
-                    Ok(e) => e,
-                    Err(_) => continue,
-                };
-                entries.push(ArchiveEntryDto {
-                    name: entry.name().to_string(),
-                    size: entry.size(),
-                    compressed_size: entry.compressed_size(),
-                    is_directory: entry.is_dir(),
-                    modified: entry.last_modified().map(|d| format!("{}", d)),
-                });
-            }
-            return Ok(ArchiveResultDto {
-                format: "ZIP".to_string(),
-                total_entries: entries.len(),
-                entries,
-            });
-        }
-
-        Err("Unsupported archive format. Supported: ZIP, TAR, GZIP/TAR.".to_string())
+        Err("Unsupported archive format. Supported: ZIP, 7Z, RAR, TAR, GZIP/TAR.".to_string())
     })
     .await
     .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
     .map_err(|e| GuiError::new("ARCHIVE_READ_ERROR", e))?;
 
     Ok(result)
+}
+
+/// One named hash result for the GUI hash panel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HashResultDto {
+    /// Algorithm name (uppercase, e.g. "SHA3_256").
+    pub algorithm: String,
+    /// Hex digest.
+    pub value: String,
+}
+
+/// List selectable hash algorithms (upstream `XHashWidget` method list).
+#[tauri::command]
+pub fn list_hash_algorithms() -> Vec<String> {
+    crate::file_info::HASH_ALGORITHMS
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+/// Compute the requested hash algorithms for a file
+/// (upstream `XHashWidget` equivalent — arbitrary subset on demand).
+#[tauri::command]
+pub async fn compute_hash(
+    path: String,
+    algorithms: Vec<String>,
+) -> Result<Vec<HashResultDto>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || -> Result<Vec<HashResultDto>, String> {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok(algorithms
+            .iter()
+            .filter_map(|a| {
+                crate::file_info::compute_named_hash(&data, a).map(|v| HashResultDto {
+                    algorithm: a.clone(),
+                    value: v,
+                })
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+
+    result.map_err(|e| GuiError::new("FILE_READ_ERROR", e))
+}
+
+/// Extract a single archive member by name to an output directory
+/// (upstream `XArchive::decompress(record)` equivalent). Supports
+/// ZIP/7Z/RAR via `diec_engine::extract_member`.
+#[tauri::command]
+pub async fn extract_archive_member(
+    path: String,
+    member_name: String,
+    output_dir: String,
+) -> Result<String, GuiError> {
+    let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        let bytes = diec_engine::extract_member(&data, &member_name);
+        if bytes.is_empty() {
+            return Err(format!("Member '{}' not found or empty.", member_name));
+        }
+        let safe_name: String = member_name
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '.' || c == '_' || c == '-' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        std::fs::create_dir_all(&output_dir).map_err(|e| e.to_string())?;
+        let out = std::path::PathBuf::from(&output_dir).join(safe_name);
+        std::fs::write(&out, &bytes).map_err(|e| e.to_string())?;
+        Ok(out.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+
+    result.map_err(|e| GuiError::new("ARCHIVE_READ_ERROR", e))
 }
 
 /// Convert Unix seconds since epoch to a human-readable date string.

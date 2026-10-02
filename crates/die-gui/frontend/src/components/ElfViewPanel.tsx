@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { followInHex } from '../follow';
 
 /**
  * ELF-specific views: program headers, section headers, dynamic entries,
@@ -26,14 +27,14 @@ interface ElfSectionHeader {
   sh_type: string;
   sh_type_val: number;
   sh_flags: string;
-  sh_flags_val: string;
-  sh_addr: string;
-  sh_offset: string;
-  sh_size: string;
+  sh_flags_val: number;
+  sh_addr: number;
+  sh_offset: number;
+  sh_size: number;
   sh_link: number;
   sh_info: number;
-  sh_addralign: string;
-  sh_entsize: string;
+  sh_addralign: number;
+  sh_entsize: number;
 }
 
 interface ElfDynamicEntry {
@@ -211,7 +212,11 @@ function SectionHeaders({ sections }: { sections: ElfSectionHeader[] }) {
               <td className="px-2 py-0.5 font-mono">{sh.sh_type}</td>
               <td className="px-2 py-0.5 font-mono">{sh.sh_flags}</td>
               <td className="px-2 py-0.5 text-right font-mono">{hex(sh.sh_addr)}</td>
-              <td className="px-2 py-0.5 text-right font-mono">{hex(sh.sh_offset)}</td>
+              <td className="px-2 py-0.5 text-right font-mono">
+                <button className="hover:underline" title="Follow in Hex" onClick={() => followInHex(sh.sh_offset)}>
+                  {hex(sh.sh_offset)}
+                </button>
+              </td>
               <td className="px-2 py-0.5 text-right font-mono">{hex(sh.sh_size)}</td>
             </tr>
           ))}

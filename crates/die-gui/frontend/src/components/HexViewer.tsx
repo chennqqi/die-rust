@@ -53,6 +53,33 @@ export function HexViewer({
   const [elementMode, setElementMode] = useState<"byte" | "word" | "dword" | "qword">("byte");
   const [selectedByteOffset, setSelectedByteOffset] = useState<number | null>(null);
   const [inspectorBytes, setInspectorBytes] = useState<Uint8Array>(new Uint8Array(0));
+  const [editMsg, setEditMsg] = useState<string | null>(null);
+
+  // Byte edit entry: prompt for hex bytes, write via backend (creates .bak),
+  // then drop cached chunks so the view reloads fresh bytes.
+  const editAtSelection = useCallback(async () => {
+    if (selectedByteOffset == null) return;
+    const input = window.prompt(
+      `Enter hex bytes to write at 0x${selectedByteOffset.toString(16)} (e.g. "90 90 CC")`,
+    );
+    if (input == null) return;
+    const cleaned = input.replace(/0x/gi, "").replace(/[^0-9a-fA-F]/g, "");
+    if (cleaned.length === 0 || cleaned.length % 2 !== 0) {
+      setEditMsg("Invalid hex input");
+      return;
+    }
+    const bytes: number[] = [];
+    for (let i = 0; i < cleaned.length; i += 2) {
+      bytes.push(parseInt(cleaned.slice(i, i + 2), 16));
+    }
+    try {
+      await invoke("edit_bytes_at_offset", { path, offset: selectedByteOffset, bytes });
+      setChunks(new Map());
+      setEditMsg(`Wrote ${bytes.length} byte(s) at 0x${selectedByteOffset.toString(16)}`);
+    } catch (e) {
+      setEditMsg(String(e));
+    }
+  }, [path, selectedByteOffset]);
 
   // Total number of lines in the file (for virtual scroll height).
   const totalLines = useMemo(() => Math.ceil(fileSize / LINE_BYTES), [fileSize]);
@@ -397,10 +424,19 @@ export function HexViewer({
         </span>
         <Copy size={10} />
         <span>{t("hex.clickToCopy")}</span>
+        {editMsg && <span className="text-accent-yellow">{editMsg}</span>}
+        {selectedByteOffset != null && (
+          <button
+            onClick={editAtSelection}
+            className="ml-auto flex items-center gap-1 px-2 py-0.5 text-xs border border-border rounded hover:bg-hover"
+          >
+            Edit
+          </button>
+        )}
         {selectedByteOffset != null && onFollowInDisasm && (
           <button
             onClick={() => onFollowInDisasm(selectedByteOffset)}
-            className="ml-auto flex items-center gap-1 px-2 py-0.5 text-xs border border-border rounded hover:bg-hover"
+            className="flex items-center gap-1 px-2 py-0.5 text-xs border border-border rounded hover:bg-hover"
           >
             <Code size={11} />
             {t("hex.followInDisasm")}

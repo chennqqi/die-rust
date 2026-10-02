@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { Archive, AlertCircle, FileText, ChevronRight, ChevronDown } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { Archive, AlertCircle, FileText, ChevronRight, ChevronDown, Download } from "lucide-react";
 
 interface ArchiveEntry {
   name: string;
@@ -25,6 +26,29 @@ export function ArchiveViewer({ filePath }: { filePath: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+  const [extractMsg, setExtractMsg] = useState<string | null>(null);
+
+  // Extract one member via `extract_archive_member` (ZIP/7Z/RAR).
+  const extractMember = async (name: string) => {
+    if (!filePath) return;
+    const outputDir = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "Select output directory",
+    });
+    if (!outputDir || typeof outputDir !== "string") return;
+    setExtractMsg(null);
+    try {
+      const out = await invoke<string>("extract_archive_member", {
+        path: filePath,
+        memberName: name,
+        outputDir,
+      });
+      setExtractMsg(out);
+    } catch (e) {
+      setExtractMsg(String(e));
+    }
+  };
 
   useEffect(() => {
     if (!filePath) {
@@ -117,9 +141,12 @@ export function ArchiveViewer({ filePath }: { filePath: string }) {
           </tr>
         </thead>
         <tbody>
-          {renderTree(tree, "", expandedDirs, toggleDir, formatSize, 0)}
+          {renderTree(tree, "", expandedDirs, toggleDir, formatSize, extractMember, 0)}
         </tbody>
       </table>
+      {extractMsg && (
+        <p className="text-xs text-fg-muted mt-2 break-all">{extractMsg}</p>
+      )}
     </div>
   );
 }
@@ -172,6 +199,7 @@ function renderTree(
   expandedDirs: Set<string>,
   toggleDir: (path: string) => void,
   formatSize: (n: number) => string,
+  onExtract: (name: string) => void,
   depth: number,
 ): React.ReactNode[] {
   const result: React.ReactNode[] = [];
@@ -199,6 +227,13 @@ function renderTree(
             <span className="flex items-center gap-1 text-fg-secondary">
               <FileText size={12} className="text-fg-muted" />
               {child.name}
+              <button
+                onClick={() => onExtract(fullPath)}
+                className="text-fg-muted hover:text-accent-blue"
+                title="Extract member"
+              >
+                <Download size={11} />
+              </button>
             </span>
           )}
         </td>
@@ -215,7 +250,9 @@ function renderTree(
     );
 
     if (child.isDir && isExpanded) {
-      result.push(...renderTree(child, fullPath, expandedDirs, toggleDir, formatSize, depth + 1));
+      result.push(
+        ...renderTree(child, fullPath, expandedDirs, toggleDir, formatSize, onExtract, depth + 1),
+      );
     }
   }
 

@@ -436,9 +436,56 @@ pub fn edit_string_at_offset(
     Ok(())
 }
 
+/// Maximum bytes writable in a single hex-edit call (defensive bound).
+const MAX_EDIT_BYTES: usize = 1 << 20; // 1 MiB
+
+/// Edit raw bytes at a given file offset (hex-viewer edit entry).
+///
+/// Creates a `.bak` backup before modifying; refuses out-of-bounds or
+/// oversized writes. Mirrors upstream hex edit semantics loosely —
+/// write is in-place, never extends the file.
+pub fn edit_bytes_at_offset(path: &str, offset: usize, bytes: &[u8]) -> Result<(), String> {
+    if bytes.is_empty() {
+        return Err("Nothing to write".into());
+    }
+    if bytes.len() > MAX_EDIT_BYTES {
+        return Err(format!("Edit too large: {} bytes", bytes.len()));
+    }
+    let mut data = std::fs::read(path).map_err(|e| e.to_string())?;
+    if offset >= data.len() {
+        return Err("Offset out of bounds".into());
+    }
+    let end = offset + bytes.len();
+    if end > data.len() {
+        return Err("Write would exceed file size".into());
+    }
+    let backup = format!("{}.bak", path);
+    std::fs::copy(path, &backup).map_err(|e| e.to_string())?;
+    data[offset..end].copy_from_slice(bytes);
+    std::fs::write(path, &data).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_edit_bytes_at_offset() {
+        let dir = std::env::temp_dir().join(format!("diec_edit_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("t.bin");
+        std::fs::write(&p, [0u8; 16]).unwrap();
+        edit_bytes_at_offset(p.to_str().unwrap(), 4, &[0xAA, 0xBB]).unwrap();
+        let data = std::fs::read(&p).unwrap();
+        assert_eq!(&data[4..6], &[0xAA, 0xBB]);
+        assert!(dir.join("t.bin.bak").exists());
+        // Out-of-bounds and oversized writes must fail without panic.
+        assert!(edit_bytes_at_offset(p.to_str().unwrap(), 14, &[1, 2, 3]).is_err());
+        assert!(edit_bytes_at_offset(p.to_str().unwrap(), 100, &[1]).is_err());
+        assert!(edit_bytes_at_offset(p.to_str().unwrap(), 0, &[]).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn test_extract_ascii_basic() {

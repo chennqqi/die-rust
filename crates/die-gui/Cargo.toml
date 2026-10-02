@@ -47,6 +47,13 @@ crc32fast = "1.5.0"
 # VirusTotal API integration (upstream XOnlineTools)
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 open = "5"
+msvc-demangler = "0.11"
+md4 = "0.10"
+sha3 = "0.10"
+blake2 = "0.10"
+blake3 = "1.8"
+adler2 = "2.0"
+crc = "3.4"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

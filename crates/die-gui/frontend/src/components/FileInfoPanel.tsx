@@ -167,6 +167,7 @@ export function FileInfoPanel({ path }: { path: string }) {
                 copied={copied === "sha256"}
                 onCopy={() => copyHash(info.hashes.sha256, "sha256")}
               />
+              <ExtraHashes path={info.path} copied={copied} copyHash={copyHash} />
             </div>
           </div>
         )}
@@ -329,6 +330,104 @@ function HashRow({
       >
         {copied ? <Check size={12} className="text-accent-green" /> : <Copy size={12} />}
       </button>
+    </div>
+  );
+}
+
+interface HashResult {
+  algorithm: string;
+  value: string;
+}
+
+/** Extended hash panel — checkable algorithm list mirroring upstream
+ *  XHashWidget. Computes on demand via `compute_hash`. */
+function ExtraHashes({
+  path,
+  copied,
+  copyHash,
+}: {
+  path: string;
+  copied: string | null;
+  copyHash: (hash: string, label: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [algos, setAlgos] = useState<string[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(["MD4", "SHA224", "SHA384", "SHA512", "SHA3_256", "BLAKE3", "CRC64"]),
+  );
+  const [results, setResults] = useState<HashResult[] | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    invoke<string[]>("list_hash_algorithms")
+      .then(setAlgos)
+      .catch(() => setAlgos([]));
+  }, []);
+
+  const toggle = (a: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(a)) next.delete(a);
+      else next.add(a);
+      return next;
+    });
+    setResults(null);
+  };
+
+  const compute = async () => {
+    setBusy(true);
+    try {
+      const r = await invoke<HashResult[]>("compute_hash", {
+        path,
+        algorithms: Array.from(selected),
+      });
+      setResults(r);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-1">
+      <button
+        onClick={() => setOpen(!open)}
+        className="text-fg-muted hover:text-fg-secondary text-[11px]"
+      >
+        {open ? "▾" : "▸"} More hashes
+      </button>
+      {open && (
+        <div className="mt-1 pl-1">
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-1">
+            {algos.map((a) => (
+              <label key={a} className="flex items-center gap-1 text-fg-secondary">
+                <input
+                  type="checkbox"
+                  checked={selected.has(a)}
+                  onChange={() => toggle(a)}
+                />
+                {a}
+              </label>
+            ))}
+          </div>
+          <button
+            onClick={compute}
+            disabled={busy || selected.size === 0}
+            className="px-2 py-0.5 bg-primary text-background rounded disabled:opacity-50"
+          >
+            {busy ? "Computing..." : "Compute"}
+          </button>
+          {results &&
+            results.map((r) => (
+              <HashRow
+                key={r.algorithm}
+                label={r.algorithm}
+                value={r.value}
+                copied={copied === r.algorithm}
+                onCopy={() => copyHash(r.value, r.algorithm)}
+              />
+            ))}
+        </div>
+      )}
     </div>
   );
 }

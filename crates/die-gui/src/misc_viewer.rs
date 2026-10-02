@@ -106,6 +106,333 @@ pub fn parse_dex_view(data: &[u8]) -> Option<DexView> {
     })
 }
 
+/// Maximum entries parsed per DEX id table (defensive bound against
+/// malformed counts).
+const MAX_DEX_TABLE: usize = 1_000_000;
+/// Maximum bytes read for a single DEX string (display safety bound).
+const MAX_DEX_STRING: usize = 4096;
+
+/// A resolved DEX proto_id entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexProto {
+    /// Shorty descriptor string.
+    pub shorty: String,
+    /// Return type descriptor.
+    pub return_type: String,
+    /// Parameter type descriptors.
+    pub parameters: Vec<String>,
+}
+
+/// A resolved DEX field_id entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexField {
+    /// Declaring class descriptor.
+    pub class: String,
+    /// Field type descriptor.
+    pub field_type: String,
+    /// Field name.
+    pub name: String,
+}
+
+/// A resolved DEX method_id entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexMethod {
+    /// Declaring class descriptor.
+    pub class: String,
+    /// Method name.
+    pub name: String,
+    /// Proto descriptor in `()ret` notation.
+    pub proto: String,
+}
+
+/// A resolved DEX class_def entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexClassDef {
+    /// Class descriptor.
+    pub class: String,
+    /// Access flags bitmask.
+    pub access_flags: u32,
+    /// Superclass descriptor ("-" for NO_INDEX).
+    pub superclass: String,
+    /// Source file name ("-" for NO_INDEX).
+    pub source_file: String,
+}
+
+/// A DEX map_list item.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexMapItem {
+    /// Item type code (e.g. 0x0001 for string_id).
+    pub item_type: u16,
+    /// Human-readable type name.
+    pub type_name: String,
+    /// Item count covered by this map entry.
+    pub size: u32,
+    /// File offset of the section.
+    pub offset: u32,
+}
+
+/// Deep DEX view: resolved string/type/proto/field/method/class_def tables
+/// plus the map list, mirroring upstream DEX widget tabs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DexDeepView {
+    /// Decoded string_data items (index = string_idx).
+    pub strings: Vec<String>,
+    /// Type descriptors (index = type_idx).
+    pub types: Vec<String>,
+    /// Proto table.
+    pub protos: Vec<DexProto>,
+    /// Field table.
+    pub fields: Vec<DexField>,
+    /// Method table.
+    pub methods: Vec<DexMethod>,
+    /// Class definitions.
+    pub class_defs: Vec<DexClassDef>,
+    /// Map list items.
+    pub map_items: Vec<DexMapItem>,
+    /// True when any table hit the entry cap.
+    pub truncated: bool,
+}
+
+/// Read a little-endian u16, returning `None` on out-of-range access.
+fn dex_u16(data: &[u8], off: usize) -> Option<u16> {
+    data.get(off..off + 2)
+        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+}
+
+/// Read a little-endian u32, returning `None` on out-of-range access.
+fn dex_u32(data: &[u8], off: usize) -> Option<u32> {
+    data.get(off..off + 4)
+        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+}
+
+/// Read a uleb128 value at `off`, returning `(value, next_offset)`.
+fn dex_uleb128(data: &[u8], mut off: usize) -> Option<(u64, usize)> {
+    let mut result: u64 = 0;
+    let mut shift = 0u32;
+    loop {
+        let b = *data.get(off)?;
+        result |= u64::from(b & 0x7f) << shift;
+        off += 1;
+        if b & 0x80 == 0 {
+            return Some((result, off));
+        }
+        shift += 7;
+        if shift >= 64 {
+            return None;
+        }
+    }
+}
+
+/// Decode the NUL-terminated MUTF-8 payload of a string_data item at `off`,
+/// bounded by `MAX_DEX_STRING` bytes.
+fn dex_string_at(data: &[u8], off: usize) -> Option<String> {
+    let (_, mut pos) = dex_uleb128(data, off)?;
+    let end = pos.saturating_add(MAX_DEX_STRING).min(data.len());
+    let start = pos;
+    while pos < end && data[pos] != 0 {
+        pos += 1;
+    }
+    Some(String::from_utf8_lossy(&data[start..pos]).into_owned())
+}
+
+/// Human-readable name for a DEX map item type code.
+fn dex_map_type_name(t: u16) -> &'static str {
+    match t {
+        0x0000 => "header_item",
+        0x0001 => "string_id_item",
+        0x0002 => "type_id_item",
+        0x0003 => "proto_id_item",
+        0x0004 => "field_id_item",
+        0x0005 => "method_id_item",
+        0x0006 => "class_def_item",
+        0x0007 => "call_site_id_item",
+        0x0008 => "method_handle_item",
+        0x2000 => "map_list",
+        0x2001 => "type_list",
+        0x2002 => "annotation_set_ref_list",
+        0x2003 => "annotation_set_item",
+        0x2004 => "class_data_item",
+        0x2005 => "code_item",
+        0x2006 => "string_data_item",
+        0x2007 => "debug_info_item",
+        0x2008 => "annotation_item",
+        0x2009 => "encoded_array_item",
+        0x200A => "annotations_directory_item",
+        0x200B => "hiddenapi_class_data_item",
+        _ => "unknown",
+    }
+}
+
+/// Parse the deep DEX tables (strings/types/protos/fields/methods/class_defs/
+/// map). Returns `None` for non-DEX input; malformed sections yield
+/// `Err`-free partial data — entries that fail bounds checks are simply
+/// absent.
+pub fn parse_dex_deep_view(data: &[u8]) -> Option<DexDeepView> {
+    let h = parse_dex_view(data)?;
+    let len = data.len();
+    let mut truncated = false;
+
+    let capped = |count: u32, item_size: usize, off: u32, trunc: &mut bool| -> Option<usize> {
+        let n = count as usize;
+        if n > MAX_DEX_TABLE {
+            *trunc = true;
+        }
+        let n = n.min(MAX_DEX_TABLE);
+        let end = (off as usize).checked_add(n.checked_mul(item_size)?)?;
+        if end > len {
+            *trunc = true;
+            // Clamp to what is actually present.
+            let avail = len.saturating_sub(off as usize) / item_size;
+            return Some(avail);
+        }
+        Some(n)
+    };
+
+    // --- strings ---
+    let mut strings = Vec::new();
+    if let Some(n) = capped(h.string_ids_size, 4, h.string_ids_off, &mut truncated) {
+        for i in 0..n {
+            let s = dex_u32(data, h.string_ids_off as usize + i * 4)
+                .and_then(|soff| dex_string_at(data, soff as usize))
+                .unwrap_or_default();
+            strings.push(s);
+        }
+    }
+    let str_get = |idx: u32| -> String { strings.get(idx as usize).cloned().unwrap_or_default() };
+
+    // --- types ---
+    let mut types = Vec::new();
+    if let Some(n) = capped(h.type_ids_size, 4, h.type_ids_off, &mut truncated) {
+        for i in 0..n {
+            let t = dex_u32(data, h.type_ids_off as usize + i * 4)
+                .map(str_get)
+                .unwrap_or_default();
+            types.push(t);
+        }
+    }
+    let type_get = |idx: u32| -> String { types.get(idx as usize).cloned().unwrap_or_default() };
+
+    // --- protos ---
+    let mut protos = Vec::new();
+    if let Some(n) = capped(h.proto_ids_size, 12, h.proto_ids_off, &mut truncated) {
+        for i in 0..n {
+            let base = h.proto_ids_off as usize + i * 12;
+            let shorty_idx = dex_u32(data, base).unwrap_or(0);
+            let return_type_idx = dex_u32(data, base + 4).unwrap_or(0);
+            let parameters_off = dex_u32(data, base + 8).unwrap_or(0);
+            let mut parameters = Vec::new();
+            if parameters_off != 0
+                && let Some(n_params) = dex_u32(data, parameters_off as usize)
+            {
+                let n_params = n_params.min(MAX_DEX_TABLE as u32);
+                for p in 0..n_params {
+                    let poff = parameters_off as usize + 4 + p as usize * 2;
+                    match dex_u16(data, poff) {
+                        Some(t) => parameters.push(type_get(u32::from(t))),
+                        None => break,
+                    }
+                }
+            }
+            protos.push(DexProto {
+                shorty: str_get(shorty_idx),
+                return_type: type_get(return_type_idx),
+                parameters,
+            });
+        }
+    }
+
+    // --- fields ---
+    let mut fields = Vec::new();
+    if let Some(n) = capped(h.field_ids_size, 8, h.field_ids_off, &mut truncated) {
+        for i in 0..n {
+            let base = h.field_ids_off as usize + i * 8;
+            fields.push(DexField {
+                class: type_get(u32::from(dex_u16(data, base).unwrap_or(0))),
+                field_type: type_get(u32::from(dex_u16(data, base + 2).unwrap_or(0))),
+                name: str_get(dex_u32(data, base + 4).unwrap_or(0)),
+            });
+        }
+    }
+
+    // --- methods ---
+    let mut methods = Vec::new();
+    if let Some(n) = capped(h.method_ids_size, 8, h.method_ids_off, &mut truncated) {
+        for i in 0..n {
+            let base = h.method_ids_off as usize + i * 8;
+            let class = type_get(u32::from(dex_u16(data, base).unwrap_or(0)));
+            let proto_idx = u32::from(dex_u16(data, base + 2).unwrap_or(0));
+            let name = str_get(dex_u32(data, base + 4).unwrap_or(0));
+            let proto = protos
+                .get(proto_idx as usize)
+                .map(|p| format!("({}){}", p.parameters.join(""), p.return_type))
+                .unwrap_or_default();
+            methods.push(DexMethod { class, name, proto });
+        }
+    }
+
+    // --- class defs ---
+    let mut class_defs = Vec::new();
+    if let Some(n) = capped(h.class_defs_size, 32, h.class_defs_off, &mut truncated) {
+        for i in 0..n {
+            let base = h.class_defs_off as usize + i * 32;
+            let class_idx = dex_u32(data, base).unwrap_or(0);
+            let access_flags = dex_u32(data, base + 4).unwrap_or(0);
+            let superclass_idx = dex_u32(data, base + 8).unwrap_or(0xFFFF_FFFF);
+            let source_file_idx = dex_u32(data, base + 16).unwrap_or(0xFFFF_FFFF);
+            class_defs.push(DexClassDef {
+                class: type_get(class_idx),
+                access_flags,
+                superclass: if superclass_idx == 0xFFFF_FFFF {
+                    "-".to_string()
+                } else {
+                    type_get(superclass_idx)
+                },
+                source_file: if source_file_idx == 0xFFFF_FFFF {
+                    "-".to_string()
+                } else {
+                    str_get(source_file_idx)
+                },
+            });
+        }
+    }
+
+    // --- map list ---
+    let mut map_items = Vec::new();
+    if h.map_off != 0
+        && let Some(n) = dex_u32(data, h.map_off as usize)
+    {
+        let n = n.min(MAX_DEX_TABLE as u32) as usize;
+        for i in 0..n {
+            let base = h.map_off as usize + 4 + i * 12;
+            let (t, size, offset) = match (
+                dex_u16(data, base),
+                dex_u32(data, base + 4),
+                dex_u32(data, base + 8),
+            ) {
+                (Some(t), Some(s), Some(o)) => (t, s, o),
+                _ => break,
+            };
+            map_items.push(DexMapItem {
+                item_type: t,
+                type_name: dex_map_type_name(t).to_string(),
+                size,
+                offset,
+            });
+        }
+    }
+
+    Some(DexDeepView {
+        strings,
+        types,
+        protos,
+        fields,
+        methods,
+        class_defs,
+        map_items,
+        truncated,
+    })
+}
+
 // ============================================================================
 // MSDOS (DOS MZ executable)
 // ============================================================================
@@ -426,6 +753,121 @@ pub fn le_os_type_name(os_type: u16) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build a minimal synthetic DEX with one of each id-table entry.
+    ///
+    /// Layout: header(0x70) | string_ids(8) | type_ids(4) | proto_ids(12) |
+    /// field_ids(8) | method_ids(8) | class_defs(32) | map_list | data.
+    fn build_test_dex() -> Vec<u8> {
+        let mut d = vec![0u8; 0x70];
+        d[0..4].copy_from_slice(b"dex\n");
+        d[4..7].copy_from_slice(b"035");
+        let w32 =
+            |d: &mut Vec<u8>, off: usize, v: u32| d[off..off + 4].copy_from_slice(&v.to_le_bytes());
+        let w16 =
+            |d: &mut Vec<u8>, off: usize, v: u16| d[off..off + 2].copy_from_slice(&v.to_le_bytes());
+
+        // Section offsets.
+        let string_ids = d.len();
+        d.extend_from_slice(&[0u8; 8]); // 2 string_id items
+        let type_ids = d.len();
+        d.extend_from_slice(&[0u8; 4]); // 1 type_id item
+        let proto_ids = d.len();
+        d.extend_from_slice(&[0u8; 12]); // 1 proto_id item
+        let field_ids = d.len();
+        d.extend_from_slice(&[0u8; 8]); // 1 field_id item
+        let method_ids = d.len();
+        d.extend_from_slice(&[0u8; 8]); // 1 method_id item
+        let class_defs = d.len();
+        d.extend_from_slice(&[0u8; 32]); // 1 class_def item
+        let map_off = d.len();
+        d.extend_from_slice(&[0u8; 4 + 12]); // map_list: size + 1 item
+        let str0 = d.len();
+        d.extend_from_slice(b"\x03Lx;\0"); // utf16_len=3? -> bytes "Lx;"
+        let str1 = d.len();
+        d.extend_from_slice(b"\x04name\0");
+        let file_size = d.len() as u32;
+
+        // string_ids -> string_data offsets.
+        w32(&mut d, string_ids, str0 as u32);
+        w32(&mut d, string_ids + 4, str1 as u32);
+        // type_id: descriptor_idx = 0.
+        w32(&mut d, type_ids, 0);
+        // proto_id: shorty_idx=1, return_type_idx=0, parameters_off=0.
+        w32(&mut d, proto_ids, 1);
+        w32(&mut d, proto_ids + 4, 0);
+        w32(&mut d, proto_ids + 8, 0);
+        // field_id: class=0, type=0, name=1.
+        w16(&mut d, field_ids, 0);
+        w16(&mut d, field_ids + 2, 0);
+        w32(&mut d, field_ids + 4, 1);
+        // method_id: class=0, proto=0, name=1.
+        w16(&mut d, method_ids, 0);
+        w16(&mut d, method_ids + 2, 0);
+        w32(&mut d, method_ids + 4, 1);
+        // class_def: class=0, flags=1, super=NO_INDEX, source=1.
+        w32(&mut d, class_defs, 0);
+        w32(&mut d, class_defs + 4, 1);
+        w32(&mut d, class_defs + 8, 0xFFFF_FFFF);
+        w32(&mut d, class_defs + 16, 1);
+        // map_list: 1 item of type string_id_item.
+        w32(&mut d, map_off, 1);
+        w16(&mut d, map_off + 4, 0x0001);
+        w32(&mut d, map_off + 8, 2);
+        w32(&mut d, map_off + 12, string_ids as u32);
+
+        // Header fields.
+        w32(&mut d, 0x20, file_size);
+        w32(&mut d, 0x24, 0x70);
+        w32(&mut d, 0x28, 0x12345678);
+        w32(&mut d, 0x34, map_off as u32);
+        w32(&mut d, 0x38, 2);
+        w32(&mut d, 0x3c, string_ids as u32);
+        w32(&mut d, 0x40, 1);
+        w32(&mut d, 0x44, type_ids as u32);
+        w32(&mut d, 0x48, 1);
+        w32(&mut d, 0x4c, proto_ids as u32);
+        w32(&mut d, 0x50, 1);
+        w32(&mut d, 0x54, field_ids as u32);
+        w32(&mut d, 0x58, 1);
+        w32(&mut d, 0x5c, method_ids as u32);
+        w32(&mut d, 0x60, 1);
+        w32(&mut d, 0x64, class_defs as u32);
+        w32(&mut d, 0x68, (str0) as u32);
+        w32(&mut d, 0x6c, str0 as u32);
+        d
+    }
+
+    #[test]
+    fn test_parse_dex_deep_view() {
+        let d = build_test_dex();
+        let v = parse_dex_deep_view(&d).unwrap();
+        assert_eq!(v.strings, vec!["Lx;".to_string(), "name".to_string()]);
+        assert_eq!(v.types, vec!["Lx;".to_string()]);
+        assert_eq!(v.protos.len(), 1);
+        assert_eq!(v.protos[0].return_type, "Lx;");
+        assert_eq!(v.fields[0].name, "name");
+        assert_eq!(v.methods[0].name, "name");
+        assert_eq!(v.methods[0].proto, "()Lx;");
+        assert_eq!(v.class_defs[0].class, "Lx;");
+        assert_eq!(v.class_defs[0].superclass, "-");
+        assert_eq!(v.class_defs[0].source_file, "name");
+        assert_eq!(v.map_items.len(), 1);
+        assert_eq!(v.map_items[0].type_name, "string_id_item");
+        assert!(!v.truncated);
+    }
+
+    #[test]
+    fn test_parse_dex_deep_view_truncated() {
+        let mut d = build_test_dex();
+        // Claim more string_ids than exist: count beyond file must clamp.
+        d[0x38..0x3c].copy_from_slice(&100u32.to_le_bytes());
+        let v = parse_dex_deep_view(&d).unwrap();
+        assert!(v.truncated);
+        // Clamped to what physically fits in the file, still bounded.
+        assert!(v.strings.len() < 100);
+        assert_eq!(v.strings[0], "Lx;");
+    }
 
     #[test]
     fn test_parse_dex_view_not_dex() {

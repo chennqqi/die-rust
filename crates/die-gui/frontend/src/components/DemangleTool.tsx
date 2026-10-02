@@ -2,6 +2,26 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 
+// Mode list mirrors upstream `XDemangleWidget` combobox order
+// (subset implemented; see crates/die-gui/src/demangle.rs).
+const MODES: { value: string; label: string }[] = [
+  { value: "auto", label: "Auto" },
+  { value: "msvc", label: "MSVC" },
+  { value: "msvc32", label: "MSVC x86" },
+  { value: "msvc64", label: "MSVC x64" },
+  { value: "msvcarm32", label: "MSVC ARM32" },
+  { value: "msvcarm64", label: "MSVC ARM64" },
+  { value: "gnuv3", label: "C++ (Itanium)" },
+  { value: "gccwin", label: "C++ GCC/Win" },
+  { value: "gccmac", label: "C++ GCC/Mac" },
+  { value: "borland32", label: "Borland x86" },
+  { value: "borland64", label: "Borland x64" },
+  { value: "watcom", label: "Watcom" },
+  { value: "rust", label: "Rust" },
+  { value: "dlang", label: "D" },
+  { value: "java", label: "Java" },
+];
+
 export function DemangleTool() {
   const { t } = useTranslation();
   const [symbol, setSymbol] = useState("");
@@ -39,9 +59,11 @@ export function DemangleTool() {
           onChange={(e) => setCompiler(e.target.value)}
           className="text-xs border border-border rounded px-1 py-1"
         >
-          <option value="auto">Auto</option>
-          <option value="cpp">C++</option>
-          <option value="rust">Rust</option>
+          {MODES.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
         </select>
         <button
           onClick={doDemangle}
