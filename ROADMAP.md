@@ -1918,6 +1918,11 @@ nrv 单测），前端 `npm run build` 通过。
   段表 EP）、LE/LX（linker header）、ELF32/64（PT_LOAD EP scan）、
   DEX（string/type 双 stringScan）、APK（成员名 CRC + fancy-regex
   archiveExpScan）、文本 "Plain text" format 记录（CRLF/LF/CR）。
+- 语义 handler 首批：`handle_DosExtenders`（WDOSX@0x34 常开；
+  CWSDPMI/DOS4G/DOS16M deep-scan 门控）、`handle_VintageCompilers`
+  （15 条 vintage 运行时横幅，deep-scan 门控）、APK Signature Block
+  ID 扫描（v2/v3 互斥、Walle、GooglePlay）、Kotlin/Java 语言判定
+  （成员名探针）、Android OS 记录。
 - 仍未移植（显式 deferred）：heuristic `handle_*` 版本补全与各格式
   的 regex/结构启发式；Mach-O/JavaClass/PDF/JPEG/CFBF/Amiga/JAR
   上游为纯 heuristic 模块（无签名表），走 generic binary 兜底。
