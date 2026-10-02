@@ -1247,6 +1247,7 @@ pub fn borland(
     ftpe: u16,
     header: &DetectMap,
     entrypoint: &DetectMap,
+    dot_ansi: &DetectMap,
     misc: &mut DetectMap,
 ) {
     #[derive(Clone, Copy, PartialEq)]
@@ -1535,6 +1536,12 @@ pub fn borland(
             if linker.is_none() {
                 linker = Some((n::RECORD_NAME_TURBOLINKER, String::new()));
             }
+        }
+    } else {
+        // Delphi.NET: dotAnsi heap hits (Borland.Studio.Delphi →
+        // "XE*", Borland.Vcl.Types → "8") promote to the tool record.
+        if let Some(r) = dot_ansi.get(&n::RECORD_NAME_EMBARCADERODELPHIDOTNET) {
+            tool = Some((r.name, r.version.clone()));
         }
     }
 
@@ -3121,5 +3128,290 @@ pub fn wx_widgets(d: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut Detec
             &version,
             &inf,
         );
+    }
+}
+
+/// `get_DeepSea_vi` — "DeepSeaObfuscator" banner → version "4.X",
+/// "Evaluation" in the following string marks info.
+fn deepsea_vi(d: &[u8], off: usize, size: usize) -> Option<(String, String)> {
+    let pos = crate::parse::find_ansi(d, off, size, b"DeepSeaObfuscator")?;
+    let full = crate::parse::read_ansi_string(d, pos + 18).unwrap_or_default();
+    let info = if full.contains("Evaluation") {
+        "Evaluation"
+    } else {
+        ""
+    };
+    Some(("4.X".to_string(), info.to_string()))
+}
+
+/// `get_Enigma_vi` — `\0\0\0ENIGMA` marker + version fields, or the
+/// ` *** Enigma protector v` banner fallback.
+fn enigma_vi(d: &[u8], off: usize, size: usize) -> Option<(String, String)> {
+    let sz = size.min(d.len().saturating_sub(off));
+    if let Some(pos) = crate::parse::find_ansi(d, off, sz, b"\x00\x00\x00ENIGMA") {
+        let r8 = |o: usize| d.get(o).copied().unwrap_or(0);
+        let r16 = |o: usize| crate::parse::rd_u16(d, o).unwrap_or(0);
+        let v = format!(
+            "{}.{:02} build {:04}.{:02}.{:02} {:02}:{:02}:{:02}",
+            r8(pos + 9),
+            r8(pos + 10),
+            r16(pos + 11),
+            r16(pos + 13),
+            r16(pos + 15),
+            r16(pos + 17),
+            r16(pos + 19),
+            r16(pos + 21),
+        );
+        return Some((v, String::new()));
+    }
+    let pos = crate::parse::find_ansi(d, off, sz, b" *** Enigma protector v")?;
+    let v = crate::parse::read_ansi_string(d, pos + 22).unwrap_or_default();
+    Some((v, String::new()))
+}
+
+/// `get_SmartAssembly_vi` — "Powered by SmartAssembly " + version.
+fn smartassembly_vi(d: &[u8], off: usize, size: usize) -> Option<(String, String)> {
+    let pos = crate::parse::find_ansi(
+        d,
+        off,
+        size.min(d.len().saturating_sub(off)),
+        b"Powered by SmartAssembly ",
+    )?;
+    let v = crate::parse::read_ansi_string(d, pos + 25).unwrap_or_default();
+    Some((v, String::new()))
+}
+
+/// `handle_NETProtection` (`nfd_pe.cpp` 5228..5561): .NET protector /
+/// obfuscator promotion driven by the `dot_ansi`/`dot_unicode` heap
+/// scans plus code-section memory scans. Emitted into `misc`
+/// (upstream fans out to mapResultNETObfuscators/Protectors/Packers/
+/// NETCompressors — our output keeps the record's own type).
+#[allow(clippy::too_many_arguments)]
+pub fn net_protection(
+    d: &[u8],
+    pe: &PeInfo,
+    deep: bool,
+    ftpe: u16,
+    dot_ansi: &DetectMap,
+    dot_unicode: &DetectMap,
+    code_section: &DetectMap,
+    overlay: &DetectMap,
+    imports: &DetectMap,
+    entrypoint: &DetectMap,
+    misc: &mut DetectMap,
+) {
+    // bIsNetPresent ≈ cliInfo.bValid || isNETPresent&&deep — both mean
+    // "CLI dir present" here.
+    if !pe.is_dotnet {
+        return;
+    }
+    /// Copy a scan record into misc (upstream `scansToScan`).
+    fn take(src: &DetectMap, name: u16, misc: &mut DetectMap) {
+        if let Some(r) = src.get(&name) {
+            misc.entry(name).or_insert_with(|| r.clone());
+        }
+    }
+    let code_region = region(d, normal_code_section(pe), deep);
+
+    // Enigma (.NET variant) — banner in the code section.
+    if let Some((off, size)) = code_region
+        && let Some((v, inf)) = enigma_vi(d, off, size)
+    {
+        let e = misc
+            .entry(n::RECORD_NAME_ENIGMA)
+            .or_insert_with(|| ScanRecord {
+                name: n::RECORD_NAME_ENIGMA,
+                rtype: rt::RECORD_TYPE_PROTECTOR,
+                ft: ftpe,
+                variant: 0,
+                version: v,
+                info: inf,
+                heuristic: false,
+                unknown: false,
+            });
+        let _ = e;
+    }
+    // DotNetReactor — fixed signature in section 1 (deep only).
+    if deep && pe.extents.len() >= 2 {
+        let e = &pe.extents[1];
+        let sz = e.size.min(d.len().saturating_sub(e.off));
+        let sig = [
+            0x52, 0x66, 0x68, 0x6E, 0x20, 0x4D, 0x18, 0x22, 0x76, 0xB5, 0x33, 0x11, 0x12, 0x33,
+            0x0C, 0x6D, 0x0A, 0x20, 0x4D, 0x18, 0x22, 0x9E, 0xA1, 0x29, 0x61, 0x1C, 0x76, 0xB5,
+            0x05, 0x19, 0x01, 0x58,
+        ];
+        if crate::parse::find_ansi(d, e.off, sz, &sig).is_some() {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_PROTECTOR,
+                n::RECORD_NAME_DOTNETREACTOR,
+                "4.8-4.9",
+                "",
+            );
+        }
+    }
+
+    for name in [
+        n::RECORD_NAME_YANO,
+        n::RECORD_NAME_DOTFUSCATOR,
+        n::RECORD_NAME_AGILENET,
+        n::RECORD_NAME_BABELNET,
+        n::RECORD_NAME_GOLIATHNET,
+        n::RECORD_NAME_SPICESNET,
+        n::RECORD_NAME_OBFUSCATORNET2009,
+        n::RECORD_NAME_CLISECURE,
+        n::RECORD_NAME_DNGUARD,
+        n::RECORD_NAME_MAXTOCODE,
+        n::RECORD_NAME_PHOENIXPROTECTOR,
+        n::RECORD_NAME_XENOCODEPOSTBUILD,
+    ] {
+        take(dot_ansi, name, misc);
+    }
+    take(code_section, n::RECORD_NAME_SKATER, misc);
+    take(dot_ansi, n::RECORD_NAME_NSPACK, misc);
+
+    // DeepSea: ansi then code-section, with vi refinement.
+    let mut ds = dot_ansi
+        .get(&n::RECORD_NAME_DEEPSEA)
+        .or_else(|| code_section.get(&n::RECORD_NAME_DEEPSEA))
+        .cloned();
+    if let Some(ref mut r) = ds {
+        if let Some((off, size)) = code_region
+            && let Some((v, inf)) = deepsea_vi(d, off, size)
+        {
+            r.version = v;
+            r.info = inf;
+        }
+        misc.insert(n::RECORD_NAME_DEEPSEA, r.clone());
+    }
+
+    // CliSecure: ansi hit, else unicode "CliSecure" in exec section 1.
+    if !dot_ansi.contains_key(&n::RECORD_NAME_CLISECURE)
+        && pe.extents.len() >= 2
+        && pe.extents[1].flags & 0x2000_0000 != 0
+    {
+        let e = &pe.extents[1];
+        let sz = e.size.min(d.len().saturating_sub(e.off));
+        if find_utf16le(d, e.off, sz, "CliSecure").is_some() {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_NETOBFUSCATOR,
+                n::RECORD_NAME_CLISECURE,
+                "4.X",
+                "",
+            );
+        }
+    }
+    if overlay.contains_key(&n::RECORD_NAME_FISHNET)
+        || code_section.contains_key(&n::RECORD_NAME_FISHNET)
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_NETOBFUSCATOR,
+            n::RECORD_NAME_FISHNET,
+            "1.X",
+            "",
+        );
+    }
+    if !dot_ansi.contains_key(&n::RECORD_NAME_DOTNETZ) {
+        take(code_section, n::RECORD_NAME_DOTNETZ, misc);
+    } else {
+        take(dot_ansi, n::RECORD_NAME_DOTNETZ, misc);
+    }
+
+    // SmartAssembly: ansi/code-section hit + vi version.
+    let mut sa = dot_ansi
+        .get(&n::RECORD_NAME_SMARTASSEMBLY)
+        .or_else(|| code_section.get(&n::RECORD_NAME_SMARTASSEMBLY))
+        .cloned();
+    if let Some(ref mut r) = sa {
+        if let Some((off, size)) = code_region
+            && let Some((v, inf)) = smartassembly_vi(d, off, size)
+        {
+            r.version = v;
+            r.info = inf;
+        }
+        misc.insert(n::RECORD_NAME_SMARTASSEMBLY, r.clone());
+    }
+
+    // Confuser / ConfuserEx — ansi hit then banner version in code.
+    if let Some(r) = dot_ansi.get(&n::RECORD_NAME_CONFUSER).cloned() {
+        let mut r = r;
+        if let Some((off, size)) = code_region {
+            if let Some(pos) = crate::parse::find_ansi(d, off, size, b"Confuser v") {
+                r.version = crate::parse::read_ansi_string(d, pos + 10).unwrap_or_default();
+            } else if let Some(pos) = crate::parse::find_ansi(d, off, size, b"ConfuserEx v") {
+                r.name = n::RECORD_NAME_CONFUSEREX;
+                r.version = crate::parse::read_ansi_string(d, pos + 12).unwrap_or_default();
+            }
+        }
+        misc.insert(r.name, r);
+    }
+
+    // CodeVeil — ansi, else unicode heap.
+    if !dot_ansi.contains_key(&n::RECORD_NAME_CODEVEIL) {
+        take(dot_unicode, n::RECORD_NAME_CODEVEIL, misc);
+    } else {
+        take(dot_ansi, n::RECORD_NAME_CODEVEIL, misc);
+    }
+    take(code_section, n::RECORD_NAME_CODEWALL, misc);
+    take(code_section, n::RECORD_NAME_CRYPTOOBFUSCATORFORNET, misc);
+    take(code_section, n::RECORD_NAME_EAZFUSCATOR, misc);
+    if !code_section.contains_key(&n::RECORD_NAME_EAZFUSCATOR) {
+        take(dot_ansi, n::RECORD_NAME_EAZFUSCATOR, misc);
+    }
+    take(code_section, n::RECORD_NAME_OBFUSCAR, misc);
+    if !dot_ansi.contains_key(&n::RECORD_NAME_DOTNETSPIDER) {
+        take(code_section, n::RECORD_NAME_DOTNETSPIDER, misc);
+    } else {
+        take(dot_ansi, n::RECORD_NAME_DOTNETSPIDER, misc);
+    }
+    take(code_section, n::RECORD_NAME_PHOENIXPROTECTOR, misc);
+    if !dot_ansi.contains_key(&n::RECORD_NAME_SIXXPACK) {
+        take(code_section, n::RECORD_NAME_SIXXPACK, misc);
+    } else {
+        take(dot_ansi, n::RECORD_NAME_SIXXPACK, misc);
+    }
+    take(code_section, n::RECORD_NAME_RENETPACK, misc);
+    take(code_section, n::RECORD_NAME_DOTNETSHRINK, misc);
+
+    // Xenocode Postbuild via version-resource Packager field.
+    let packager = pe.res_version.value("Packager");
+    if packager.contains("Xenocode Postbuild 2009 for .NET") {
+        let v = pe.res_version.value("PackagerVersion").trim().to_string();
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_NETOBFUSCATOR,
+            n::RECORD_NAME_XENOCODEPOSTBUILD2009FORDOTNET,
+            &v,
+            "",
+        );
+    }
+    if packager.contains("Xenocode Postbuild 2010 for .NET") {
+        let v = pe.res_version.value("PackagerVersion").trim().to_string();
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_PROTECTOR,
+            n::RECORD_NAME_XENOCODEPOSTBUILD2010FORDOTNET,
+            &v,
+            "",
+        );
+    }
+    if !misc.contains_key(&n::RECORD_NAME_DOTNETREACTOR)
+        && imports.contains_key(&n::RECORD_NAME_DOTNETREACTOR)
+        && crate::pe::resource_present(&pe.resources, 10, Some("__"), None)
+    {
+        take(imports, n::RECORD_NAME_DOTNETREACTOR, misc);
+    }
+    if !misc.contains_key(&n::RECORD_NAME_CODEVEIL)
+        && imports.contains_key(&n::RECORD_NAME_CODEVEIL)
+        && entrypoint.contains_key(&n::RECORD_NAME_CODEVEIL)
+    {
+        take(entrypoint, n::RECORD_NAME_CODEVEIL, misc);
     }
 }

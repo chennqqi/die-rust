@@ -1227,6 +1227,11 @@ fn pe32_version_resource_parsed() {
 /// PE32 with a .NET CLI directory: `#Strings` heap carries
 /// "Microsoft.VisualBasic"; `#US` carries one UTF-16 entry.
 fn pe32_dotnet_fixture() -> Vec<u8> {
+    pe32_dotnet_fixture_heap(b"Microsoft.VisualBasic\0")
+}
+
+/// Variant with a custom #Strings payload.
+fn pe32_dotnet_fixture_heap(ansi: &[u8]) -> Vec<u8> {
     let mut d = pe32_delphi_fixture();
     d[0x210..0x217].copy_from_slice(&[0u8; 7]);
     d.resize(0xC00, 0);
@@ -1275,8 +1280,7 @@ fn pe32_dotnet_fixture() -> Vec<u8> {
     // #Strings heap @0x4C0: index0=NUL, then "Microsoft.VisualBasic\0X\0".
     let hp = m + 0x80;
     d[hp] = 0;
-    let s = b"Microsoft.VisualBasic\0";
-    d[hp + 1..hp + 1 + s.len()].copy_from_slice(s);
+    d[hp + 1..hp + 1 + ansi.len()].copy_from_slice(ansi);
     // #US heap @0x540: idx0=0, entry len=8 "Hi\0\0US!!" utf16.
     let up = m + 0x100;
     d[up] = 0;
@@ -1472,5 +1476,17 @@ fn pe32_7zip_sfx_and_nsis() {
             h.contains("Installer") && h.contains("Nullsoft Scriptable") && h.contains("3.10")
         }),
         "{hits:?}"
+    );
+}
+
+#[test]
+fn pe32_dotnet_ansi_heap_promotes_dotfuscator() {
+    let d = pe32_dotnet_fixture_heap(b"DotfuscatorAttribute\0");
+    let out = diec_nfd::scan(&d, diec_nfd::sniff_ft(&d), diec_nfd::ScanOptions::default());
+    assert!(
+        out.iter()
+            .any(|x| x.record_name.contains("Dotfuscator")),
+        "{:?}",
+        out.iter().map(|x| x.record_name.clone()).collect::<Vec<_>>()
     );
 }

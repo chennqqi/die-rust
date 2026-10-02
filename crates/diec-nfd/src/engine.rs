@@ -832,7 +832,29 @@ fn pe_scan(
     );
     crate::pe_handlers::sfx(data, &pe, opts.deep_scan, ftpe, overlay, misc);
     crate::pe_handlers::wx_widgets(data, &pe, opts.deep_scan, ftpe, misc);
-    crate::pe_handlers::borland(data, &pe, opts.deep_scan, ftpe, header, entrypoint, misc);
+    crate::pe_handlers::borland(
+        data,
+        &pe,
+        opts.deep_scan,
+        ftpe,
+        header,
+        entrypoint,
+        dot_ansi,
+        misc,
+    );
+    crate::pe_handlers::net_protection(
+        data,
+        &pe,
+        opts.deep_scan,
+        ftpe,
+        dot_ansi,
+        dot_unicode,
+        code_section,
+        overlay,
+        imports,
+        entrypoint,
+        misc,
+    );
     crate::pe_handlers::tools(
         data,
         &pe,
