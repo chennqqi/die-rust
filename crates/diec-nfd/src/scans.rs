@@ -112,6 +112,28 @@ pub fn archive_scan(
     string_scan(map, member_names, records, ft1, ft2);
 }
 
+/// `XBinary::regExp` — capture group `group` of the first regex match,
+/// or "" (bad pattern / no match).
+pub fn reg_exp(pattern: &str, text: &str, group: usize) -> String {
+    let Ok(re) = fancy_regex::Regex::new(pattern) else {
+        return String::new();
+    };
+    re.captures(text)
+        .ok()
+        .flatten()
+        .and_then(|c| c.get(group))
+        .map(|m| m.as_str().to_string())
+        .unwrap_or_default()
+}
+
+/// `XBinary::isRegExpPresent` — whether the pattern matches anywhere.
+pub fn reg_exp_present(pattern: &str, text: &str) -> bool {
+    fancy_regex::Regex::new(pattern)
+        .ok()
+        .and_then(|re| re.find(text).ok().flatten())
+        .is_some()
+}
+
 /// Port of `NFD_Binary::archiveExpScan`: regex (`XBinary::isRegExpPresent`,
 /// substring match) between member names and record patterns.
 pub fn archive_exp_scan(

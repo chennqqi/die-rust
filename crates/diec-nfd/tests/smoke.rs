@@ -1302,3 +1302,175 @@ fn pe32_dotnet_heaps_parsed() {
     t.truncate(0x4D0);
     let _ = diec_nfd::scan(&t, diec_nfd::sniff_ft(&t), diec_nfd::ScanOptions::default());
 }
+
+/// PE32 with "Inno" magic at 0x30 (old Inno Setup loader marker) —
+/// the header signature record and the installer handler both fire.
+fn pe32_innosetup_fixture() -> Vec<u8> {
+    let mut d = pe32_delphi_fixture();
+    d[0x210..0x217].copy_from_slice(&[0u8; 7]);
+    d[0x30..0x34].copy_from_slice(b"Inno");
+    d[0x34..0x38].copy_from_slice(&0u32.to_le_bytes()); // ldr table = 0
+    d
+}
+
+/// PE32 whose RT_VERSION resource claims ProductName "7-Zip" +
+/// RT_MANIFEST carrying "Nullsoft.NSIS" (two level-1 resource types).
+fn pe32_7zip_nsis_fixture() -> Vec<u8> {
+    fn w16(v: u16, out: &mut Vec<u8>) {
+        out.extend(v.to_le_bytes());
+    }
+    // Build VS_VERSION_INFO with ProductName=7-Zip, ProductVersion=24.05.
+    fn kv(key: &str, val: &str) -> Vec<u8> {
+        let kw: Vec<u8> = key
+            .encode_utf16()
+            .flat_map(|c| c.to_le_bytes())
+            .chain([0, 0])
+            .collect();
+        let vw: Vec<u8> = val
+            .encode_utf16()
+            .flat_map(|c| c.to_le_bytes())
+            .chain([0, 0])
+            .collect();
+        let kd = (6 + kw.len()).div_ceil(4) * 4;
+        let mut n = Vec::new();
+        w16((kd + vw.len()) as u16, &mut n);
+        w16((val.len() + 1) as u16, &mut n);
+        w16(1, &mut n);
+        n.extend(&kw);
+        n.resize(kd, 0);
+        n.extend(&vw);
+        n.resize(n.len().div_ceil(4) * 4, 0);
+        n
+    }
+    let kids = [kv("ProductName", "7-Zip"), kv("ProductVersion", "24.05")].concat();
+    let mut lang = Vec::new();
+    let lw: Vec<u8> = "040904b0"
+        .encode_utf16()
+        .flat_map(|c| c.to_le_bytes())
+        .chain([0, 0])
+        .collect();
+    let ld = (6 + lw.len()).div_ceil(4) * 4;
+    w16((ld + kids.len()) as u16, &mut lang);
+    w16(0, &mut lang);
+    w16(0, &mut lang);
+    lang.extend(&lw);
+    lang.resize(ld, 0);
+    lang.extend(&kids);
+    let mut sfi = Vec::new();
+    let sw: Vec<u8> = "StringFileInfo"
+        .encode_utf16()
+        .flat_map(|c| c.to_le_bytes())
+        .chain([0, 0])
+        .collect();
+    let sd = (6 + sw.len()).div_ceil(4) * 4;
+    w16((sd + lang.len()) as u16, &mut sfi);
+    w16(0, &mut sfi);
+    w16(0, &mut sfi);
+    sfi.extend(&sw);
+    sfi.resize(sd, 0);
+    sfi.extend(&lang);
+    let mut root = Vec::new();
+    let rw: Vec<u8> = "VS_VERSION_INFO"
+        .encode_utf16()
+        .flat_map(|c| c.to_le_bytes())
+        .chain([0, 0])
+        .collect();
+    let rd = (6 + rw.len()).div_ceil(4) * 4;
+    w16((rd + 52 + sfi.len()) as u16, &mut root);
+    w16(52, &mut root);
+    w16(0, &mut root);
+    root.extend(&rw);
+    root.resize(rd, 0);
+    let mut ffi = vec![0u8; 52];
+    ffi[0..4].copy_from_slice(&0xFEEF04BDu32.to_le_bytes());
+    root.extend(&ffi);
+    root.extend(&sfi);
+
+    let manifest = b"<?xml version=\"1.0\"?><assembly><assemblyIdentity name=\"Nullsoft.NSIS\"/>Nullsoft Install System v3.10<";
+
+    let mut d = pe32_delphi_fixture();
+    d[0x210..0x217].copy_from_slice(&[0u8; 7]);
+    d.resize(0xD00, 0);
+    let opt = 0x58;
+    d[opt + 96 + 16..opt + 96 + 20].copy_from_slice(&0x2000u32.to_le_bytes());
+    d[opt + 96 + 20..opt + 96 + 24].copy_from_slice(&0x200u32.to_le_bytes());
+    let s0 = opt + 0xE0;
+    d[0x46..0x48].copy_from_slice(&2u16.to_le_bytes());
+    let s1 = s0 + 40;
+    d[s1..s1 + 5].copy_from_slice(b".rsrc");
+    d[s1 + 8..s1 + 12].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s1 + 12..s1 + 16].copy_from_slice(&0x2000u32.to_le_bytes());
+    d[s1 + 16..s1 + 20].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s1 + 20..s1 + 24].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s1 + 36..s1 + 40].copy_from_slice(&0x4000_0040u32.to_le_bytes());
+    // Resource root @0x400, two level-1 id entries: 16 (version),
+    // 24 (manifest).
+    d[0x400 + 14..0x400 + 16].copy_from_slice(&2u16.to_le_bytes());
+    d[0x410..0x414].copy_from_slice(&16u32.to_le_bytes());
+    d[0x414..0x418].copy_from_slice(&0x8000_0030u32.to_le_bytes());
+    d[0x418..0x41C].copy_from_slice(&24u32.to_le_bytes());
+    d[0x41C..0x420].copy_from_slice(&0x8000_0048u32.to_le_bytes());
+    // dir2 for version @0x430 → dir3 @0x448 → data @0x460.
+    d[0x430 + 14..0x430 + 16].copy_from_slice(&1u16.to_le_bytes());
+    d[0x440..0x444].copy_from_slice(&1u32.to_le_bytes());
+    d[0x444..0x448].copy_from_slice(&0x8000_0060u32.to_le_bytes());
+    d[0x460 + 14..0x460 + 16].copy_from_slice(&1u16.to_le_bytes());
+    d[0x470..0x474].copy_from_slice(&0x409u32.to_le_bytes());
+    d[0x474..0x478].copy_from_slice(&0x80u32.to_le_bytes());
+    d[0x480..0x484].copy_from_slice(&0x2100u32.to_le_bytes()); // →0x500
+    d[0x484..0x488].copy_from_slice(&(root.len() as u32).to_le_bytes());
+    d[0x500..0x500 + root.len()].copy_from_slice(&root);
+    // dir2 for manifest @0x448 → dir3 @0x490 → data @0x4A8.
+    d[0x448 + 14..0x448 + 16].copy_from_slice(&1u16.to_le_bytes());
+    d[0x458..0x45C].copy_from_slice(&1u32.to_le_bytes());
+    d[0x45C..0x460].copy_from_slice(&0x8000_0090u32.to_le_bytes());
+    d[0x490 + 14..0x490 + 16].copy_from_slice(&1u16.to_le_bytes());
+    d[0x4A0..0x4A4].copy_from_slice(&0x409u32.to_le_bytes());
+    d[0x4A4..0x4A8].copy_from_slice(&0xA8u32.to_le_bytes());
+    d[0x4A8..0x4AC].copy_from_slice(&0x2200u32.to_le_bytes()); // →0x600
+    d[0x4AC..0x4B0].copy_from_slice(&(manifest.len() as u32).to_le_bytes());
+    d[0x600..0x600 + manifest.len()].copy_from_slice(manifest);
+    d
+}
+
+#[test]
+fn pe32_innosetup_detected() {
+    let d = pe32_innosetup_fixture();
+    let out = diec_nfd::scan(&d, diec_nfd::sniff_ft(&d), diec_nfd::ScanOptions::default());
+    let hits: Vec<String> = out
+        .iter()
+        .map(|x| format!("{}:{}:{}", x.record_type, x.record_name, x.version))
+        .collect();
+    assert!(
+        hits.iter().any(|h| h.contains("Installer")
+            && h.contains("Inno Setup")
+            && h.contains("1.XX-5.1.X")),
+        "{hits:?}"
+    );
+}
+
+#[test]
+fn pe32_7zip_sfx_and_nsis() {
+    let d = pe32_7zip_nsis_fixture();
+    let out = diec_nfd::scan(&d, diec_nfd::sniff_ft(&d), diec_nfd::ScanOptions::default());
+    let hits: Vec<String> = out
+        .iter()
+        .map(|x| {
+            format!(
+                "{}:{}:{}:{}",
+                x.record_type, x.record_name, x.version, x.info
+            )
+        })
+        .collect();
+    assert!(
+        hits.iter()
+            .any(|h| h.contains("SFX") && h.contains("7-Zip") && h.contains("24.05")),
+        "{hits:?}"
+    );
+    assert!(
+        hits.iter().any(|h| {
+            h.contains("Installer") && h.contains("Nullsoft Scriptable") && h.contains("3.10")
+        }),
+        "{hits:?}"
+    );
+}

@@ -149,8 +149,14 @@ impl ResourcesVersion {
 /// Parse the first `RT_VERSION` (type 16) resource of the image.
 /// Empty result when no version resource or malformed layout.
 pub fn resources_version(d: &[u8]) -> ResourcesVersion {
-    let mut out = ResourcesVersion::default();
     let res = crate::pe::collect_resources(d);
+    resources_version_from(d, &res)
+}
+
+/// [`resources_version`] variant over an already-collected resource
+/// list (`getResourcesVersion(&listResources)`).
+pub fn resources_version_from(d: &[u8], res: &[crate::scans::ResourceEntry]) -> ResourcesVersion {
+    let mut out = ResourcesVersion::default();
     let Some(vr) = res
         .iter()
         .find(|r| r.id1 == 16 && r.data_off != 0 && r.data_size >= 6)

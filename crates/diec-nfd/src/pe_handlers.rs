@@ -2193,3 +2193,933 @@ fn python_dot_version(up: &str) -> Option<String> {
         None
     }
 }
+
+/// `XBinary::appendComma` — build ", "-separated info strings.
+fn append_comma(s: &mut String, add: &str) {
+    if add.is_empty() {
+        return;
+    }
+    if !s.is_empty() {
+        s.push_str(", ");
+    }
+    s.push_str(add);
+}
+
+/// Region bounds guard mirroring `checkOffsetSize` + deep-scan gating
+/// used before every `find_ansiString` call in the installer handlers.
+fn region(d: &[u8], e: Option<&SectionExtent>, deep: bool) -> Option<(usize, usize)> {
+    let e = e?;
+    if !deep || e.off == 0 || e.off >= d.len() {
+        return None;
+    }
+    Some((e.off, e.size.min(d.len() - e.off)))
+}
+
+/// `NFD_Binary::get_WindowsInstaller_vi` — find "Windows Installer" in
+/// the region, capture `(...)` as version; "xml" (case-insensitive)
+/// marks info="XML".
+fn windows_installer_vi(d: &[u8], off: usize, size: usize) -> (String, String, bool) {
+    let Some(pos) = crate::parse::find_ansi(
+        d,
+        off,
+        size.min(d.len().saturating_sub(off)),
+        b"Windows Installer",
+    ) else {
+        return (String::new(), String::new(), false);
+    };
+    let s = crate::parse::read_ansi_string(d, pos).unwrap_or_default();
+    let mut info = String::new();
+    if s.to_ascii_lowercase().contains("xml") {
+        info = "XML".to_string();
+    }
+    let ver = crate::scans::reg_exp(r"\((.*?)\)", &s, 1);
+    (ver, info, true)
+}
+
+/// `handle_Installers` (non-.NET branch, `nfd_pe.cpp` 3717..4278):
+/// overlay/header/section-name gated installer detections driven by
+/// version-resource fields, the manifest string and export names.
+#[allow(clippy::too_many_arguments)]
+pub fn installers(
+    d: &[u8],
+    pe: &PeInfo,
+    deep: bool,
+    ftpe: u16,
+    overlay: &DetectMap,
+    header: &DetectMap,
+    section_names: &DetectMap,
+    misc: &mut DetectMap,
+) {
+    use crate::gen_names::name as n;
+    use crate::gen_names::rtype as rt;
+    use crate::scans::reg_exp;
+    if pe.is_dotnet {
+        return;
+    }
+    let rv = &pe.res_version;
+    let manifest = &pe.manifest;
+
+    // ---- Inno Setup ----
+    if overlay.contains_key(&n::RECORD_NAME_INNOSETUP)
+        || header.contains_key(&n::RECORD_NAME_INNOSETUP)
+    {
+        let mut ver = String::new();
+        let mut info = String::new();
+        if crate::parse::rd_u32(d, 0x30) == Some(0x6E55_6E49) {
+            // "InUn" — Uninstall stub.
+            info = "Uninstall".to_string();
+            if let Some((off, size)) = region(d, normal_code_section(pe), deep)
+                && let Some(pos) =
+                    crate::parse::find_ansi(d, off, size, b"Setup version: Inno Setup version ")
+            {
+                let vs = crate::parse::read_ansi_string(d, pos + 34).unwrap_or_default();
+                ver = vs.split(' ').next().unwrap_or("").to_string();
+                match vs.split(' ').nth(1) {
+                    Some("(a)") => append_comma(&mut info, "ANSI"),
+                    Some("(u)") => append_comma(&mut info, "Unicode"),
+                    _ => {}
+                }
+            }
+        } else if overlay
+            .get(&n::RECORD_NAME_INNOSETUP)
+            .map(|r| r.info.as_str())
+            == Some("Uninstall")
+        {
+            info = "Uninstall".to_string();
+            if pe.overlay_offset >= 0 {
+                let (oo, osz) = (pe.overlay_offset as usize, pe.overlay_size);
+                if let Some(pos) = crate::parse::find_ansi(d, oo, osz, b"Inno Setup Messages (") {
+                    let vs = crate::parse::read_ansi_string(d, pos + 21).unwrap_or_default();
+                    ver = vs.split(' ').next().unwrap_or("").replace(')', "");
+                    match vs.split(' ').nth(1) {
+                        Some("(a))") => append_comma(&mut info, "ANSI"),
+                        Some("(u))") => append_comma(&mut info, "Unicode"),
+                        _ => {}
+                    }
+                }
+            }
+        } else {
+            let mut ldr_off: i64 = -1;
+            if crate::parse::rd_u32(d, 0x30) == Some(0x6F6E_6E49) {
+                // "Inno" — 1.XX-5.1.X layout.
+                ver = "1.XX-5.1.X".to_string();
+                info = "Install".to_string();
+                ldr_off = crate::parse::rd_u32(d, 0x34)
+                    .map(|v| v as i64)
+                    .unwrap_or(-1);
+            } else if let Some((o, _)) =
+                crate::pe::resource_record(&pe.resources, 10 /* RT_RCDATA */, 11111)
+            {
+                ldr_off = o as i64;
+                ver = "5.1.X-X.X.X".to_string();
+                info = "Install".to_string();
+            }
+            if ldr_off >= 0 {
+                let lo = ldr_off as usize;
+                if crate::signature::get_signature(d, lo, 12)[..12] == *"72446C507453" {
+                    // rDlPtS — loader table.
+                    let mut setup = crate::parse::rd_u32(d, lo + 32)
+                        .and_then(|o| crate::parse::read_ansi_string(d, o as usize))
+                        .unwrap_or_default();
+                    if !setup.contains('(') {
+                        setup = crate::parse::rd_u32(d, lo + 36)
+                            .and_then(|o| crate::parse::read_ansi_string(d, o as usize))
+                            .unwrap_or_default();
+                    }
+                    let v = reg_exp(r"\((.*?)\)", &setup, 1);
+                    if !v.is_empty() {
+                        ver = v;
+                    }
+                    match reg_exp(r"\) \((.*?)\)", &setup, 1).as_str() {
+                        "a" => append_comma(&mut info, "ANSI"),
+                        "u" => append_comma(&mut info, "Unicode"),
+                        _ => {}
+                    }
+                }
+            }
+        }
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_INNOSETUP,
+            &ver,
+            &info,
+        );
+    }
+
+    // ---- WiX toolset (CAB overlay + .wixburn section) ----
+    if overlay.contains_key(&n::RECORD_NAME_CAB) && pe.has_section_name(".wixburn") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_WIXTOOLSET,
+            "3.X",
+            "",
+        );
+    }
+    if overlay.contains_key(&n::RECORD_NAME_NOSINSTALLER)
+        && section_names.contains_key(&n::RECORD_NAME_NOSINSTALLER)
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_NOSINSTALLER,
+            "",
+            "",
+        );
+    }
+
+    // ---- sfxcab.exe manifest → CAB SFX w/ embedded version ----
+    if manifest.contains("sfxcab.exe") {
+        let mut ver = String::new();
+        if deep
+            && pe.resources_section >= 0
+            && let Some(e) = pe.extents.get(pe.resources_section as usize)
+        {
+            let end = e.off + e.vsize.min(e.size as u32) as usize;
+            let base = end.saturating_sub(0x600).min(d.len());
+            let sz = (end.min(d.len())).saturating_sub(base);
+            if let Some(p) = crate::parse::find_ansi(
+                d,
+                base,
+                sz,
+                &[0xBD, 0x04, 0xEF, 0xFE, 0x00, 0x00, 0x01, 0x00],
+            ) {
+                // BD04EFFE sig → version dwords at +16.
+                let (a, b, c, dd) = (
+                    crate::parse::rd_u16(d, p + 18).unwrap_or(0),
+                    crate::parse::rd_u16(d, p + 16).unwrap_or(0),
+                    crate::parse::rd_u16(d, p + 22).unwrap_or(0),
+                    crate::parse::rd_u16(d, p + 20).unwrap_or(0),
+                );
+                ver = format!("{a}.{b}.{c}.{dd}");
+            }
+        }
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_SFX,
+            n::RECORD_NAME_CAB,
+            &ver,
+            "",
+        );
+    }
+
+    // ---- InstallAnywhere ----
+    if overlay.contains_key(&n::RECORD_NAME_INSTALLANYWHERE)
+        && rv.value("ProductName") == "InstallAnywhere"
+    {
+        let v = rv.value("ProductVersion").to_string();
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_INSTALLANYWHERE,
+            &v,
+            "",
+        );
+    }
+    if overlay.contains_key(&n::RECORD_NAME_GHOSTINSTALLER) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_GHOSTINSTALLER,
+            "1.0",
+            "",
+        );
+    }
+    if overlay.contains_key(&n::RECORD_NAME_QTINSTALLER) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_QTINSTALLER,
+            "",
+            "",
+        );
+    }
+    if overlay.contains_key(&n::RECORD_NAME_INSTALL4J) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_INSTALL4J,
+            "",
+            "",
+        );
+    }
+    if overlay.contains_key(&n::RECORD_NAME_SMARTINSTALLMAKER) {
+        // Version = overlay signature bytes 23..30 as hex.
+        let sig = if pe.overlay_offset >= 0 {
+            crate::signature::get_signature(d, pe.overlay_offset as usize, 150)
+        } else {
+            String::new()
+        };
+        let v = if sig.len() >= 60 {
+            // mid(46,14) hex chars → raw ASCII bytes 23..30.
+            let hex = &sig[46..60];
+            (0..7)
+                .filter_map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok())
+                .map(|b| b as char)
+                .collect::<String>()
+        } else {
+            String::new()
+        };
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_SMARTINSTALLMAKER,
+            &v,
+            "",
+        );
+    }
+    if overlay.contains_key(&n::RECORD_NAME_TARMAINSTALLER) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_TARMAINSTALLER,
+            "",
+            "",
+        );
+    }
+    if overlay.contains_key(&n::RECORD_NAME_CLICKTEAM) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_CLICKTEAM,
+            "",
+            "",
+        );
+    }
+
+    // ---- NSIS ----
+    if overlay.contains_key(&n::RECORD_NAME_NSIS) || manifest.contains("Nullsoft.NSIS") {
+        let mut info = overlay
+            .get(&n::RECORD_NAME_NSIS)
+            .map(|r| r.info.clone())
+            .unwrap_or_default();
+        if info.is_empty() {
+            info = String::new();
+        }
+        let ver = reg_exp("Null[sS]oft Install System v?(.*?)<", manifest, 1);
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_NSIS,
+            &ver,
+            &info,
+        );
+    }
+
+    // ---- InstallShield chain ----
+    if rv.value("ProductName").contains("InstallShield") {
+        let mut v = rv.value("FileVersion").trim().to_string();
+        v = v.replace(", ", ".");
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_INSTALLSHIELD,
+            &v,
+            "",
+        );
+    } else if manifest.contains("InstallShield") {
+        let mut ver = String::new();
+        if let Some((off, size)) = region(d, normal_data_section(pe), deep)
+            && let Some(pos) = crate::parse::find_ansi(d, off, size, b"SOFTWARE\\InstallShield\\1")
+        {
+            let s = crate::parse::read_ansi_string(d, pos).unwrap_or_default();
+            ver = s.split('\\').nth(2).unwrap_or("").to_string();
+        }
+        if ver.is_empty() {
+            ver = rv.value("ISInternalVersion").to_string();
+        }
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_INSTALLSHIELD,
+            &ver,
+            "",
+        );
+    } else if overlay.contains_key(&n::RECORD_NAME_INSTALLSHIELD) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_INSTALLSHIELD,
+            "",
+            "PackageForTheWeb",
+        );
+    } else if rv.value("CompanyName").contains("InstallShield") {
+        let mut v = rv.value("FileVersion").to_string();
+        let mut info = "";
+        if rv.value("CompanyName").contains("PackageForTheWeb") {
+            info = "PackageForTheWeb";
+        }
+        v = v.trim().to_string();
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_INSTALLSHIELD,
+            &v,
+            info,
+        );
+    }
+
+    if manifest.contains("name=\"InstallSimple\"")
+        || overlay.contains_key(&n::RECORD_NAME_INSTALLSIMPLE)
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_INSTALLSIMPLE,
+            "",
+            "",
+        );
+    }
+    if manifest.contains("AdvancedInstallerSetup") {
+        let mut ver = String::new();
+        if deep
+            && pe.overlay_offset >= 0
+            && pe.overlay_size > 0
+            && let Some(pos) = crate::parse::find_ansi(
+                d,
+                pe.overlay_offset as usize,
+                pe.overlay_size,
+                b"Advanced Installer ",
+            )
+        {
+            let s = crate::parse::read_ansi_string(d, pos).unwrap_or_default();
+            ver = s.split(' ').nth(2).unwrap_or("").to_string();
+        }
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_ADVANCEDINSTALLER,
+            &ver,
+            "",
+        );
+    }
+    if manifest.contains("Illustrate.Spoon.Installer") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_SPOONINSTALLER,
+            "",
+            "",
+        );
+    }
+    if manifest.contains("DeployMaster Installer") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_DEPLOYMASTER,
+            "",
+            "",
+        );
+    }
+    if manifest.contains("Gentee.Installer.Install")
+        || manifest.contains("name=\"gentee\"")
+        || (section_names.contains_key(&n::RECORD_NAME_GENTEEINSTALLER)
+            && crate::pe::resource_present(&pe.resources, 10, Some("SETUP_TEMP"), None))
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_GENTEEINSTALLER,
+            "",
+            "",
+        );
+    }
+    if manifest.contains("BitRock Installer") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_BITROCKINSTALLER,
+            "",
+            "",
+        );
+    }
+
+    // ---- version-resource driven installers ----
+    let file_ver = rv.value("FileVersion").trim().replace(", ", ".");
+    let fd = rv.value("FileDescription");
+    let pn = rv.value("ProductName");
+    let cm = rv.value("Comments");
+    let iname = rv.value("InternalName");
+
+    if fd.contains("GP-Install") && fd.contains("TASPro6-Install") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_GPINSTALL,
+            &file_ver,
+            "",
+        );
+    }
+    if fd.contains("Total Commander Installer") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_TOTALCOMMANDERINSTALLER,
+            &file_ver,
+            "",
+        );
+    }
+    if cm.contains("Actual Installer") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_ACTUALINSTALLER,
+            &file_ver,
+            "",
+        );
+    }
+    if cm.contains("Avast Antivirus") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_AVASTANTIVIRUS,
+            &file_ver,
+            "",
+        );
+    }
+    if pn.contains("Opera Installer") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_OPERA,
+            &file_ver,
+            "",
+        );
+    }
+    if pn.contains("Yandex Installer") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_YANDEX,
+            &file_ver,
+            "",
+        );
+    }
+    if pn.contains("Google Update") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_GOOGLE,
+            &file_ver,
+            "",
+        );
+    }
+    if fd.contains("Visual Studio Installer") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_MICROSOFTVISUALSTUDIO,
+            &file_ver,
+            "",
+        );
+    }
+    if iname.contains("Dropbox Update Setup") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_DROPBOX,
+            &file_ver,
+            "",
+        );
+    }
+    if pn.contains("VeraCrypt") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_VERACRYPT,
+            &file_ver,
+            "",
+        );
+    }
+    if fd.contains("Microsoft .NET Framework") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_MICROSOFTDOTNETFRAMEWORK,
+            &file_ver,
+            "",
+        );
+    }
+    if rv.value("LegalTrademarks").contains("Setup Factory") {
+        let mut v = rv.value("ProductVersion").trim().to_string();
+        if v.contains(',') {
+            v = v.replace(' ', "").replace(',', ".");
+        }
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_SETUPFACTORY,
+            &v,
+            "",
+        );
+    }
+    if cm.contains("This installation was built with InstallAware") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_INSTALLAWARE,
+            &file_ver,
+            "",
+        );
+    }
+    if fd.contains("Microsoft Office") && iname.contains("Bootstrapper.exe") {
+        let mut v = rv.value("ProductVersion").trim().to_string();
+        if v.contains(',') {
+            v = v.replace(' ', "").replace(',', ".");
+        }
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_MICROSOFTOFFICE,
+            &v,
+            "",
+        );
+    }
+    let squirrel = rv.value("SquirrelAwareVersion").trim();
+    if !squirrel.is_empty() {
+        let v = if squirrel == "1" {
+            "1.0.0-1.9.1"
+        } else {
+            squirrel
+        };
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_SQUIRRELINSTALLER,
+            v,
+            "",
+        );
+    }
+    if fd.contains("Java") && iname.contains("Setup Launcher") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_JAVA,
+            &file_ver,
+            "",
+        );
+    }
+    if overlay.contains_key(&n::RECORD_NAME_VMWARE) || fd.contains("VMware installation") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_VMWARE,
+            &file_ver,
+            "",
+        );
+    }
+
+    // ---- Windows Installer (MSI overlay / embedded CFBF) ----
+    if overlay.contains_key(&n::RECORD_NAME_MICROSOFTCOMPOUND) && pe.overlay_offset >= 0 {
+        let (v, inf, ok) = windows_installer_vi(d, pe.overlay_offset as usize, pe.overlay_size);
+        if ok && !v.is_empty() || ok && !inf.is_empty() {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_INSTALLER,
+                n::RECORD_NAME_WINDOWSINSTALLER,
+                &v,
+                &inf,
+            );
+        } else if ok && v.is_empty() {
+            // upstream emits only when sVersion non-empty.
+            let _ = inf;
+        }
+    }
+    if !misc.contains_key(&n::RECORD_NAME_WINDOWSINSTALLER) {
+        for r in &pe.resources {
+            if r.data_off == 0 || r.data_size == 0 {
+                continue;
+            }
+            let sig = crate::signature::get_signature(d, r.data_off, 8.min(r.data_size));
+            if sig == "D0CF11E0A1B11AE1" {
+                let (v, inf, ok) = windows_installer_vi(d, r.data_off, r.data_size);
+                if ok && !v.is_empty() {
+                    emit(
+                        misc,
+                        ftpe,
+                        rt::RECORD_TYPE_INSTALLER,
+                        n::RECORD_NAME_WINDOWSINSTALLER,
+                        &v,
+                        &inf,
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    // ---- WISE (STUB32.EXE export signature) ----
+    if pe.export_dll_name == "STUB32.EXE" {
+        let names = &pe.export_names;
+        let is_wise = (names.len() == 2
+            && (names.first().map(|s| s.as_str()) == Some("_MainWndProc@16")
+                || names.get(1).map(|s| s.as_str()) == Some("_StubFileWrite@12")))
+            || (names.len() == 6
+                && [
+                    "_LanguageDlg@16",
+                    "_PasswordDlg@16",
+                    "_ProgressDlg@16",
+                    "_UpdateCRC@8",
+                    "_t1@40",
+                    "_t2@12",
+                ]
+                .iter()
+                .enumerate()
+                .any(|(i, w)| names.get(i).map(|s| s.as_str()) == Some(w)));
+        if is_wise {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_INSTALLER,
+                n::RECORD_NAME_WISE,
+                "",
+                "",
+            );
+        }
+    }
+}
+
+/// `handle_SFX` (`nfd_pe.cpp` 4280..4501): non-.NET branch, SFX
+/// detections driven by overlay map + manifest + version resources.
+pub fn sfx(
+    d: &[u8],
+    pe: &PeInfo,
+    deep: bool,
+    ftpe: u16,
+    overlay: &DetectMap,
+    misc: &mut DetectMap,
+) {
+    use crate::gen_names::name as n;
+    use crate::gen_names::rtype as rt;
+    if pe.is_dotnet {
+        return;
+    }
+    let rv = &pe.res_version;
+    let manifest = &pe.manifest;
+
+    if overlay.contains_key(&n::RECORD_NAME_RAR)
+        && crate::pe::resource_present(
+            &pe.resources,
+            5, /* RT_DIALOG */
+            Some("STARTDLG"),
+            None,
+        )
+        && crate::pe::resource_present(&pe.resources, 5, Some("LICENSEDLG"), None)
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_SFX,
+            n::RECORD_NAME_WINRAR,
+            "",
+            "",
+        );
+    }
+    if (overlay.contains_key(&n::RECORD_NAME_WINRAR) || overlay.contains_key(&n::RECORD_NAME_ZIP))
+        && manifest.contains("WinRAR")
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_SFX,
+            n::RECORD_NAME_WINRAR,
+            "",
+            "",
+        );
+    }
+    if overlay.contains_key(&n::RECORD_NAME_ZIP)
+        && let Some((off, size)) = region(d, normal_data_section(pe), deep)
+        && crate::parse::find_ansi(d, off, size, b"ZIP self-extractor").is_some()
+    {
+        emit(misc, ftpe, rt::RECORD_TYPE_SFX, n::RECORD_NAME_ZIP, "", "");
+    }
+    if rv.value("ProductName").contains("7-Zip") {
+        let v = rv.value("ProductVersion").to_string();
+        emit(misc, ftpe, rt::RECORD_TYPE_SFX, n::RECORD_NAME_7Z, &v, "");
+    }
+    if !misc.contains_key(&n::RECORD_NAME_7Z) && overlay.contains_key(&n::RECORD_NAME_7Z) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_SFX,
+            n::RECORD_NAME_7Z,
+            "",
+            "Modified",
+        );
+    }
+    if overlay.contains_key(&n::RECORD_NAME_SQUEEZSFX) && rv.value("ProductName").contains("Squeez")
+    {
+        // Upstream tags the type INSTALLER but inserts into mapResultSFX.
+        let v = rv.value("FileVersion").trim().to_string();
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_SQUEEZSFX,
+            &v,
+            "",
+        );
+    }
+    let iname = rv.value("InternalName");
+    if iname.contains("WinACE") || iname.contains("WinAce") || iname.contains("UNACE") {
+        let v = rv.value("ProductVersion").to_string();
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_SFX,
+            n::RECORD_NAME_WINACE,
+            &v,
+            "",
+        );
+    }
+    if manifest.contains("WinZipComputing.WinZip") || pe.has_section_name("_winzip_") {
+        let seg = manifest.split("assemblyIdentity").nth(1).unwrap_or("");
+        let v = crate::scans::reg_exp("version=\"(.*?)\"", seg, 1);
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_SFX,
+            n::RECORD_NAME_WINZIP,
+            &v,
+            "",
+        );
+    }
+    if rv
+        .value("FileDescription")
+        .contains("Self-Extracting Cabinet")
+    {
+        let v = rv.value("FileVersion").to_string();
+        emit(misc, ftpe, rt::RECORD_TYPE_SFX, n::RECORD_NAME_CAB, &v, "");
+    }
+    if rv.value("ProductName").contains("GkSetup Self extractor") {
+        let v = rv.value("ProductVersion").to_string();
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_SFX,
+            n::RECORD_NAME_GKSETUPSFX,
+            &v,
+            "",
+        );
+    }
+}
+
+/// `handle_wxWidgets` (`nfd_pe.cpp` 7159..7246): `^WX*` import DLL →
+/// dynamic version, `WXWINDOWMENU` menu resource → static; deep-scan
+/// const-data version strings refine the version.
+pub fn wx_widgets(d: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut DetectMap) {
+    use crate::gen_names::name as n;
+    use crate::gen_names::rtype as rt;
+    if pe.is_dotnet {
+        return;
+    }
+    let mut dynamic = false;
+    let mut statik = false;
+    let mut version = String::new();
+    let mut info = String::new();
+    for h in &pe.import_headers {
+        if crate::scans::reg_exp_present("^WX", &h.name.to_uppercase()) {
+            let dv = crate::scans::reg_exp("(\\d+)", &h.name.to_uppercase(), 0);
+            if let Ok(v) = dv.parse::<f64>()
+                && v != 0.0
+            {
+                if v < 100.0 {
+                    version = format!("{:.1}", v / 10.0);
+                } else if v < 1000.0 {
+                    version = format!("{:.2}", v / 100.0);
+                }
+                dynamic = true;
+            }
+            break;
+        }
+    }
+    if !dynamic
+        && crate::pe::resource_present(
+            &pe.resources,
+            4, /* RT_MENU */
+            Some("WXWINDOWMENU"),
+            None,
+        )
+    {
+        statik = true;
+    }
+    if (dynamic || statik)
+        && deep
+        && let Some((off, size)) = region(d, const_data_section(pe), true)
+    {
+        for (pat, ver, inf) in [
+            (
+                "3.1.1 (wchar_t,Visual C++ 1900,wx containers)",
+                "3.1.1",
+                "Visual C++ 1900",
+            ),
+            (
+                "3.1.2 (wchar_t,Visual C++ 1900,wx containers,compatible with 3.0)",
+                "3.1.2",
+                "Visual C++ 1900",
+            ),
+        ] {
+            if crate::parse::find_ansi(d, off, size, pat.as_bytes()).is_some() {
+                version = ver.to_string();
+                info = inf.to_string();
+                break;
+            }
+        }
+    }
+    if dynamic || statik {
+        let mut inf = String::new();
+        if statik {
+            inf = "Static".to_string();
+        }
+        append_comma(&mut inf, &info);
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_LIBRARY,
+            n::RECORD_NAME_WXWIDGETS,
+            &version,
+            &inf,
+        );
+    }
+}

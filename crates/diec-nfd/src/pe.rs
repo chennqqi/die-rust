@@ -85,6 +85,21 @@ pub struct PeInfo {
     pub cert_offset: usize,
     /// See [`Self::cert_offset`]; `Size` field of the security dir.
     pub cert_size: usize,
+    /// Overlay size in bytes (0 when `overlay_offset` is -1).
+    pub overlay_size: usize,
+    /// Section index containing the resource directory
+    /// (`getImageDirectoryEntrySection(RESOURCE)`), -1 when absent.
+    pub resources_section: i32,
+    /// Export DLL name (`IMAGE_EXPORT_DIRECTORY.Name`), empty when the
+    /// image has no export table.
+    pub export_dll_name: String,
+    /// Flattened resource entries (level-3 leaf offsets resolved).
+    pub resources: Vec<crate::scans::ResourceEntry>,
+    /// `getResourceManifest` — first `RT_MANIFEST` resource body as an
+    /// ANSI string, capped at 4000 bytes upstream.
+    pub manifest: String,
+    /// Parsed `VS_VERSIONINFO` (`getResourcesVersion` subset).
+    pub res_version: crate::pe_version::ResourcesVersion,
 }
 
 fn rd_u16(d: &[u8], off: usize) -> Option<u16> {
@@ -262,10 +277,24 @@ fn collect_export_names(d: &[u8], l: &PeLayout) -> Vec<String> {
     out
 }
 
-/// Index of the section containing the import directory
+/// `IMAGE_EXPORT_DIRECTORY.Name` (exp_off+12) → ANSI DLL name
+/// (`exportHeader.sName`).
+fn export_dll_name(d: &[u8], l: &PeLayout) -> String {
+    let Some(exp_off) = rva_to_off(l, l.dir_rva[DIR_EXPORT]) else {
+        return String::new();
+    };
+    let Some(name_rva) = rd_u32(d, exp_off + 12) else {
+        return String::new();
+    };
+    let Some(no) = rva_to_off(l, name_rva) else {
+        return String::new();
+    };
+    crate::parse::read_ansi_string_len(d, no, 256).unwrap_or_default()
+}
+
+/// Index of the section containing a data-directory RVA
 /// (`XPE::getImageDirectoryEntrySection`), -1 when unmapped.
-fn import_section_index(l: &PeLayout) -> i32 {
-    let rva = l.dir_rva[DIR_IMPORT];
+fn dir_section_index(l: &PeLayout, rva: u32) -> i32 {
     if rva == 0 {
         return -1;
     }
@@ -276,6 +305,17 @@ fn import_section_index(l: &PeLayout) -> i32 {
         }
     }
     -1
+}
+
+/// `XPE::getImageDirectoryEntrySection(RESOURCE)` — section index of
+/// the resource tree, -1 when absent.
+fn import_section_index(l: &PeLayout) -> i32 {
+    dir_section_index(l, l.dir_rva[DIR_IMPORT])
+}
+
+/// See [`import_section_index`]; resource-directory variant.
+fn resources_section_index(l: &PeLayout) -> i32 {
+    dir_section_index(l, l.dir_rva[DIR_RESOURCE])
 }
 
 /// .NET metadata version: CLI header (dir 14) → metadata root →
@@ -431,11 +471,13 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
             end = end.max(s.raw_ptr as u64 + s.raw_size as u64);
         }
     }
-    info.overlay_offset = if end != 0 && end < d.len() as u64 {
-        end as i64
+    if end != 0 && end < d.len() as u64 {
+        info.overlay_offset = end as i64;
+        info.overlay_size = d.len() - end as usize;
     } else {
-        -1
-    };
+        info.overlay_offset = -1;
+        info.overlay_size = 0;
+    }
 
     info.is_dotnet = l.dir_rva[DIR_CLR] != 0;
     info.dotnet_version = dotnet_metadata_version(d, &l);
@@ -469,6 +511,22 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
     info.image_base = l.image_base;
     info.import_section = import_section_index(&l);
     info.export_names = collect_export_names(d, &l);
+    info.export_dll_name = export_dll_name(d, &l);
+    info.resources_section = resources_section_index(&l);
+    info.resources = collect_resources_l(d, &l);
+    // getResourceManifest: first RT_MANIFEST(24) leaf, ANSI, <=4000 B.
+    if let Some(r) = info
+        .resources
+        .iter()
+        .find(|r| r.id1 == 24 && r.data_off != 0)
+    {
+        let n = r
+            .data_size
+            .min(4000)
+            .min(d.len().saturating_sub(r.data_off));
+        info.manifest = String::from_utf8_lossy(&d[r.data_off..r.data_off + n]).into_owned();
+    }
+    info.res_version = crate::pe_version::resources_version_from(d, &info.resources);
     info.tls_present = l.dir_rva[9] != 0;
     info.cert_offset = l.dir_rva[4] as usize;
     info.cert_size = l.dir_size[4] as usize;
@@ -595,12 +653,10 @@ fn collect_rich(d: &[u8], info: &mut PeInfo) {
 
 /// Flattened resource `(type, name)` pairs — level-1 and level-2 of the
 /// PE resource tree — for `NFD_Binary::PE_resourcesScan`.
-pub fn collect_resources(d: &[u8]) -> Vec<crate::scans::ResourceEntry> {
+/// Resource-tree walk bound to an already-parsed layout.
+fn collect_resources_l(d: &[u8], l: &PeLayout) -> Vec<crate::scans::ResourceEntry> {
     use crate::scans::ResourceEntry;
-    let Some(l) = parse_layout(d) else {
-        return Vec::new();
-    };
-    let Some(root) = rva_to_off(&l, l.dir_rva[DIR_RESOURCE]) else {
+    let Some(root) = rva_to_off(l, l.dir_rva[DIR_RESOURCE]) else {
         return Vec::new();
     };
     let mut out = Vec::new();
@@ -658,7 +714,7 @@ pub fn collect_resources(d: &[u8]) -> Vec<crate::scans::ResourceEntry> {
                 {
                     let dentry = root + e3sub as usize;
                     if let (Some(rva), Some(sz)) = (rd_u32(d, dentry), rd_u32(d, dentry + 4))
-                        && let Some(foff) = rva_to_off(&l, rva)
+                        && let Some(foff) = rva_to_off(l, rva)
                     {
                         data_off = foff;
                         data_size = sz as usize;
@@ -679,6 +735,47 @@ pub fn collect_resources(d: &[u8]) -> Vec<crate::scans::ResourceEntry> {
 }
 
 /// Read a UTF-16LE resource name string at `off`.
+/// `XPE::isResourcePresent` — two-level match on (type, name-or-id).
+/// `want` is either a numeric level-2 id or a level-2 name string.
+pub fn resource_present(
+    res: &[crate::scans::ResourceEntry],
+    id1: u32,
+    name2: Option<&str>,
+    id2: Option<u32>,
+) -> bool {
+    res.iter().any(|r| {
+        if r.id1 != id1 {
+            return false;
+        }
+        match (name2, id2) {
+            (Some(n), _) => r.name2.as_deref() == Some(n),
+            (None, Some(i)) => r.id2 == i,
+            (None, None) => true,
+        }
+    })
+}
+
+/// `XPE::getResourceRecord` — first leaf of (type, level-2 id);
+/// returns (data_off, data_size).
+pub fn resource_record(
+    res: &[crate::scans::ResourceEntry],
+    id1: u32,
+    id2: u32,
+) -> Option<(usize, usize)> {
+    res.iter()
+        .find(|r| r.id1 == id1 && r.id2 == id2)
+        .map(|r| (r.data_off, r.data_size))
+        .filter(|(o, _)| *o != 0)
+}
+
+/// Collect the flattened resource list (parses layout internally).
+pub fn collect_resources(d: &[u8]) -> Vec<crate::scans::ResourceEntry> {
+    let Some(l) = parse_layout(d) else {
+        return Vec::new();
+    };
+    collect_resources_l(d, &l)
+}
+
 fn rd_res_name(d: &[u8], off: usize) -> Option<String> {
     let len = rd_u16(d, off)? as usize;
     let mut s = String::with_capacity(len);

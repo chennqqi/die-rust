@@ -721,9 +721,14 @@ fn pe_scan(
     );
 
     // Resource scan (name/id pairs flattened from the resource tree).
-    let res = pe::collect_resources(data);
-    if !res.is_empty() {
-        crate::scans::resources_scan(resources, &res, t::PE_RESOURCES_RECORDS, actual, ftpe);
+    if !pe.resources.is_empty() {
+        crate::scans::resources_scan(
+            resources,
+            &pe.resources,
+            t::PE_RESOURCES_RECORDS,
+            actual,
+            ftpe,
+        );
     }
 
     // .NET `#Strings`/`#US` heap scans (`mapDotAnsiStringsDetects` /
@@ -815,6 +820,18 @@ fn pe_scan(
     crate::pe_handlers::neolite(data, &pe, opts.deep_scan, ftpe, misc);
     crate::pe_handlers::petools(section_names, ftpe, misc);
     crate::pe_handlers::joiners(data, &pe, ftpe, imports, entrypoint, misc);
+    crate::pe_handlers::installers(
+        data,
+        &pe,
+        opts.deep_scan,
+        ftpe,
+        overlay,
+        header,
+        section_names,
+        misc,
+    );
+    crate::pe_handlers::sfx(data, &pe, opts.deep_scan, ftpe, overlay, misc);
+    crate::pe_handlers::wx_widgets(data, &pe, opts.deep_scan, ftpe, misc);
     crate::pe_handlers::borland(data, &pe, opts.deep_scan, ftpe, header, entrypoint, misc);
     crate::pe_handlers::tools(
         data,
