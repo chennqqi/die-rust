@@ -77,6 +77,8 @@ interface ScanDetectionDto {
   is_heuristic: boolean | null;
   is_a_heuristic: boolean | null;
   original_name: string | null;
+  /** Engine that produced this detection ("nfd" for the NFD pass). */
+  engine: string | null;
 }
 
 interface StructuredDiagnosticDto {
@@ -144,6 +146,8 @@ interface ScanFlagsDto {
   first_wrapper_only: boolean;
   hide_unknown: boolean;
   no_dedup: boolean;
+  /** Run the NFD/SpecAbstract second engine (Phase 21). */
+  nfd?: boolean;
   /** Optional file type override. When set, only rules for this type are run. */
   file_type?: string | null;
 }
@@ -186,6 +190,7 @@ const defaultFlags: ScanFlagsDto = {
   first_wrapper_only: false,
   hide_unknown: false,
   no_dedup: false,
+  nfd: false,
 };
 
 const defaultSettings: AppSettings = {
@@ -477,6 +482,7 @@ export default function App() {
       // Build flags with file_type override (null when "Auto").
       const flagsWithFileType: ScanFlagsDto = {
         ...flags,
+        nfd: flags.nfd || settings.engine.nfd_enabled,
         file_type: flags.file_type && flags.file_type !== "Auto" ? flags.file_type : null,
       };
       const res = await invoke<ScanResultDto>("scan_file", {
@@ -1456,6 +1462,7 @@ function DetectionTreeView({
             {d.is_a_heuristic && <span className="text-orange-400 font-medium">(A-Heur) </span>}
             {d.is_heuristic && !d.is_a_heuristic && <span className="text-yellow-400 font-medium">(Heur) </span>}
             <span className="text-fg-primary">{d.name}</span>
+            {d.engine && <span className="text-fg-muted text-[10px] ml-1">[{d.engine}]</span>}
             {d.file_part && <span className="text-fg-muted text-[10px] ml-1">[{d.file_part}]</span>}
             {d.offset != null && (
               <span className="text-fg-muted text-[10px] ml-1">@0x{d.offset.toString(16)}</span>

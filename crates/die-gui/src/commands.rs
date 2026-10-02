@@ -78,6 +78,9 @@ pub struct ScanFlagsDto {
     pub resources: bool,
     /// Archives scan.
     pub archives: bool,
+    /// Run the NFD/SpecAbstract second engine.
+    #[serde(default)]
+    pub nfd: bool,
     /// First wrapper only.
     pub first_wrapper_only: bool,
     /// Hide unknown detections.
@@ -104,6 +107,7 @@ impl From<ScanFlagsDto> for ScanFlags {
             resources: dto.resources,
             overlays: dto.overlay,
             archives: dto.archives,
+            nfd: dto.nfd,
         }
     }
 }
@@ -139,6 +143,8 @@ pub struct ScanDetectionDto {
     pub is_a_heuristic: Option<bool>,
     /// Optional original name for archive/container entries.
     pub original_name: Option<String>,
+    /// Engine that produced this detection (`"nfd"` for the NFD pass).
+    pub engine: Option<String>,
 }
 
 impl From<ScanDetection> for ScanDetectionDto {
@@ -158,6 +164,7 @@ impl From<ScanDetection> for ScanDetectionDto {
             is_heuristic: d.is_heuristic,
             is_a_heuristic: d.is_a_heuristic,
             original_name: d.original_name,
+            engine: d.engine,
         }
     }
 }

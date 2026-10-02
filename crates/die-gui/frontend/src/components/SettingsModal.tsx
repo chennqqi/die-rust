@@ -403,7 +403,19 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                       />
                       DIE engine
                     </label>
-                    {/* NFD engine removed: no backend exists (ADR 0035). */}
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={settings.engine.nfd_enabled}
+                        onChange={(e) =>
+                          updateSettings((s) => ({
+                            ...s,
+                            engine: { ...s.engine, nfd_enabled: e.target.checked },
+                          }))
+                        }
+                      />
+                      NFD engine
+                    </label>
                     <label>
                       <input
                         type="checkbox"
