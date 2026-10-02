@@ -1525,6 +1525,7 @@ dependencies = [
  "criterion",
  "diec-core",
  "diec-formats",
+ "diec-nfd",
  "diec-rules",
  "flate2",
  "hex",
@@ -1555,6 +1556,13 @@ name = "diec-formats"
 version = "0.9.1"
 dependencies = [
  "criterion",
+ "diec-core",
+]
+
+[[package]]
+name = "diec-nfd"
+version = "0.9.1"
+dependencies = [
  "diec-core",
 ]
 
