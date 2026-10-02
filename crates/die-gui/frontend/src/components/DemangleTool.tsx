@@ -20,6 +20,14 @@ const MODES: { value: string; label: string }[] = [
   { value: "rust", label: "Rust" },
   { value: "dlang", label: "D" },
   { value: "java", label: "Java" },
+  { value: "swift", label: "Swift" },
+  { value: "go", label: "Go" },
+  { value: "gnat", label: "GNAT (Ada)" },
+  { value: "haskell", label: "Haskell" },
+  { value: "ocaml", label: "OCaml" },
+  { value: "tru64", label: "Tru64" },
+  { value: "sun", label: "SunPro" },
+  { value: "gnuv2", label: "GNU v2" },
 ];
 
 export function DemangleTool() {

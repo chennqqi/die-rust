@@ -13,7 +13,7 @@
 //! | JAVA            | built-in JNI-style decoder           |
 //! | BORLAND32       | built-in simplified `@`-segment decoder |
 //! | WATCOM          | built-in simplified `W?` decoder     |
-//! | GNU_V2/GNAT/SWIFT/GO/HASKELL/OCAML/TRU64/SUN | not implemented (raw passthrough) |
+//! | GNU_V2/GNAT/SWIFT/GO/HASKELL/OCAML/TRU64/SUN | built-in simplified decoders (Phase 18.A) |
 
 use serde::{Deserialize, Serialize};
 
@@ -48,23 +48,23 @@ pub enum DemangleMode {
     Watcom,
     /// Rust (legacy `ZN`/`_R` and v0 `_R` schemes).
     Rust,
-    /// GNAT/Ada (`_ada_` prefix) — not implemented.
+    /// GNAT/Ada (`_ada_` prefix) — simplified decoder.
     Gnat,
     /// D language (`_D` prefix) — simplified decoder.
     Dlang,
-    /// Swift (`$s`/`_$s` prefix) — not implemented.
+    /// Swift (`$s`/`_$s` prefix) — simplified decoder.
     Swift,
-    /// Go symbol conventions — not implemented.
+    /// Go symbol conventions — escape/separator normalizer.
     Go,
-    /// Haskell (`zi` + `_closure`/`_info`/`_entry`) — not implemented.
+    /// Haskell (`zi` + `_closure`/`_info`/`_entry`) — z-encoding decoder.
     Haskell,
-    /// OCaml (`caml` prefix) — not implemented.
+    /// OCaml (`caml` prefix) — simplified decoder.
     Ocaml,
-    /// DEC/Compaq Tru64 (`__X` marker) — not implemented.
+    /// DEC/Compaq Tru64 (`__X` marker) — simplified decoder.
     Tru64,
-    /// SunPro / Sun Studio (`__1c` scheme) — not implemented.
+    /// SunPro / Sun Studio (`__1c` scheme) — simplified decoder.
     Sun,
-    /// GNU v2 (`__vt_`/`__F`/`__Q` style) — not implemented.
+    /// GNU v2 (`__vt_`/`__F`/`__Q` style) — simplified decoder.
     GnuV2,
     /// Java / JNI (`Java_` prefix) — simplified decoder.
     Java,
@@ -270,6 +270,14 @@ pub fn demangle_with_mode(symbol: &str, mode: DemangleMode) -> String {
         DemangleMode::Java => demangle_java(symbol),
         DemangleMode::Borland32 => demangle_borland32(symbol),
         DemangleMode::Watcom => demangle_watcom(symbol),
+        DemangleMode::Swift => demangle_swift(symbol),
+        DemangleMode::Go => Some(demangle_go(symbol)),
+        DemangleMode::Gnat => demangle_gnat(symbol),
+        DemangleMode::Haskell => demangle_haskell(symbol),
+        DemangleMode::Ocaml => demangle_ocaml(symbol),
+        DemangleMode::Tru64 => demangle_tru64(symbol),
+        DemangleMode::Sun => demangle_sun(symbol),
+        DemangleMode::GnuV2 => demangle_gnuv2(symbol),
         _ => None,
     };
     out.unwrap_or_else(|| symbol.to_string())
@@ -409,6 +417,385 @@ fn demangle_watcom(s: &str) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
+/// Shared legacy type-letter map for Sun/Tru64/GNU v2 signatures.
+/// These ABIs use single-letter codes similar to but simpler than Itanium.
+fn legacy_type_letter(c: char) -> &'static str {
+    match c {
+        'v' => "void",
+        'c' => "char",
+        'w' => "wchar_t",
+        'b' => "bool",
+        's' => "short",
+        'i' => "int",
+        'l' => "long",
+        'f' => "float",
+        'd' => "double",
+        'r' => "long double",
+        'e' => "...",
+        'x' => "long long",
+        'j' => "unsigned int",
+        _ => "?",
+    }
+}
+
+/// Decode a legacy single-letter parameter sequence into a joined list.
+fn legacy_params(sig: &str) -> String {
+    // Trim a trailing return-type segment after '_' if present is the
+    // caller's job; here we map each leading type letter.
+    sig.chars()
+        .filter(|c| *c != '_')
+        .map(legacy_type_letter)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Simplified Swift decoder: `$s`/`_$s` prefix, length-prefixed
+/// identifiers (`4main`), then an optional function signature tail.
+/// Handles the common `$s<mod><name>y?<types>F`/`...F` shape; exotic
+/// substitutions (std shorthands, generics) fall back to raw segments.
+fn demangle_swift(s: &str) -> Option<String> {
+    let s = s.strip_prefix('_').unwrap_or(s);
+    let rest = s.strip_prefix("$s").or_else(|| s.strip_prefix("$S"))?;
+    let b = rest.as_bytes();
+    let mut i = 0usize;
+    let mut parts: Vec<String> = Vec::new();
+    // Skip well-known entity markers.
+    while i < b.len() {
+        if b[i].is_ascii_digit() {
+            let start = i;
+            while i < b.len() && b[i].is_ascii_digit() {
+                i += 1;
+            }
+            let n: usize = rest[start..i].parse().ok()?;
+            if n == 0 || i + n > rest.len() {
+                return Some(if parts.is_empty() {
+                    s.to_string()
+                } else {
+                    parts.join(".")
+                });
+            }
+            parts.push(rest[i..i + n].to_string());
+            i += n;
+        } else if b[i] == b's' && i + 1 < b.len() && b[i + 1].is_ascii_digit() {
+            // 's' std-module shorthand: treat like a length-prefixed name
+            // already handled by the digit branch on the next byte.
+            i += 1;
+        } else {
+            break;
+        }
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    let tail = &rest[i..];
+    let mut out = parts.join(".");
+    // Function signature tail: 'y<ret>F' / '<params>F' / bare 'F'.
+    if tail.contains('F') {
+        let params = tail.trim_end_matches('F').trim_start_matches('y');
+        if params.is_empty() {
+            out.push_str("()");
+        } else {
+            out.push_str(&format!("({})", legacy_params_swift(params)));
+        }
+    }
+    Some(out)
+}
+
+/// Map a subset of Swift type-letter codes to names.
+fn legacy_params_swift(sig: &str) -> String {
+    sig.chars()
+        .map(|c| match c {
+            'i' => "Int",
+            'd' => "Double",
+            'f' => "Float",
+            'S' => "String",
+            'b' => "Bool",
+            _ => "?",
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Simplified Go symbol normalizer: Go linker symbols are already mostly
+/// readable (`main.main`, `runtime.goexit`); the decoder decodes `%NN`
+/// percent escapes and normalizes mid-dot separators to `.`.
+fn demangle_go(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16)
+        {
+            out.push(v as char);
+            i += 3;
+            continue;
+        }
+        // Push the full (possibly multi-byte) char, not a raw byte.
+        let c = s[i..].chars().next().unwrap();
+        out.push(c);
+        i += c.len_utf8();
+    }
+    out.replace(['\u{00b7}', '\u{2215}'], ".")
+}
+
+/// Simplified GNAT/Ada decoder: strip `_ada_`, split library levels on
+/// `__`, and decode common `O<op>` operator encodings.
+fn demangle_gnat(s: &str) -> Option<String> {
+    let rest = s.strip_prefix("_ada_")?;
+    let parts: Vec<String> = rest.split("__").map(gnat_op).collect();
+    if parts.is_empty() {
+        return None;
+    }
+    Some(parts.join("."))
+}
+
+/// Decode a GNAT operator token (`Oadd` -> `"+"`, etc.); non-operator
+/// segments pass through unchanged.
+fn gnat_op(seg: &str) -> String {
+    let table = [
+        ("Oadd", "+"),
+        ("Ominus", "-"),
+        ("Omult", "*"),
+        ("Odivide", "/"),
+        ("Omod", "mod"),
+        ("Orem", "rem"),
+        ("Oand", "and"),
+        ("Oor", "or"),
+        ("Oxor", "xor"),
+        ("Olt", "<"),
+        ("Ole", "<="),
+        ("Ogt", ">"),
+        ("Oge", ">="),
+        ("Oeq", "="),
+        ("One", "/="),
+        ("Oabs", "abs"),
+        ("Onot", "not"),
+        ("Oppow", "**"),
+    ];
+    for (enc, op) in table {
+        if seg == enc {
+            return format!("\"{}\"", op);
+        }
+    }
+    seg.to_string()
+}
+
+/// Simplified Haskell (GHC z-encoding) decoder: decode `z`-escape pairs
+/// and keep the `_closure`/`_info`/`_entry` kind as a suffix note.
+fn demangle_haskell(s: &str) -> Option<String> {
+    let (kind, base) = ["_closure", "_info", "_entry"]
+        .iter()
+        .find_map(|k| s.strip_suffix(k).map(|b| (*k, b)))
+        .unwrap_or(("", s));
+    if !base.contains("zi") && !base.contains("zt") && !base.contains("zz") {
+        return None;
+    }
+    Some(format!("{}{}", z_decode(base), kind_suffix(kind)))
+}
+
+/// Decode GHC z-encoding escapes (`zi`=':' `zt`='*' `zz`='z' …).
+fn z_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0usize;
+    while i < b.len() {
+        if b[i] == b'z' && i + 1 < b.len() {
+            let decoded = match b[i + 1] {
+                b'a' => '&',
+                b'b' => '|',
+                b'c' => ':',
+                b'd' => '$',
+                b'e' => '=',
+                b'f' => '?',
+                b'g' => '>',
+                b'h' => '#',
+                b'i' => ':',
+                b'j' => '.',
+                b'l' => '<',
+                b'm' => '(',
+                b'n' => ')',
+                b'o' => '[',
+                b'p' => ']',
+                b'q' => '\'',
+                b'r' => ')',
+                b's' => '-',
+                b't' => '*',
+                b'u' => '_',
+                b'v' => 'v',
+                b'z' => 'z',
+                _ => {
+                    out.push('z');
+                    i += 1;
+                    continue;
+                }
+            };
+            out.push(decoded);
+            i += 2;
+            continue;
+        }
+        if b[i] == b'Z' && i + 1 < b.len() && b[i + 1].is_ascii_uppercase() {
+            out.push((b[i + 1] - b'A' + b'a') as char);
+            i += 2;
+            continue;
+        }
+        out.push(b[i] as char);
+        i += 1;
+    }
+    out
+}
+
+/// Render a Haskell symbol-kind suffix as a readable note.
+fn kind_suffix(kind: &str) -> &'static str {
+    match kind {
+        "_closure" => " [closure]",
+        "_info" => " [info]",
+        "_entry" => " [entry]",
+        _ => "",
+    }
+}
+
+/// Simplified OCaml decoder: `caml<Module>__<name>_<stamp>` →
+/// `Module.name`; `caml<Module>.<field>` globals decode to `Module.field`.
+fn demangle_ocaml(s: &str) -> Option<String> {
+    let rest = s.strip_prefix("caml")?;
+    if rest.is_empty() || !rest.as_bytes()[0].is_ascii_uppercase() {
+        return None;
+    }
+    if let Some((module, tail)) = rest.split_once("__") {
+        // Drop the trailing numeric stamp (_<digits>).
+        let name = match tail.rfind('_') {
+            Some(i) if tail[i + 1..].bytes().all(|c| c.is_ascii_digit()) => &tail[..i],
+            _ => tail,
+        };
+        return Some(format!("{}.{}", module, name.replace("__", ".")));
+    }
+    if let Some((module, field)) = rest.split_once('.') {
+        return Some(format!("{}.{}", module, field));
+    }
+    Some(rest.to_string())
+}
+
+/// Simplified Tru64 (Compaq C++) decoder: `name__X<params>` →
+/// `name(<params>)`; `__vtbl__<name>` → `vtable for <name>`.
+fn demangle_tru64(s: &str) -> Option<String> {
+    if let Some(vt) = s.strip_prefix("__vtbl__") {
+        return Some(format!("vtable for {}", vt));
+    }
+    let pos = s.find("__X").filter(|&i| i > 0)?;
+    let name = &s[..pos];
+    let params = &s[pos + 3..];
+    Some(format!("{}({})", name, legacy_params(params)))
+}
+
+/// Simplified SunPro (Sun Studio) decoder: `__1c<L><name>6F_<sig>_`
+/// where `<L>` is `'A'+name_len`, `6F` marks a function, and the
+/// signature tail encodes return/parameter type letters.
+fn demangle_sun(s: &str) -> Option<String> {
+    let rest = s.strip_prefix("__1c")?;
+    let b = rest.as_bytes();
+    if b.is_empty() {
+        return None;
+    }
+    // Length char: 'A' encodes 0, 'B' encodes 1, … (SunPro scheme).
+    let len = (b[0] as usize).checked_sub(b'A' as usize)?;
+    if len > 26 || 1 + len > rest.len() {
+        return None;
+    }
+    let name = &rest[1..1 + len];
+    let tail = &rest[1 + len..];
+    let mut out = name.to_string();
+    if let Some(sig) = tail.strip_prefix("6F") {
+        let sig = sig.trim_matches('_');
+        let (ret, params) = if sig.len() > 1 {
+            (sig.chars().last(), &sig[..sig.len() - 1])
+        } else {
+            (sig.chars().next(), "")
+        };
+        let args = if params.is_empty() || params == "v" {
+            String::new()
+        } else {
+            legacy_params(params)
+        };
+        if let Some(r) = ret {
+            return Some(format!("{} {}({})", legacy_type_letter(r), out, args));
+        }
+        out.push_str(&format!("({})", args));
+    }
+    Some(out)
+}
+
+/// Simplified GNU v2 (g++ 2.x) decoder covering:
+/// `__vt_<class>` vtables, `_$_<class>` destructors, `name__F<params>`
+/// free functions, and `name__<class-spec>F<params>` members where
+/// class-spec is `<len><name>` or `Q<n>_<len><name>...`.
+fn demangle_gnuv2(s: &str) -> Option<String> {
+    if let Some(rest) = s.strip_prefix("__vt_") {
+        return parse_gnuv2_name(rest).map(|n| format!("vtable for {}", n));
+    }
+    if let Some(rest) = s.strip_prefix("_$_") {
+        return parse_gnuv2_name(rest)
+            .map(|n| format!("{}::~{}", n, n.rsplit("::").next().unwrap_or(&n)));
+    }
+    let pos = s.find("__").filter(|&i| i > 0)?;
+    let name = &s[..pos];
+    let tail = &s[pos + 2..];
+    if let Some(sig) = tail.strip_prefix('F') {
+        return Some(format!("{}({})", name, legacy_params(sig)));
+    }
+    // Member form: `<class-spec>F<params>` — consume the class spec first
+    // so an 'F' inside the class name is not mistaken for the marker.
+    let (class, used) = gnuv2_class_prefix(tail)?;
+    let params = tail[used..].strip_prefix('F')?;
+    Some(format!("{}::{}({})", class, name, legacy_params(params)))
+}
+
+/// Parse a GNU v2 class spec prefix: `<len><name>` or `Q<n>_<len><name>…`.
+/// Returns the dotted class path and the number of bytes consumed.
+fn gnuv2_class_prefix(spec: &str) -> Option<(String, usize)> {
+    if let Some(q) = spec.strip_prefix('Q') {
+        let n: usize = q.chars().next()?.to_digit(10)? as usize;
+        let body = q[1..].strip_prefix('_').unwrap_or(&q[1..]);
+        let mut parts = Vec::new();
+        let mut i = 0usize;
+        let b = body.as_bytes();
+        while i < b.len() && parts.len() < n {
+            let start = i;
+            while i < b.len() && b[i].is_ascii_digit() {
+                i += 1;
+            }
+            if start == i {
+                return None;
+            }
+            let len: usize = body[start..i].parse().ok()?;
+            if i + len > body.len() {
+                return None;
+            }
+            parts.push(&body[i..i + len]);
+            i += len;
+        }
+        if parts.len() == n {
+            // consumed = 'Q' + digit + optional '_' + i bytes of body
+            let sep = if q[1..].starts_with('_') { 1 } else { 0 };
+            return Some((parts.join("::"), 1 + 1 + sep + i));
+        }
+        return None;
+    }
+    // `<len><name>` form.
+    let digits: String = spec.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let len: usize = digits.parse().ok()?;
+    spec.get(digits.len()..digits.len() + len)
+        .map(|n| (n.to_string(), digits.len() + len))
+}
+
+/// Parse a GNU v2 length-prefixed name used by `__vt_`/`_$_` forms.
+fn parse_gnuv2_name(spec: &str) -> Option<String> {
+    gnuv2_class_prefix(spec)
+        .map(|(n, _)| n)
+        .or_else(|| Some(spec.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -458,7 +845,7 @@ mod tests {
     }
 
     #[test]
-    fn detect_unimplemented_modes() {
+    fn detect_phase18a_modes() {
         assert_eq!(detect_mode("$s4test4testyF"), DemangleMode::Swift);
         assert_eq!(detect_mode("_ada_foo"), DemangleMode::Gnat);
         assert_eq!(detect_mode("camlFoo"), DemangleMode::Ocaml);
@@ -533,8 +920,76 @@ mod tests {
     }
 
     #[test]
-    fn demangle_unimplemented_passthrough() {
-        assert_eq!(demangle_symbol("$s4test4testyF", "auto"), "$s4test4testyF");
+    fn demangle_unknown_passthrough() {
         assert_eq!(demangle_symbol("plain_symbol", "auto"), "plain_symbol");
+    }
+
+    // -- Phase 18.A: previously-deferred modes --
+
+    #[test]
+    fn demangle_swift_function() {
+        // $s<mod-len><mod><name-len><name>y?..F form.
+        assert_eq!(demangle_symbol("$s4test5helloyF", "auto"), "test.hello()");
+        let out = demangle_symbol("_$s7MyClass8callbackySiF", "swift");
+        assert!(out.contains("MyClass.callback"), "got: {}", out);
+        assert!(out.contains("Int"), "got: {}", out);
+    }
+
+    #[test]
+    fn demangle_go_separators() {
+        assert_eq!(demangle_symbol("main.main", "go"), "main.main");
+        // Mid-dot / division-slash used in generic Go symbol names.
+        assert_eq!(demangle_symbol("main\u{00b7}main", "go"), "main.main");
+        // Percent escapes (Go linker encodes '.'/'/'/'%' in package paths).
+        assert_eq!(
+            demangle_symbol("foo%2ecom%2fbar%2eBaz", "go"),
+            "foo.com/bar.Baz"
+        );
+    }
+
+    #[test]
+    fn demangle_gnat_ada() {
+        assert_eq!(demangle_symbol("_ada_pack__proc", "gnat"), "pack.proc");
+        assert_eq!(demangle_symbol("_ada_foo__Oadd", "gnat"), "foo.\"+\"");
+    }
+
+    #[test]
+    fn demangle_haskell_z_encoding() {
+        // 'zi' -> ':' inside identifiers.
+        let out = demangle_symbol("base_GHCziIO_zdws_info", "haskell");
+        assert!(out.contains(':'), "got: {}", out);
+        assert!(out.ends_with("[info]"), "got: {}", out);
+        // '_closure' suffix.
+        let out = demangle_symbol("Main_zimain_closure", "haskell");
+        assert!(out.ends_with("[closure]"), "got: {}", out);
+    }
+
+    #[test]
+    fn demangle_ocaml_module() {
+        assert_eq!(demangle_symbol("camlList__map_1008", "auto"), "List.map");
+        assert_eq!(
+            demangle_symbol("camlPrintf.printf", "ocaml"),
+            "Printf.printf"
+        );
+    }
+
+    #[test]
+    fn demangle_tru64_function() {
+        assert_eq!(demangle_symbol("foo__Xi", "auto"), "foo(int)");
+        assert_eq!(demangle_symbol("__vtbl__3Bar", "tru64"), "vtable for 3Bar");
+    }
+
+    #[test]
+    fn demangle_sun_function() {
+        // __1cD put 6F _v_  -> void put()
+        assert_eq!(demangle_symbol("__1cDput6F_v_", "auto"), "void put()");
+    }
+
+    #[test]
+    fn demangle_gnuv2_forms() {
+        assert_eq!(demangle_symbol("__vt_3Foo", "auto"), "vtable for Foo");
+        assert_eq!(demangle_symbol("_$_3Foo", "gnuv2"), "Foo::~Foo");
+        assert_eq!(demangle_symbol("bar__3FooFi", "gnuv2"), "Foo::bar(int)");
+        assert_eq!(demangle_symbol("baz__Fi", "gnuv2"), "baz(int)");
     }
 }
