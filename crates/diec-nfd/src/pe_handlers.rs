@@ -8,20 +8,11 @@
 use crate::gen_tables as t;
 use crate::pe::{PeInfo, SectionExtent};
 use crate::pe_tables::{MSVC_BUILD_VS, MSVC_LINKER_VS};
-use crate::scans::{DetectMap, ScanRecord};
+use crate::scans::{DetectMap, EmitTarget, ResultMaps, ScanRecord};
 use crate::{gen_names::ft, gen_names::name as n, gen_names::rtype as rt};
 
-fn emit(map: &mut DetectMap, ft_id: u16, rtype: u8, name: u16, ver: &str, info: &str) {
-    map.entry(name).or_insert_with(|| ScanRecord {
-        name,
-        rtype,
-        ft: ft_id,
-        variant: 0,
-        version: ver.to_string(),
-        info: info.to_string(),
-        heuristic: false,
-        unknown: false,
-    });
+fn emit(map: &mut impl EmitTarget, ft_id: u16, rtype: u8, name: u16, ver: &str, info: &str) {
+    crate::scans::push(map, ft_id, rtype, name, ver, info, None, None);
 }
 
 /// Case-insensitive import-library presence
@@ -131,7 +122,7 @@ fn type_name(pe: &PeInfo) -> &'static str {
 /// `handle_OperationSystem` — `XPE::getFileFormatInfo` OS resolution:
 /// subsystem → OS family, Linux native-override machine check, and the
 /// Windows version table with the 64-bit >=5.02 floor.
-pub fn operation_system(pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
+pub fn operation_system(pe: &PeInfo, ftpe: u16, misc: &mut ResultMaps) {
     let (os_name, show_ver) = match pe.subsystem {
         2 | 3 | 8 | 16 => (n::RECORD_NAME_WINDOWS, true),
         10..=13 => (n::RECORD_NAME_UNKNOWN, false), // UEFI
@@ -345,9 +336,13 @@ pub fn import_heuristics(pe: &PeInfo, ftpe: u16, imports: &mut DetectMap) {
 
 /// `handle_DebugData` — `.stab`/`.stabstr` → Stabs record; `.debug_info`
 /// → DWARF version (u16 at +4, 0..=7 → "v.0").
-pub fn debug_data(data: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
-    let names: Vec<&str> = pe.section_names.iter().map(String::as_str).collect();
-    if names.contains(&".stab") && names.contains(&".stabstr") {
+pub fn debug_data(data: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut ResultMaps) {
+    let has = |want: &str| {
+        pe.section_names
+            .iter()
+            .any(|s| s.eq_ignore_ascii_case(want))
+    };
+    if has(".stab") && has(".stabstr") {
         emit(
             misc,
             ftpe,
@@ -410,7 +405,7 @@ pub fn microsoft(
     header: &DetectMap,
     entrypoint: &DetectMap,
     dot_ansi: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     // ssLinker initial state.
     let has_mslinker = header.contains_key(&n::RECORD_NAME_MICROSOFTLINKER);
@@ -556,7 +551,6 @@ pub fn microsoft(
         }
     } else {
         net = Some((pe.dotnet_version.clone(), String::new()));
-        compiler_dot.get_or_insert((n::RECORD_NAME_VISUALCSHARP, String::new()));
         if dot_ansi.contains_key(&n::RECORD_NAME_VBNET) {
             compiler_vb = Some((n::RECORD_NAME_VBNET, String::new(), String::new()));
         }
@@ -815,7 +809,7 @@ pub fn gcc(
     header: &DetectMap,
     overlay: &DetectMap,
     entrypoint: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     if pe.is_dotnet {
         return;
@@ -972,7 +966,7 @@ pub fn watcom(
     ftpe: u16,
     header: &DetectMap,
     entrypoint: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     let mut linker: Option<(String, String)> = None;
     let mut compiler: Option<(u16, String, String)> = None;
@@ -1022,7 +1016,7 @@ pub fn watcom(
 
 /// `handle_Signtools` — security-directory first cert with
 /// `wRevision=0x200`/`wCertificateType=2` → WINAUTH "2.0"/"PKCS #7".
-pub fn signtools(data: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
+pub fn signtools(data: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut ResultMaps) {
     if pe.cert_offset == 0 || pe.cert_size == 0 {
         return;
     }
@@ -1051,7 +1045,7 @@ pub fn signtools(data: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
 
 /// `handle_DongleProtection` — single `NOVEX*` import → Guardian
 /// Stealth dongle record (emitted via the SFX map upstream; we use misc).
-pub fn dongle(pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
+pub fn dongle(pe: &PeInfo, ftpe: u16, misc: &mut ResultMaps) {
     if pe.import_headers.len() == 1
         && pe.import_headers[0]
             .name
@@ -1071,7 +1065,7 @@ pub fn dongle(pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
 
 /// `handle_NeoLite` — EP section contains "NeoLite Executable File
 /// Compressor" (deep scan, EP not in section 0).
-pub fn neolite(data: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut DetectMap) {
+pub fn neolite(data: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut ResultMaps) {
     if pe.is_dotnet || pe.entrypoint_section_index() == 0 || !deep {
         return;
     }
@@ -1092,7 +1086,7 @@ pub fn neolite(data: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut Detec
 
 /// `handle_PETools` — section-name detects VMUNPACKER/XVOLKOLAK/HOODLUM
 /// are re-emitted as PETools records.
-pub fn petools(section_names: &DetectMap, ftpe: u16, misc: &mut DetectMap) {
+pub fn petools(section_names: &DetectMap, ftpe: u16, misc: &mut ResultMaps) {
     for nm in [
         n::RECORD_NAME_VMUNPACKER,
         n::RECORD_NAME_XVOLKOLAK,
@@ -1121,7 +1115,7 @@ pub fn joiners(
     ftpe: u16,
     imports: &DetectMap,
     entrypoint: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     let overlay_size = if pe.overlay_offset >= 0 {
         data.len().saturating_sub(pe.overlay_offset as usize)
@@ -1312,7 +1306,7 @@ pub fn borland(
     header: &DetectMap,
     entrypoint: &DetectMap,
     dot_ansi: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     #[derive(Clone, Copy, PartialEq)]
     enum Company {
@@ -1704,7 +1698,7 @@ pub fn tools(
     entrypoint: &DetectMap,
     section_names: &DetectMap,
     code_section: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     let _ = overlay;
     let cd = if deep { const_data_section(pe) } else { None };
@@ -2328,7 +2322,7 @@ pub fn installers(
     overlay: &DetectMap,
     header: &DetectMap,
     section_names: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     use crate::gen_names::name as n;
     use crate::gen_names::rtype as rt;
@@ -3008,7 +3002,7 @@ pub fn sfx(
     deep: bool,
     ftpe: u16,
     overlay: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     use crate::gen_names::name as n;
     use crate::gen_names::rtype as rt;
@@ -3128,7 +3122,7 @@ pub fn sfx(
 /// `handle_wxWidgets` (`nfd_pe.cpp` 7159..7246): `^WX*` import DLL →
 /// dynamic version, `WXWINDOWMENU` menu resource → static; deep-scan
 /// const-data version strings refine the version.
-pub fn wx_widgets(d: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut DetectMap) {
+pub fn wx_widgets(d: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut ResultMaps) {
     use crate::gen_names::name as n;
     use crate::gen_names::rtype as rt;
     if pe.is_dotnet {
@@ -3271,7 +3265,7 @@ pub fn net_protection(
     overlay: &DetectMap,
     imports: &DetectMap,
     entrypoint: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     // bIsNetPresent ≈ cliInfo.bValid || isNETPresent&&deep — both mean
     // "CLI dir present" here.
@@ -3279,9 +3273,9 @@ pub fn net_protection(
         return;
     }
     /// Copy a scan record into misc (upstream `scansToScan`).
-    fn take(src: &DetectMap, name: u16, misc: &mut DetectMap) {
+    fn take(src: &DetectMap, name: u16, misc: &mut ResultMaps) {
         if let Some(r) = src.get(&name) {
-            misc.entry(name).or_insert_with(|| r.clone());
+            misc.entry_or_insert(name, || r.clone());
         }
     }
     let code_region = region(d, normal_code_section(pe), deep);
@@ -3290,19 +3284,18 @@ pub fn net_protection(
     if let Some((off, size)) = code_region
         && let Some((v, inf)) = enigma_vi(d, off, size)
     {
-        let e = misc
-            .entry(n::RECORD_NAME_ENIGMA)
-            .or_insert_with(|| ScanRecord {
-                name: n::RECORD_NAME_ENIGMA,
-                rtype: rt::RECORD_TYPE_PROTECTOR,
-                ft: ftpe,
-                variant: 0,
-                version: v,
-                info: inf,
-                heuristic: false,
-                unknown: false,
-            });
-        let _ = e;
+        misc.entry_or_insert(n::RECORD_NAME_ENIGMA, || ScanRecord {
+            name: n::RECORD_NAME_ENIGMA,
+            rtype: rt::RECORD_TYPE_PROTECTOR,
+            ft: ftpe,
+            variant: 0,
+            version: v,
+            info: inf,
+            heuristic: false,
+            unknown: false,
+            sname: None,
+            stype: None,
+        });
     }
     // DotNetReactor — fixed signature in section 1 (deep only).
     if deep && pe.extents.len() >= 2 {
@@ -3501,35 +3494,28 @@ pub fn net_protection(
 
 /// `QMap::insert` semantics — replace an existing record of the same
 /// name (`emit` keeps the first).
-fn put(map: &mut DetectMap, ft_id: u16, rtype: u8, name: u16, ver: &str, info: &str) {
-    map.insert(
-        name,
-        ScanRecord {
-            name,
-            rtype,
-            ft: ft_id,
-            variant: 0,
-            version: ver.to_string(),
-            info: info.to_string(),
-            heuristic: false,
-            unknown: false,
-        },
-    );
+fn put(map: &mut impl EmitTarget, ft_id: u16, rtype: u8, name: u16, ver: &str, info: &str) {
+    crate::scans::push(map, ft_id, rtype, name, ver, info, None, None);
 }
 
 /// Clone `name` from `src` into `misc` with replace semantics.
-fn take_put(src: &DetectMap, name: u16, misc: &mut DetectMap) {
+fn take_put(src: &DetectMap, name: u16, misc: &mut impl EmitTarget) {
     if let Some(r) = src.get(&name) {
-        misc.insert(name, r.clone());
+        misc.push_rec(r.clone());
     }
 }
 
 /// Clone `name` from `src` into `misc` and post-edit the copy.
-fn take_edit(src: &DetectMap, name: u16, misc: &mut DetectMap, edit: impl Fn(&mut ScanRecord)) {
+fn take_edit(
+    src: &DetectMap,
+    name: u16,
+    misc: &mut impl EmitTarget,
+    edit: impl Fn(&mut ScanRecord),
+) {
     if let Some(r) = src.get(&name) {
         let mut r = r.clone();
         edit(&mut r);
-        misc.insert(name, r);
+        misc.push_rec(r);
     }
 }
 
@@ -3560,7 +3546,7 @@ fn section<'a>(s: &'a str, sep: &str, start: usize) -> &'a str {
 
 /// `isProtectionPresent` — true when any result record of a
 /// protection-flavoured type is already present in `misc`.
-fn protection_present(misc: &DetectMap) -> bool {
+fn protection_present(misc: &ResultMaps) -> bool {
     misc.values().any(|r| {
         matches!(
             r.rtype,
@@ -3817,7 +3803,7 @@ pub fn protection(
     ep_section: &DetectMap,
     section_names: &DetectMap,
     imports: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     let ep_sig = if pe.entry_point_offset >= 0 {
         crate::signature::get_signature(d, pe.entry_point_offset as usize, 150)
@@ -4093,6 +4079,8 @@ pub fn protection(
                 info: String::new(),
                 heuristic: false,
                 unknown: false,
+                sname: None,
+                stype: None,
             };
             if let Some((v, _)) = enigma_vi(d, off, size) {
                 rec.version = v;
@@ -4288,6 +4276,8 @@ pub fn protection(
                     info: String::new(),
                     heuristic: false,
                     unknown: false,
+                    sname: None,
+                    stype: None,
                 };
                 if let Some(hex) = ep_sig.get(102..110) {
                     let bytes: Vec<u8> = (0..4)
@@ -4784,7 +4774,7 @@ pub fn protection(
 
 /// `handle_SafeengineShielden` — EP detect + `.sedata` EP section name +
 /// version banner in section 1.
-pub fn safeengine(d: &[u8], pe: &PeInfo, ftpe: u16, entrypoint: &DetectMap, misc: &mut DetectMap) {
+pub fn safeengine(d: &[u8], pe: &PeInfo, ftpe: u16, entrypoint: &DetectMap, misc: &mut ResultMaps) {
     if pe.is_dotnet || !entrypoint.contains_key(&n::RECORD_NAME_SAFEENGINESHIELDEN) {
         return;
     }
@@ -4819,7 +4809,7 @@ pub fn safeengine(d: &[u8], pe: &PeInfo, ftpe: u16, entrypoint: &DetectMap, misc
 }
 
 /// `handle_VProtect` — `VProtect` EP section name + banner.
-pub fn vprotect(d: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut DetectMap) {
+pub fn vprotect(d: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut ResultMaps) {
     if pe.is_dotnet {
         return;
     }
@@ -4858,7 +4848,7 @@ pub fn vprotect(d: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut DetectM
 }
 
 /// `handle_TTProtect` — first import-position hash + `.TTP` EP section.
-pub fn ttprotect(pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
+pub fn ttprotect(pe: &PeInfo, ftpe: u16, misc: &mut ResultMaps) {
     if pe.is_dotnet {
         return;
     }
@@ -4884,7 +4874,7 @@ pub fn ttprotect(pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
 }
 
 /// `handle_VMProtect` — EP detect forward.
-pub fn vmprotect(pe: &PeInfo, entrypoint: &DetectMap, misc: &mut DetectMap) {
+pub fn vmprotect(pe: &PeInfo, entrypoint: &DetectMap, misc: &mut ResultMaps) {
     if pe.is_dotnet {
         return;
     }
@@ -4893,7 +4883,7 @@ pub fn vmprotect(pe: &PeInfo, entrypoint: &DetectMap, misc: &mut DetectMap) {
 
 /// `handle_tElock` — 2 imports (kernel32!GetModuleHandleA +
 /// user32!MessageBoxA) + EP detect.
-pub fn telock(pe: &PeInfo, entrypoint: &DetectMap, misc: &mut DetectMap) {
+pub fn telock(pe: &PeInfo, entrypoint: &DetectMap, misc: &mut ResultMaps) {
     if pe.is_dotnet || pe.import_headers.len() != 2 {
         return;
     }
@@ -4908,7 +4898,7 @@ pub fn telock(pe: &PeInfo, entrypoint: &DetectMap, misc: &mut DetectMap) {
 
 /// `handle_Armadillo` — linker 83.82 or KERNEL32/USER32/GDI32 import
 /// order + Armadillo import-hash detect.
-pub fn armadillo(pe: &PeInfo, ftpe: u16, imports: &DetectMap, misc: &mut DetectMap) {
+pub fn armadillo(pe: &PeInfo, ftpe: u16, imports: &DetectMap, misc: &mut ResultMaps) {
     if pe.is_dotnet {
         return;
     }
@@ -4937,7 +4927,7 @@ pub fn armadillo(pe: &PeInfo, ftpe: u16, imports: &DetectMap, misc: &mut DetectM
 
 /// `handle_Obsidium` — 2-3 imports with kernel32!ExitProcess +
 /// user32!MessageBoxA + EP patterns.
-pub fn obsidium(d: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
+pub fn obsidium(d: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut ResultMaps) {
     if pe.is_dotnet || !(2..=3).contains(&pe.import_headers.len()) {
         return;
     }
@@ -4958,7 +4948,7 @@ pub fn obsidium(d: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
 }
 
 /// `handle_Themida` — Winlicense/T themida shape probes.
-pub fn themida(pe: &PeInfo, ftpe: u16, entrypoint: &DetectMap, misc: &mut DetectMap) {
+pub fn themida(pe: &PeInfo, ftpe: u16, entrypoint: &DetectMap, misc: &mut ResultMaps) {
     if pe.is_dotnet {
         return;
     }
@@ -5014,7 +5004,7 @@ pub fn themida(pe: &PeInfo, ftpe: u16, entrypoint: &DetectMap, misc: &mut Detect
 
 /// `handle_StarForce` — `.sforce3`/`.ps4` section names; single-position
 /// import library name becomes info.
-pub fn starforce(pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
+pub fn starforce(pe: &PeInfo, ftpe: u16, misc: &mut ResultMaps) {
     let v = if pe.has_section_name(".sforce3") {
         "3.X"
     } else if pe.has_section_name(".ps4") {
@@ -5044,7 +5034,7 @@ pub fn petite(
     pe: &PeInfo,
     entrypoint: &DetectMap,
     section_names: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     if pe.is_dotnet || pe.is64 {
         return;
@@ -5136,7 +5126,7 @@ pub fn petite(
 
 /// `handle_PrivateEXEProtector` — import shape + zero low
 /// characteristics + PEP-linker/TurboLinker header detects.
-pub fn private_exe(pe: &PeInfo, ftpe: u16, header: &DetectMap, misc: &mut DetectMap) {
+pub fn private_exe(pe: &PeInfo, ftpe: u16, header: &DetectMap, misc: &mut ResultMaps) {
     if pe.is_dotnet {
         return;
     }
@@ -5185,7 +5175,7 @@ pub fn private_exe(pe: &PeInfo, ftpe: u16, header: &DetectMap, misc: &mut Detect
 /// `handle_VisualBasicCryptors` — import-map forwards to protector
 /// results; 1337 Exe Crypter additionally requires MSVBVM60 import and
 /// an overlay detect (version/info carried over).
-pub fn vb_cryptors(pe: &PeInfo, overlay: &DetectMap, imports: &DetectMap, misc: &mut DetectMap) {
+pub fn vb_cryptors(pe: &PeInfo, overlay: &DetectMap, imports: &DetectMap, misc: &mut ResultMaps) {
     if overlay.contains_key(&n::RECORD_NAME_1337EXECRYPTER)
         && has_lib(pe, "MSVBVM60.DLL")
         && let Some(r) = overlay.get(&n::RECORD_NAME_1337EXECRYPTER).cloned()
@@ -5251,7 +5241,7 @@ pub fn vb_cryptors(pe: &PeInfo, overlay: &DetectMap, imports: &DetectMap, misc: 
 
 /// `handle_DelphiCryptors` — import-map forwards to protector results;
 /// CigiCigi additionally requires an RCDATA resource named `AYARLAR`.
-pub fn delphi_cryptors(pe: &PeInfo, imports: &DetectMap, misc: &mut DetectMap) {
+pub fn delphi_cryptors(pe: &PeInfo, imports: &DetectMap, misc: &mut ResultMaps) {
     for nm in [
         n::RECORD_NAME_ASSCRYPTER,
         n::RECORD_NAME_AASE,
@@ -5310,7 +5300,7 @@ pub fn unknown_protection(
     section_names: &DetectMap,
     imports: &DetectMap,
     entrypoint: &DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     let present = protection_present(misc);
     if !present
@@ -5328,6 +5318,8 @@ pub fn unknown_protection(
             info: String::new(),
             heuristic: true,
             unknown: false,
+            sname: None,
+            stype: None,
         };
         misc.insert(r.name, r);
     }
@@ -5359,6 +5351,8 @@ pub fn unknown_protection(
             info: inf,
             heuristic: true,
             unknown: false,
+            sname: None,
+            stype: None,
         };
         misc.insert(r.name, r);
     }
@@ -5375,6 +5369,8 @@ pub fn unknown_protection(
             info: String::new(),
             heuristic: true,
             unknown: false,
+            sname: None,
+            stype: None,
         };
         misc.insert(r.name, r);
     }
@@ -5390,6 +5386,8 @@ pub fn unknown_protection(
             info: inf,
             heuristic: true,
             unknown: false,
+            sname: None,
+            stype: None,
         };
         misc.insert(r.name, r);
     }
@@ -5408,6 +5406,8 @@ pub fn unknown_protection(
             info: String::new(),
             heuristic: true,
             unknown: false,
+            sname: None,
+            stype: None,
         };
         misc.insert(r.name, r);
     }
@@ -5450,6 +5450,8 @@ pub fn unknown_protection(
         info,
         heuristic: true,
         unknown: false,
+        sname: None,
+        stype: None,
     };
     misc.insert(r.name, r);
 }
@@ -5457,8 +5459,8 @@ pub fn unknown_protection(
 /// `handle_FixDetects` — result suppression rules run after all
 /// handlers (upstream keeps per-category maps; we apply the same
 /// name-based removals against the merged `misc` map).
-pub fn fix_detects(misc: &mut DetectMap) {
-    let has = |m: &DetectMap, nm: u16| m.contains_key(&nm);
+pub fn fix_detects(misc: &mut ResultMaps) {
+    let has = |m: &ResultMaps, nm: u16| m.contains_key(&nm);
     if has(misc, n::RECORD_NAME_RLPACK) || has(misc, n::RECORD_NAME_BACKDOORPECOMPRESSPROTECTOR) {
         misc.remove(&n::RECORD_NAME_MICROSOFTLINKER);
         misc.remove(&n::RECORD_NAME_MASM);

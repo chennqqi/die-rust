@@ -2009,7 +2009,14 @@ nrv 单测），前端 `npm run build` 通过。
   文本 `handle_Texts` 全量（C/C++ guard/include、HTML、Python、
   XML version、PHP、shebang）。新增 `flate2` 依赖（JAR manifest
   解压；与 workspace 既有版本一致）。
-  待办：Phase 23 差分 oracle（Qt harness）收敛后逐行升 ✅。
+- **Phase 23 已完成**：独立 Qt oracle（`tools/nfd-oracle`，Qt 仅限
+  oracle harness）+ `tools/nfd_diff.py` 差分 harness；`ResultMaps`
+  重构（按上游 `mapResult*` 命名 map + rtype 路由 + insert-overwrite）、
+  binary promotion 层 + 4 个子检测引擎（archiveheaders/legacy/
+  containers/compression）全量移植、`scanProcess` 文件分片递归
+  （OVERLAY/RESOURCE/STREAM + isScanable/aggressive 门控 + 子扫描
+  Unknown 抑制）、各专用 getInfo 补齐与解析修正（COFF 字符串表节名、
+  短 ELF 宽松读、PE32+ 偏移）。**差分收敛：72 语料文件 0 差异**。
 
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。

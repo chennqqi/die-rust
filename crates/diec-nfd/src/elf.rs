@@ -3,11 +3,13 @@
 //! (`handle_OperationSystem`, `handle_CommentSection`, `handle_GCC`,
 //! `handle_DebugData`, `handle_Tools`).
 
-use crate::scans::{DetectMap, ScanRecord};
+use crate::scans::{DetectMap, EmitTarget, ResultMaps, ScanRecord};
 use crate::{gen_names::name as n, gen_names::rtype as rt, parse, vi};
 
 fn rec(ft: u16, rtype: u8, name: u16, ver: &str, info: &str) -> ScanRecord {
     ScanRecord {
+        sname: None,
+        stype: None,
         name,
         rtype,
         ft,
@@ -19,9 +21,8 @@ fn rec(ft: u16, rtype: u8, name: u16, ver: &str, info: &str) -> ScanRecord {
     }
 }
 
-fn emit(map: &mut DetectMap, ft: u16, rtype: u8, name: u16, ver: &str, info: &str) {
-    map.entry(name)
-        .or_insert_with(|| rec(ft, rtype, name, ver, info));
+fn emit(map: &mut impl EmitTarget, ft: u16, rtype: u8, name: u16, ver: &str, info: &str) {
+    map.push_rec(rec(ft, rtype, name, ver, info));
 }
 
 /// OSABI value → `RECORD_NAME` (`XELF::getFileFormatInfo` osabi map).
@@ -49,37 +50,114 @@ fn osabi_name(osabi: u8) -> Option<u16> {
 /// `e_machine` → `getMachinesS` string (prefix `EM_`).
 fn machine_str(m: u16) -> &'static str {
     match m {
-        0 => "EM_NONE",
-        1 => "EM_M32",
-        2 => "EM_SPARC",
-        3 => "EM_386",
-        4 => "EM_68K",
-        5 => "EM_88K",
-        7 => "EM_860",
-        8 => "EM_MIPS",
-        15 => "EM_PARISC",
-        18 => "EM_SPARC32PLUS",
-        20 => "EM_PPC",
-        21 => "EM_PPC64",
-        22 => "EM_S390",
-        40 => "EM_ARM",
-        41 => "EM_ALPHA",
-        42 => "EM_SH",
-        43 => "EM_SPARCV9",
-        50 => "EM_IA_64",
-        62 => "EM_AMD64",
-        83 => "EM_AVR",
-        87 => "EM_V850",
-        88 => "EM_M32R",
-        89 => "EM_MN10300",
-        92 => "EM_OPENRISC",
-        94 => "EM_XTENSA",
-        106 => "EM_BLACKFIN",
-        113 => "EM_ALTERA_NIOS2",
-        140 => "EM_TI_C6000",
-        183 => "EM_AARCH64",
-        243 => "EM_RISC_V",
-        258 => "EM_LOONGARCH",
+        0 => "NONE",
+        1 => "M32",
+        2 => "SPARC",
+        3 => "386",
+        4 => "68K",
+        5 => "88K",
+        6 => "486",
+        7 => "860",
+        8 => "MIPS",
+        9 => "S370",
+        10 => "MIPS_RS3_LE",
+        11 => "RS6000",
+        15 => "PARISC",
+        16 => "nCUBE",
+        17 => "VPP500",
+        18 => "SPARC32PLUS",
+        19 => "960",
+        20 => "PPC",
+        21 => "PPC64",
+        22 => "S390",
+        23 => "SPU",
+        36 => "V800",
+        37 => "FR20",
+        38 => "RH32",
+        39 => "RCE",
+        40 => "ARM",
+        41 => "ALPHA",
+        42 => "SH",
+        43 => "SPARCV9",
+        44 => "TRICORE",
+        45 => "ARC",
+        46 => "H8_300",
+        47 => "H8_300H",
+        48 => "H8S",
+        49 => "H8_500",
+        50 => "IA_64",
+        51 => "MIPS_X",
+        52 => "COLDFIRE",
+        53 => "68HC12",
+        54 => "MMA",
+        55 => "PCP",
+        56 => "NCPU",
+        57 => "NDR1",
+        58 => "STARCORE",
+        59 => "ME16",
+        60 => "ST100",
+        61 => "TINYJ",
+        62 => "AMD64",
+        63 => "PDSP",
+        66 => "FX66",
+        67 => "ST9PLUS",
+        68 => "ST7",
+        69 => "68HC16",
+        70 => "68HC11",
+        71 => "68HC08",
+        72 => "68HC05",
+        73 => "SVX",
+        74 => "ST19",
+        75 => "VAX",
+        76 => "CRIS",
+        77 => "JAVELIN",
+        78 => "FIREPATH",
+        79 => "ZSP",
+        80 => "MMIX",
+        81 => "HUANY",
+        82 => "PRISM",
+        83 => "AVR",
+        84 => "FR30",
+        85 => "D10V",
+        86 => "D30V",
+        87 => "V850",
+        88 => "M32R",
+        89 => "MN10300",
+        90 => "MN10200",
+        91 => "PJ",
+        92 => "OPENRISC",
+        93 => "ARC_A5",
+        94 => "XTENSA",
+        95 => "VIDEOCORE",
+        96 => "TMM_GPP",
+        97 => "NS32K",
+        98 => "TPC",
+        99 => "SNP1K",
+        100 => "ST200",
+        101 => "IP2K",
+        102 => "MAX",
+        103 => "CR",
+        104 => "F2MC16",
+        105 => "MSP430",
+        106 => "BLACKFIN",
+        107 => "SE_C33",
+        108 => "SEP",
+        109 => "ARCA",
+        110 => "UNICORE",
+        111 => "EXCESS",
+        112 => "DXP",
+        113 => "ALTERA_NIOS2",
+        114 => "CRX",
+        115 => "XGATE",
+        116 => "C166",
+        117 => "M16C",
+        118 => "DSPIC30F",
+        119 => "CE",
+        120 => "M32C",
+        140 => "TI_C6000",
+        183 => "AARCH64",
+        243 => "RISC_V",
+        258 => "LOONGARCH",
         _ => "Unknown",
     }
 }
@@ -141,7 +219,7 @@ fn u32_of(e: &parse::ElfInfo, b: &[u8], off: usize) -> Option<u32> {
 type Extractor = (fn(&str) -> vi::Vi, u8, u16);
 
 /// Run the full `NFD_ELF` semantic handler set over parsed ELF info.
-pub fn elf_semantic_scan(data: &[u8], ft: u16, ep: &DetectMap, misc: &mut DetectMap) {
+pub fn elf_semantic_scan(data: &[u8], ft: u16, ep: &DetectMap, misc: &mut ResultMaps) {
     let Some(e) = parse::elf_info(data) else {
         return;
     };
@@ -540,7 +618,7 @@ pub fn elf_semantic_scan(data: &[u8], ft: u16, ep: &DetectMap, misc: &mut Detect
     // handle_Tools moves comment detects into the result categories;
     // keep them grouped by their RECORD_TYPE when draining.
     for r in comment_detects.values() {
-        misc.entry(r.name).or_insert_with(|| r.clone());
+        misc.entry_or_insert(r.name, || r.clone());
     }
 
     // ---- handle_GCC — .gcc_except_table fallback ----

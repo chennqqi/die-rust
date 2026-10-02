@@ -4,20 +4,11 @@
 
 use crate::mach_tables as mt;
 use crate::parse::{self, rd_u32_be_le};
-use crate::scans::{DetectMap, ScanRecord};
+use crate::scans::{EmitTarget, ResultMaps};
 use crate::{gen_names::name as n, gen_names::rtype as rt};
 
-fn emit(map: &mut DetectMap, ft: u16, rtype: u8, name: u16, ver: &str, info: &str) {
-    map.entry(name).or_insert_with(|| ScanRecord {
-        name,
-        rtype,
-        ft,
-        variant: 0,
-        version: ver.to_string(),
-        info: info.to_string(),
-        heuristic: false,
-        unknown: false,
-    });
+fn emit(map: &mut impl EmitTarget, ft: u16, rtype: u8, name: u16, ver: &str, info: &str) {
+    crate::scans::push(map, ft, rtype, name, ver, info, None, None);
 }
 
 /// Parsed Mach-O load-command summary.
@@ -29,6 +20,10 @@ pub struct MachInfo {
     pub cputype: u32,
     /// `cpusubtype` (low 24 bits).
     pub cpusubtype: u32,
+    /// 64-bit magic (`MH_MAGIC_64`/`MH_CIGAM_64`).
+    pub is64: bool,
+    /// `filetype` header field (`MH_*`).
+    pub filetype: u32,
     /// Load commands as `(cmd, file offset)`.
     pub commands: Vec<(u32, usize)>,
     /// LC_LOAD_DYLIB records: `(basename, current_version)`.
@@ -56,6 +51,8 @@ pub fn mach_info(d: &[u8]) -> Option<MachInfo> {
         big,
         cputype: ru32(4)?,
         cpusubtype: ru32(8)? & 0xFF_FFFF,
+        is64,
+        filetype: ru32(12)?,
         ..Default::default()
     };
     let ncmds = ru32(16)? as usize;
@@ -413,17 +410,73 @@ fn toolchain_from_sdk(sdk: &str, os: u16, col: usize) -> &'static str {
     ""
 }
 
+/// `XMACH::_getArch` — CPU-type table (the ARM/MC680x0 subtype
+/// refinements are not needed by any current caller).
+fn mach_arch(cputype: u32, _cpusubtype: u32) -> &'static str {
+    match cputype {
+        1 => "VAX",
+        2 => "ROMP",
+        4 => "NS32032",
+        5 => "NS32332",
+        6 => "MC680x0",
+        7 => "I386",
+        0x0100_0007 => "X86_64",
+        8 => "MIPS",
+        9 => "NS32532",
+        0xB => "HPPA",
+        0xC => "ARM",
+        0x0100_000C => "ARM64",
+        0x0200_000C => "ARM64_32",
+        0xD => "MC88000",
+        0xE => "SPARC",
+        0xF => "I860",
+        0x10 => "I860_LITTLE",
+        0x11 => "RS6000",
+        0x12 => "POWERPC",
+        0x0100_0012 => "POWERPC64",
+        255 => "VEO",
+        _ => "Unknown",
+    }
+}
+
+/// `XMACH::typeIdToString(XMACH::getType)` — `MH_*` file type names.
+fn mach_type(filetype: u32) -> &'static str {
+    match filetype {
+        1 => "OBJECT",
+        2 => "EXECUTE",
+        3 => "FVMLIB",
+        4 => "CORE",
+        5 => "PRELOAD",
+        6 => "DYLIB",
+        7 => "DYLINKER",
+        8 => "BUNDLE",
+        9 => "DYLIB_STUB",
+        10 => "DSYM",
+        11 => "KEXT_BUNDLE",
+        12 => "FILESET",
+        0xD..=0xF => "Unknown",
+        _ => "Unknown",
+    }
+}
+
 /// Full `NFD_MACH::getInfo` semantic path (fat binaries are sniffed
 /// FT_MACHOFAT upstream and have no dedicated handler).
-pub fn mach_semantic_scan(data: &[u8], ft: u16, misc: &mut DetectMap) {
+pub fn mach_semantic_scan(data: &[u8], ft: u16, misc: &mut ResultMaps) {
     let Some(e) = mach_info(data) else {
         return;
     };
     let big = e.big;
 
     // OS record emitted first (before Foundation exact-name fixup).
+    // `getOperationSystemScansStruct` info: "<arch>, <mode>, <type>".
     let (os, osver) = mach_os(data, &e, big);
-    emit(misc, ft, rt::RECORD_TYPE_OPERATIONSYSTEM, os, &osver, "");
+    let info = format!(
+        "{}, {}, {}",
+        mach_arch(e.cputype, e.cpusubtype),
+        if e.is64 { "64-bit" } else { "32-bit" },
+        mach_type(e.filetype),
+    );
+    emit(misc, ft, rt::RECORD_TYPE_OPERATIONSYSTEM, os, &osver, &info);
 
     // recordSDK/recordXcode/recordGCC/recordCLANG/recordSwift state.
     let mut sdk_name: u16 = n::RECORD_NAME_UNKNOWN;

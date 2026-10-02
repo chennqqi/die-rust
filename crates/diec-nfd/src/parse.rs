@@ -191,6 +191,8 @@ pub struct ZipMember {
     pub method: u16,
     /// Compressed size.
     pub comp_size: u32,
+    /// Uncompressed size (`XArchive::RECORD::spInfo.nUncompressedSize`).
+    pub unc_size: u32,
     /// File offset of the local header.
     pub local_off: u32,
 }
@@ -240,9 +242,10 @@ pub fn zip_members(d: &[u8]) -> Vec<ZipMember> {
             .get(name_off..name_off + nl)
             .map(|nb| String::from_utf8_lossy(nb).into_owned())
             .unwrap_or_default();
-        let (method, comp_size, local_off) = (
+        let (method, comp_size, unc_size, local_off) = (
             rd_u16(d, p + 10).unwrap_or(0),
             rd_u32(d, p + 20).unwrap_or(0),
+            rd_u32(d, p + 24).unwrap_or(0),
             rd_u32(d, p + 42).unwrap_or(0),
         );
         names.push(ZipMember {
@@ -251,6 +254,7 @@ pub fn zip_members(d: &[u8]) -> Vec<ZipMember> {
             encrypted: flags & 1 != 0,
             method,
             comp_size,
+            unc_size,
             local_off,
         });
         let Some(next) = name_off.checked_add(nl + el + cl) else {
@@ -290,6 +294,174 @@ pub fn is_plain_text(d: &[u8]) -> bool {
     }
     let n = d.len() as f64;
     (print + ext) as f64 / n >= 0.85 && ctl as f64 / n <= 0.05 && ext as f64 / n <= 0.50
+}
+
+/// `XBinary::UNICODE_TYPE` — UTF-16 classification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnicodeType {
+    /// No UTF-16 pattern detected.
+    None,
+    /// UTF-16 little-endian.
+    Le,
+    /// UTF-16 big-endian.
+    Be,
+}
+
+/// `XBinary::getUnicodeType` — BOM check, then null-byte and pair
+/// statistics over a 512-byte sample.
+pub fn unicode_type(d: &[u8]) -> UnicodeType {
+    if d.len() >= 2 {
+        match (d[0], d[1]) {
+            (0xFE, 0xFF) => return UnicodeType::Be,
+            (0xFF, 0xFE) => return UnicodeType::Le,
+            _ => {}
+        }
+    }
+    if d.len() < 4 {
+        return UnicodeType::None;
+    }
+    let n = d.len().min(512);
+    let (mut nulls, mut even_nulls, mut odd_nulls, mut printable) = (0u32, 0u32, 0u32, 0u32);
+    for (i, &b) in d[..n].iter().enumerate() {
+        if b == 0 {
+            nulls += 1;
+            if i % 2 == 0 {
+                even_nulls += 1;
+            } else {
+                odd_nulls += 1;
+            }
+        } else if (0x20..=0x7E).contains(&b) {
+            printable += 1;
+        }
+    }
+    let valid = n as u32;
+    if nulls == 0 || valid <= 4 {
+        return UnicodeType::None;
+    }
+    let null_ratio = nulls as f64 / valid as f64;
+    let print_ratio = printable as f64 / valid as f64;
+    if null_ratio < 0.30 || print_ratio < 0.30 {
+        return UnicodeType::None;
+    }
+    if even_nulls > odd_nulls.saturating_mul(2) {
+        return UnicodeType::Le;
+    }
+    if odd_nulls > even_nulls.saturating_mul(2) {
+        return UnicodeType::Be;
+    }
+    let (mut le, mut be) = (0u32, 0u32);
+    for i in (0..n.saturating_sub(1)).step_by(2) {
+        let lo = d[i];
+        let hi = d[i + 1];
+        if hi == 0 && (0x20..=0x7E).contains(&lo) {
+            le += 1;
+        }
+        if lo == 0 && (0x20..=0x7E).contains(&hi) {
+            be += 1;
+        }
+    }
+    if le > be {
+        UnicodeType::Le
+    } else if be > le {
+        UnicodeType::Be
+    } else {
+        UnicodeType::None
+    }
+}
+
+/// `XBinary::isUTF8TextType` over a 0x2000-byte sample — BOM or valid
+/// multibyte sequences with printable ratio >= 0.70 and multibyte
+/// ratio > 0.05.
+pub fn is_utf8_text(d: &[u8]) -> bool {
+    let d = &d[..d.len().min(0x2000)];
+    if d.is_empty() {
+        return false;
+    }
+    let (bom, start) = if d.len() >= 3 && d[..3] == [0xEF, 0xBB, 0xBF] {
+        (true, 3)
+    } else {
+        (false, 0)
+    };
+    let (mut valid, mut multi, mut printable) = (0u32, 0u32, 0u32);
+    let mut i = start;
+    while i < d.len() {
+        let b = d[i];
+        if b == 0 {
+            return false;
+        } else if b < 0x80 {
+            if b >= 0x20 || b == 0x09 || b == 0x0A || b == 0x0D {
+                printable += 1;
+            }
+            valid += 1;
+            i += 1;
+        } else if (b & 0xE0) == 0xC0 {
+            if i + 1 >= d.len() || (d[i + 1] & 0xC0) != 0x80 || b < 0xC2 {
+                return false;
+            }
+            multi += 1;
+            valid += 1;
+            i += 2;
+        } else if (b & 0xF0) == 0xE0 {
+            if i + 2 >= d.len()
+                || (d[i + 1] & 0xC0) != 0x80
+                || (d[i + 2] & 0xC0) != 0x80
+                || (b == 0xE0 && d[i + 1] < 0xA0)
+            {
+                return false;
+            }
+            multi += 1;
+            valid += 1;
+            i += 3;
+        } else if (b & 0xF8) == 0xF0 {
+            if i + 3 >= d.len()
+                || (d[i + 1] & 0xC0) != 0x80
+                || (d[i + 2] & 0xC0) != 0x80
+                || (d[i + 3] & 0xC0) != 0x80
+                || (b == 0xF0 && d[i + 1] < 0x90)
+                || b > 0xF4
+                || (b == 0xF4 && d[i + 1] > 0x8F)
+            {
+                return false;
+            }
+            multi += 1;
+            valid += 1;
+            i += 4;
+        } else {
+            return false;
+        }
+    }
+    if bom {
+        return valid > 0;
+    }
+    if valid > 0 {
+        let pr = printable as f64 / valid as f64;
+        let mr = multi as f64 / valid as f64;
+        return mr > 0.05 && pr >= 0.70;
+    }
+    false
+}
+
+/// `XBinary::read_unicodeString` — decode UTF-16 (LE or BE) until NUL.
+pub fn read_unicode(d: &[u8], off: usize, len: usize, ty: UnicodeType) -> String {
+    if ty == UnicodeType::None {
+        return String::new();
+    }
+    let mut out = Vec::new();
+    let mut i = off;
+    let end = off.saturating_add(len).min(d.len());
+    while i + 1 < end {
+        let u = if ty == UnicodeType::Be {
+            u16::from_be_bytes([d[i], d[i + 1]])
+        } else {
+            u16::from_le_bytes([d[i], d[i + 1]])
+        };
+        if u == 0 {
+            break;
+        }
+        out.push(u);
+        i += 2;
+    }
+    String::from_utf16_lossy(&out)
 }
 
 /// Endianness-aware `u16`/`u32`/`u64` readers (`XBinary::read_uint*`
@@ -558,25 +730,27 @@ pub fn elf_info(d: &[u8]) -> Option<ElfInfo> {
         })
     };
 
+    // Truncated headers read as zero, matching upstream `read_*`
+    // helpers that return 0 for out-of-range offsets.
     let (phoff, phentsize, phnum, shoff, shentsize, shnum, shstrndx) = if is64 {
         (
-            ru64(0x20)? as usize,
-            ru16(0x36)? as usize,
-            ru16(0x38)? as usize,
-            ru64(0x28)? as usize,
-            ru16(0x3A)? as usize,
-            ru16(0x3C)? as usize,
-            ru16(0x3E)? as usize,
+            ru64(0x20).unwrap_or(0) as usize,
+            ru16(0x36).unwrap_or(0) as usize,
+            ru16(0x38).unwrap_or(0) as usize,
+            ru64(0x28).unwrap_or(0) as usize,
+            ru16(0x3A).unwrap_or(0) as usize,
+            ru16(0x3C).unwrap_or(0) as usize,
+            ru16(0x3E).unwrap_or(0) as usize,
         )
     } else {
         (
-            ru32(0x1C)? as usize,
-            ru16(0x2A)? as usize,
-            ru16(0x2C)? as usize,
-            ru32(0x20)? as usize,
-            ru16(0x2E)? as usize,
-            ru16(0x30)? as usize,
-            ru16(0x32)? as usize,
+            ru32(0x1C).unwrap_or(0) as usize,
+            ru16(0x2A).unwrap_or(0) as usize,
+            ru16(0x2C).unwrap_or(0) as usize,
+            ru32(0x20).unwrap_or(0) as usize,
+            ru16(0x2E).unwrap_or(0) as usize,
+            ru16(0x30).unwrap_or(0) as usize,
+            ru16(0x32).unwrap_or(0) as usize,
         )
     };
 
@@ -891,6 +1065,174 @@ pub fn zip_member_data(d: &[u8], member: &ZipMember, cap: usize) -> Option<Vec<u
     }
 }
 
+/// Standard CRC32 (polynomial 0xEDB88320, init/final XOR 0xFFFFFFFF) —
+/// `XBinary::_getCRC32` with the `EDB88320` table, used by
+/// `XDEX::getMapItemsHash`.
+pub fn crc32_edb88320(d: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFFu32;
+    for &b in d {
+        crc ^= u32::from(b);
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+/// `XDEX::isValid` subset: `dex\n......00` magic and a numeric version
+/// >= 35 (checked as `_getVersion() >= 35`).
+pub fn dex_is_valid(d: &[u8]) -> bool {
+    d.len() >= 8
+        && d.starts_with(b"dex\n")
+        && d.get(7) == Some(&0)
+        && dex_version(d).is_some_and(|v| v.parse::<u32>().unwrap_or(0) >= 35)
+}
+
+/// `XDEX::getVersion` — NUL-terminated ASCII at offset 4 (e.g. "035").
+pub fn dex_version(d: &[u8]) -> Option<String> {
+    read_ansi_string(d, 4).filter(|s| s.len() == 3)
+}
+
+/// `XDEX::getMapItems` — the `type` field sequence of `map_list`
+/// (`map_off` header field at 0x34; entries are 12 bytes:
+/// u16 type + u16 unused + u32 size + u32 offset), bounded by file size
+/// and a 0x10000 entry cap.
+pub fn dex_map_item_types(d: &[u8]) -> Vec<u16> {
+    let Some(map_off) = rd_u32(d, 0x34).map(|v| v as usize) else {
+        return Vec::new();
+    };
+    if map_off == 0 || map_off > d.len().saturating_sub(4) {
+        return Vec::new();
+    }
+    let Some(declared) = rd_u32(d, map_off) else {
+        return Vec::new();
+    };
+    let start = map_off + 4;
+    let avail = d.len().saturating_sub(start);
+    let n = (declared as usize).min(avail / 12).min(0x10000);
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        if let Some(t) = rd_u16(d, start + i * 12) {
+            out.push(t);
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+/// `XDEX::compareMapItems` — bug-compatible walk: index pairs advance
+/// together on a type match, the ID list alone otherwise; the result
+/// requires the last step to have matched and every map item consumed.
+pub fn dex_compare_map_items(maps: &[u16], ids: &[u16]) -> bool {
+    let (mut mi, mut ii) = (0usize, 0usize);
+    let mut result = false;
+    while mi < maps.len() && ii < ids.len() {
+        result = false;
+        if maps[mi] == ids[ii] {
+            result = true;
+            mi += 1;
+            ii += 1;
+        } else {
+            ii += 1;
+        }
+    }
+    result && mi == maps.len().min(ids.len())
+}
+
+/// `XDEX::getMapItemsHash` — CRC32 over little-endian `u16` types.
+/// `valueToHex` renders it as 8 lowercase hex digits.
+pub fn dex_map_items_hash(maps: &[u16]) -> String {
+    let mut bytes = Vec::with_capacity(maps.len() * 2);
+    for &t in maps {
+        bytes.extend_from_slice(&t.to_le_bytes());
+    }
+    // Upstream `_dexAddCompiler` emits `QString::number(hash)` — decimal.
+    format!("{}", crc32_edb88320(&bytes))
+}
+
+/// `XDEX::isStringPoolSorted` — string data offsets in `string_ids`
+/// non-decreasing.
+pub fn dex_string_pool_sorted(d: &[u8]) -> bool {
+    if !d.starts_with(b"dex\n") {
+        return true;
+    }
+    let Some(n_str) = rd_u32(d, 0x38).map(|v| v as usize) else {
+        return true;
+    };
+    let Some(str_off) = rd_u32(d, 0x3C).map(|v| v as usize) else {
+        return true;
+    };
+    let n = n_str.min(d.len().saturating_sub(str_off) / 4);
+    let mut prev = 0u32;
+    for i in 0..n {
+        let Some(off) = rd_u32(d, str_off + i * 4) else {
+            break;
+        };
+        if off < prev {
+            return false;
+        }
+        prev = off;
+    }
+    true
+}
+
+/// `XDEX::isOverlayPresent` — `file_size` header field (0x20) smaller
+/// than the actual device size.
+pub fn dex_overlay_size(d: &[u8]) -> usize {
+    match rd_u32(d, 0x20) {
+        Some(declared) if (declared as usize) < d.len() => d.len() - declared as usize,
+        _ => 0,
+    }
+}
+
+/// `XBinary::getAndroidVersionFromApi`.
+pub fn android_version_from_api(api: u32) -> &'static str {
+    match api {
+        1 => "1.0",
+        2 => "1.1",
+        3 => "1.5",
+        4 => "1.6",
+        5 => "2.0",
+        6 => "2.0.1",
+        7 => "2.1",
+        8 => "2.2.X",
+        9 => "2.3-2.3.2",
+        10 => "2.3.3-2.3.7",
+        11 => "3.0",
+        12 => "3.1",
+        13 => "3.2.X",
+        14 => "4.0.1-4.0.2",
+        15 => "4.0.3-4.0.4",
+        16 => "4.1.X",
+        17 => "4.2.X",
+        18 => "4.3.X",
+        19 => "4.4-4.4.4",
+        20 => "4.4W",
+        21 => "5.0",
+        22 => "5.1",
+        23 => "6.0",
+        24 => "7.0",
+        25 => "7.1",
+        26 => "8.0",
+        27 => "8.1",
+        28 => "9.0",
+        29 => "10.0",
+        30 => "11.0",
+        31 => "12.0",
+        32 => "12.1",
+        33 => "13.0",
+        34 => "14.0",
+        35 => "15.0",
+        36 => "16.0",
+        _ => "Unknown",
+    }
+}
+
 /// `XNE::getOverlayOffset` — end of the last segment entry
 /// (`(fileOffset << ne_align) + fileSize`), or `None` when the segment
 /// table is malformed.
@@ -899,21 +1241,134 @@ pub fn ne_overlay_offset(d: &[u8]) -> Option<usize> {
     if d.get(ne..ne + 2) != Some(b"NE") {
         return None;
     }
+    let total = d.len() as u64;
+    // Upstream counts the header end (`ne + sizeof(IMAGE_OS2_HEADER)`)
+    // and segment ends even for OVERLAY-only part queries.
+    let mut end = u64::try_from(ne).ok()?.checked_add(0x40)?.min(total);
     let cseg = rd_u16(d, ne + 0x1C)? as usize;
     let segtab = ne.checked_add(rd_u16(d, ne + 0x22)? as usize)?;
     let align = rd_u16(d, ne + 0x32)? as u32;
-    if cseg == 0 || align > 20 {
+    if align <= 62 {
+        for i in 0..cseg.min(4096) {
+            let rec = segtab.checked_add(i.checked_mul(8)?)?;
+            let mut off = u64::from(rd_u16(d, rec)?);
+            let mut size = u64::from(rd_u16(d, rec + 2)?);
+            if size == 0 {
+                size = 0x1_0000;
+            }
+            let seg_base = total.saturating_sub(1);
+            if seg_base > 0 && off > (seg_base >> align) {
+                continue;
+            }
+            off <<= align;
+            if off > total {
+                continue;
+            }
+            if off > total - size {
+                size = total - off;
+            }
+            end = end.max(off + size);
+        }
+    }
+    (end < total).then_some(usize::try_from(end).ok()?)
+}
+
+/// `XMSDOS::getFileParts` overlay: `min(imageSize, fileSize)` where
+/// `imageSize = e_cp*512 - ((-e_cblp) & 0x1FF)`; `None` when the image
+/// covers the whole file.
+pub fn msdos_overlay_offset(d: &[u8]) -> Option<usize> {
+    let magic = d.get(..2)?;
+    if magic != b"MZ" && magic != b"ZM" {
         return None;
     }
-    let mut end = 0u64;
-    for i in 0..cseg.min(4096) {
-        let rec = segtab.checked_add(i.checked_mul(8)?)?;
-        let off = (rd_u16(d, rec)? as u64) << align;
-        let size = rd_u16(d, rec + 2)? as u64;
-        let size = if size == 0 { 0x1_0000 } else { size };
-        end = end.max(off.checked_add(size)?);
+    let cblp = i64::from(rd_u16(d, 0x02)?);
+    let cp = i64::from(rd_u16(d, 0x04)?);
+    let mut image = cp
+        .checked_mul(512)?
+        .checked_sub(cblp.checked_neg()? & 0x1FF)?;
+    if image > d.len() as i64 {
+        image = d.len() as i64;
     }
-    usize::try_from(end).ok().filter(|&e| e < d.len())
+    if image <= 0 || image >= d.len() as i64 {
+        return None;
+    }
+    usize::try_from(image).ok()
+}
+
+/// `XDEX::getFileParts` overlay: `nMaxOffset` starts at
+/// `data_off + data_size` and is extended by every map item's end
+/// (fixed-size items by element size; variable items span to the next
+/// map item start or the format size).
+pub fn dex_overlay_offset(d: &[u8]) -> Option<usize> {
+    let data_off = u64::from(rd_u32(d, 0x68)?);
+    let data_size = u64::from(rd_u32(d, 0x6C)?);
+    let mut end = data_off.checked_add(data_size)?;
+    let format_size = u64::from(rd_u32(d, 0x20)?).min(d.len() as u64);
+    if let Some(map_off) = rd_u32(d, 0x34) {
+        let map_off = map_off as usize;
+        if let Some(count) = rd_u32(d, map_off) {
+            let count = (count as usize).min(4096);
+            let mut items: Vec<(u16, u64, u64)> = Vec::with_capacity(count);
+            for i in 0..count {
+                let it = map_off.checked_add(4 + i * 12)?;
+                let ty = rd_u16(d, it)?;
+                let cnt = u64::from(rd_u32(d, it + 4)?);
+                let off = u64::from(rd_u32(d, it + 8)?);
+                items.push((ty, cnt, off));
+            }
+            let mut sorted: Vec<u64> = items
+                .iter()
+                .map(|&(_, _, o)| o)
+                .filter(|&o| o > 0)
+                .collect();
+            sorted.push(format_size);
+            sorted.sort_unstable();
+            for &(ty, cnt, off) in &items {
+                // `getDataSizeByType` — fixed element sizes; <=1 means a
+                // variable-length item handled by the gap fallback.
+                let fixed = match ty {
+                    0x0000 => Some(0x70),
+                    0x0001 | 0x0002 | 0x0007 => cnt.checked_mul(4),
+                    0x0003 => cnt.checked_mul(12),
+                    0x0004 | 0x0005 | 0x0008 => cnt.checked_mul(8),
+                    0x0006 => cnt.checked_mul(32),
+                    0x1000 => cnt.checked_mul(12)?.checked_add(4),
+                    _ => Some(1),
+                };
+                let mut size = fixed.unwrap_or(0);
+                if size <= 1 && off > 0 {
+                    let next = sorted
+                        .iter()
+                        .copied()
+                        .find(|&s| s > off)
+                        .unwrap_or(format_size);
+                    if next > off {
+                        size = next - off;
+                    }
+                }
+                end = end.max(off.saturating_add(size));
+            }
+        }
+    }
+    if end >= d.len() as u64 {
+        return None;
+    }
+    usize::try_from(end).ok()
+}
+
+/// `XZip::getFileParts` overlay: bytes after the end of the EOCD record
+/// (`nRealSize` of the container).
+pub fn zip_overlay_offset(d: &[u8]) -> Option<usize> {
+    let start = d.len().saturating_sub(0x10000 + 22);
+    let mut real = None;
+    for pos in (start..d.len().saturating_sub(3)).rev() {
+        if d.get(pos..pos + 4) == Some(b"PK\x05\x06") {
+            let comment = rd_u16(d, pos + 20)? as usize;
+            real = pos.checked_add(22)?.checked_add(comment);
+            break;
+        }
+    }
+    real.filter(|&r| r < d.len())
 }
 
 #[cfg(test)]

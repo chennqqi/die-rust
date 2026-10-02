@@ -13,17 +13,20 @@ use crate::parse;
 use crate::pe;
 use crate::records::SignatureRecord;
 use crate::scans::{
-    DetectMap, ScanRecord, archive_exp_scan, archive_scan, const_scan, signature_scan, string_scan,
+    DetectMap, ResultMaps, ScanRecord, archive_exp_scan, archive_scan, const_scan, signature_scan,
+    string_scan,
 };
 use crate::signature::get_signature;
 
 /// One emitted detection (normalized `SCANSTRUCT`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Detection {
-    /// `RECORD_TYPE` display string (e.g. `"Packer"`).
-    pub record_type: &'static str,
-    /// `RECORD_NAME` display string (e.g. `"UPX"`).
-    pub record_name: &'static str,
+    /// `RECORD_TYPE` display string (e.g. `"Packer"`); `sType` override
+    /// when the record carries one.
+    pub record_type: std::borrow::Cow<'static, str>,
+    /// `RECORD_NAME` display string (e.g. `"UPX"`); `sName` override
+    /// when the record carries one (e.g. "UTF-8 text").
+    pub record_name: std::borrow::Cow<'static, str>,
     /// Version string.
     pub version: String,
     /// Info string.
@@ -40,30 +43,63 @@ pub struct Detection {
 pub struct ScanOptions {
     /// Deep scan: enables whole-section memory scans.
     pub deep_scan: bool,
+    /// Heuristic scan: enables the `bIsHeuristicScan` gated branches.
+    pub heuristic_scan: bool,
+    /// Verbose: emits OS/format records gated on `bIsVerbose`.
+    pub verbose: bool,
+    /// All-types scan (`bIsAllTypesScan`): JAR skips the ZIP container
+    /// record, matching upstream.
+    pub all_types: bool,
+    /// Archives scan (`bIsArchivesScan`): unpack and scan ZIP members.
+    pub archives_scan: bool,
+    /// Recursive scan (`bIsRecursiveScan`): enables resource and overlay
+    /// file parts.
+    pub recursive_scan: bool,
+    /// Resources scan (`bIsResourcesScan`): scan resource file parts.
+    pub resources_scan: bool,
+    /// Overlay scan (`bIsOverlayScan`): scan the overlay file part.
+    pub overlay_scan: bool,
+    /// Aggressive scan (`bIsAggressiveScan`): drops the `isScanable`
+    /// gate on archive members.
+    pub aggressive_scan: bool,
 }
 
 fn to_detection(r: &ScanRecord) -> Detection {
+    // `XScanEngine::translateType`: strip `~`/`!` heuristic markers from
+    // the sType override, then capitalize the first character.
+    let stype = r.stype.map(|s| {
+        let s = s.strip_prefix('~').unwrap_or(s);
+        let s = s.strip_prefix('!').unwrap_or(s);
+        let mut c = s.chars();
+        match c.next() {
+            Some(f) => std::borrow::Cow::Owned(format!("{}{}", f.to_uppercase(), c.as_str())),
+            None => std::borrow::Cow::Owned(s.to_string()),
+        }
+    });
     Detection {
-        record_type: RECORD_TYPE_STR
-            .get(r.rtype as usize)
-            .copied()
-            .unwrap_or("Unknown"),
-        record_name: RECORD_NAME_STR
-            .get(r.name as usize)
-            .copied()
-            .unwrap_or("Unknown"),
+        record_type: stype
+            .or_else(|| {
+                RECORD_TYPE_STR
+                    .get(r.rtype as usize)
+                    .copied()
+                    .map(std::borrow::Cow::Borrowed)
+            })
+            .unwrap_or(std::borrow::Cow::Borrowed("Unknown")),
+        record_name: r
+            .sname
+            .clone()
+            .or_else(|| {
+                RECORD_NAME_STR
+                    .get(r.name as usize)
+                    .copied()
+                    .map(std::borrow::Cow::Borrowed)
+            })
+            .unwrap_or(std::borrow::Cow::Borrowed("Unknown")),
         version: r.version.clone(),
         info: r.info.clone(),
         heuristic: r.heuristic,
         unknown: r.unknown,
     }
-}
-
-/// Collect a detect map into detections.
-fn drain(map: &DetectMap, out: &mut Vec<Detection>) {
-    let mut v: Vec<&ScanRecord> = map.values().collect();
-    v.sort_by_key(|r| r.name);
-    out.extend(v.into_iter().map(to_detection));
 }
 
 fn exp_match(data: &[u8], sig: &str, offset: usize) -> bool {
@@ -135,8 +171,9 @@ fn memory_scan(
 /// `SpecAbstract::_processDetect`; callers may override with a real
 /// format detection.
 pub fn sniff_ft(data: &[u8]) -> u16 {
-    if data.len() >= 4 {
-        if data.starts_with(b"MZ") {
+    // `XMSDOS::isValid` accepts a bare two-byte MZ/ZM magic.
+    if data.len() >= 2 {
+        if data.starts_with(b"MZ") || data.starts_with(b"ZM") {
             // e_lfanew points at the secondary signature: PE\0\0 for
             // Win32, NE/LX/LE for the 16/32-bit OS/2-DOS families.
             if data.len() > 0x40 {
@@ -160,16 +197,26 @@ pub fn sniff_ft(data: &[u8]) -> u16 {
             return ft::FT_MSDOS;
         }
         if data.starts_with(b"\x7FELF") {
+            // `XELF::isValid` requires a known ELFCLASS byte; anything
+            // else falls back to FT_BINARY.
             return match data.get(4) {
                 Some(1) => ft::FT_ELF32,
                 Some(2) => ft::FT_ELF64,
-                _ => ft::FT_ELF,
+                _ => ft::FT_BINARY,
             };
         }
         if data.starts_with(b"PK\x03\x04") || data.starts_with(b"PK\x05\x06") {
             return ft::FT_ZIP;
         }
-        if data.starts_with(b"dex\n") {
+        // `XDEX::isValid` — `compareSignature("'dex\n'......00")`:
+        // `.` is a NIBBLE wildcard, so `......` covers bytes 4-6 and
+        // `00` lands on offset 7 (the version-field NUL), then
+        // `_getVersion() >= 35` (e.g. "035").
+        if data.len() >= 8
+            && data.starts_with(b"dex\n")
+            && data[7] == 0
+            && parse::dex_version(data).is_some_and(|v| v.parse::<u32>().unwrap_or(0) >= 35)
+        {
             return ft::FT_DEX;
         }
         match data.get(..4) {
@@ -236,17 +283,78 @@ pub fn sniff_ft_named(data: &[u8], file_name: &str) -> u16 {
     }
     match ft {
         x if x == ft::FT_MSDOS => ft::FT_MSDOS,
-        x if x == ft::FT_ZIP => {
-            if lower.ends_with(".apk") {
-                ft::FT_APK
-            } else if lower.ends_with(".jar") {
-                ft::FT_JAR
-            } else {
-                ft::FT_ZIP
-            }
-        }
+        x if x == ft::FT_ZIP => zip_subtype(data),
         x => x,
     }
+}
+
+/// `XFormats::getFileTypesZIP` — content-based ZIP subtyping in upstream
+/// order (APKS > APK > IPA > JAR). Extension is not consulted upstream;
+/// a ZIP whose members match none of the rules stays `FT_ZIP`.
+fn zip_subtype(d: &[u8]) -> u16 {
+    const MANIFEST_LIMIT: u32 = 16 * 1024 * 1024;
+    let members = parse::zip_members(d);
+    // `XAPKS::isValid` — a member that is itself an .apk package.
+    if members.iter().any(|m| m.name.ends_with(".apk")) {
+        return ft::FT_APKS;
+    }
+    // Full `XAPK::isValid` / `XJAR::isValid` — the manifest member must
+    // be non-empty and decompress to exactly its declared size.
+    let manifest_ok = |name: &str| -> bool {
+        let Some(m) = members
+            .iter()
+            .find(|m| m.name == name && m.unc_size > 0 && m.unc_size <= MANIFEST_LIMIT)
+        else {
+            return false;
+        };
+        parse::zip_member_data(d, m, MANIFEST_LIMIT as usize + 1)
+            .is_some_and(|b| b.len() as u32 == m.unc_size)
+    };
+    if manifest_ok("AndroidManifest.xml") {
+        return ft::FT_APK;
+    }
+    // `XIPA::isInfoPlistRecord` — "Payload/<app>.app/Info.plist".
+    let is_ipa = members.iter().any(|m| {
+        let name = m.name.replace('\\', "/");
+        name.starts_with("Payload/") && name.ends_with("/Info.plist") && m.unc_size > 0 && {
+            let app = &name[8..name.len() - 11];
+            !app.contains('/') && app.len() > 4 && app.ends_with(".app")
+        }
+    });
+    if is_ipa {
+        return ft::FT_IPA;
+    }
+    if manifest_ok("META-INF/MANIFEST.MF") {
+        return ft::FT_JAR;
+    }
+    ft::FT_ZIP
+}
+
+/// `XScanEngine::isScanable` — whether an intra-file part (archive
+/// member, resource) is scanned at all. Upstream scans only executable
+/// and structured formats; plain text and data members are skipped.
+pub fn is_scanable_ft(ft: u16) -> bool {
+    matches!(
+        ft,
+        x if x == ft::FT_MSDOS
+            || x == ft::FT_NE
+            || x == ft::FT_LE
+            || x == ft::FT_LX
+            || x == ft::FT_PE32
+            || x == ft::FT_PE64
+            || x == ft::FT_ELF32
+            || x == ft::FT_ELF64
+            || x == ft::FT_ELF
+            || x == ft::FT_MACHO32
+            || x == ft::FT_MACHO64
+            || x == ft::FT_MACHO
+            || x == ft::FT_MACHOFAT
+            || x == ft::FT_DEX
+            || x == ft::FT_PDF
+            || x == ft::FT_ARCHIVE
+            || x == ft::FT_DOS16M
+            || x == ft::FT_DOS4G
+    )
 }
 
 /// Scan `data` with the NFD engine. `hint_ft` is a `gen_names::ft::*`
@@ -254,6 +362,216 @@ pub fn sniff_ft_named(data: &[u8], file_name: &str) -> u16 {
 ///
 /// The return order follows upstream `_handleResult` category ordering.
 pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
+    let mut out = Vec::new();
+    scan_recursive(
+        data,
+        hint_ft,
+        &opts,
+        &mut out,
+        0,
+        crate::promote::FilePart::Header,
+        0,
+    );
+    out
+}
+
+/// `XScanEngine::scanProcess` file-part tail: archive members (STREAM,
+/// `isScanable` gated) recurse on the freshly detected member type;
+/// RESOURCE and OVERLAY parts are enumerated only at the root scan —
+/// upstream sub-scans run with `bInit=false`, leaving `ftInit` at
+/// `FT_UNKNOWN` whose `getFileParts` yields no parts.
+fn scan_recursive(
+    data: &[u8],
+    hint_ft: u16,
+    opts: &ScanOptions,
+    out: &mut Vec<Detection>,
+    depth: u32,
+    parent_part: crate::promote::FilePart,
+    res_type_id: u32,
+) {
+    out.extend(scan_file(data, hint_ft, *opts, parent_part, res_type_id));
+    if depth >= 8 {
+        return;
+    }
+    if opts.archives_scan
+        && matches!(
+            hint_ft,
+            ft::FT_ZIP
+                | ft::FT_7Z
+                | ft::FT_RAR
+                | ft::FT_CAB
+                | ft::FT_ISO9660
+                | ft::FT_APK
+                | ft::FT_APKS
+                | ft::FT_JAR
+                | ft::FT_IPA
+                | ft::FT_NPM
+        )
+    {
+        let limit = if opts.aggressive_scan { 100000 } else { 20 };
+        for member in parse::zip_members(data).iter().take(limit) {
+            let Some(bytes) = parse::zip_member_data(data, member, 0x800_000) else {
+                continue;
+            };
+            if bytes.is_empty() {
+                continue;
+            }
+            let sub_ft = sniff_ft(&bytes);
+            if !(opts.aggressive_scan || is_scanable_ft(sub_ft)) {
+                continue;
+            }
+            scan_recursive(
+                &bytes,
+                sub_ft,
+                opts,
+                out,
+                depth + 1,
+                crate::promote::FilePart::Stream,
+                0,
+            );
+        }
+    }
+    if depth != 0 {
+        return;
+    }
+    // RESOURCE parts (upstream nLimit=10000, scanned while <=20
+    // `isScanable`-gated) — PE resource leaves.
+    if opts.resources_scan || opts.recursive_scan {
+        let mut scanned = 0usize;
+        for (off, size, type_id) in resource_parts(data, hint_ft) {
+            if scanned > 20 && !opts.aggressive_scan {
+                break;
+            }
+            let Some(bytes) = data.get(off..off.saturating_add(size)) else {
+                continue;
+            };
+            if bytes.is_empty() {
+                continue;
+            }
+            let sub_ft = sniff_ft(bytes);
+            if !(opts.aggressive_scan || is_scanable_ft(sub_ft)) {
+                continue;
+            }
+            scan_recursive(
+                bytes,
+                sub_ft,
+                opts,
+                out,
+                depth + 1,
+                crate::promote::FilePart::Resource,
+                type_id,
+            );
+            scanned += 1;
+        }
+    }
+    // OVERLAY part — scanned unconditionally when the option is on.
+    if !(opts.overlay_scan || opts.recursive_scan) {
+        return;
+    }
+    let Some(off) = overlay_offset(data, hint_ft) else {
+        return;
+    };
+    if off >= data.len() {
+        return;
+    }
+    let sub = &data[off..];
+    if sub.is_empty() {
+        return;
+    }
+    scan_recursive(
+        sub,
+        sniff_ft(sub),
+        opts,
+        out,
+        depth + 1,
+        crate::promote::FilePart::Overlay,
+        0,
+    );
+}
+
+/// `FILEPART_RESOURCE` enumeration — currently only PE resource leaves
+/// carry `(offset, size, type_id)` tuples.
+fn resource_parts(data: &[u8], ft_id: u16) -> Vec<(usize, usize, u32)> {
+    if !(ft_id == ft::FT_PE32 || ft_id == ft::FT_PE64) {
+        return Vec::new();
+    }
+    if pe::collect(data).is_none() {
+        return Vec::new();
+    }
+    pe::collect_resources(data)
+        .into_iter()
+        .filter(|r| r.data_off != 0 && r.data_size != 0)
+        .map(|r| (r.data_off, r.data_size, r.id1))
+        .collect()
+}
+
+/// `XBinary::getFileParts(FILEPART_OVERLAY)` dispatch: the per-format
+/// overlay offset (`nMaxOffset` of the memory map).
+fn overlay_offset(data: &[u8], ft: u16) -> Option<usize> {
+    match ft {
+        ft::FT_MSDOS => parse::msdos_overlay_offset(data),
+        ft::FT_NE => parse::ne_overlay_offset(data),
+        // Upstream quirk: `XLE::getFileParts` counts header/object ends
+        // only when those parts are requested, so an OVERLAY-only query
+        // leaves `nMaxOffset` at 0 — the overlay is the whole file.
+        ft::FT_LE | ft::FT_LX => Some(0),
+        ft::FT_PE32 | ft::FT_PE64 => pe_overlay_offset(data),
+        ft::FT_DEX => parse::dex_overlay_offset(data),
+        // XZip covers the whole ZIP family (APK/JAR/IPA inherit it).
+        ft::FT_ZIP | ft::FT_APK | ft::FT_APKS | ft::FT_JAR | ft::FT_IPA | ft::FT_NPM => {
+            parse::zip_overlay_offset(data)
+        }
+        // ELF/Mach-O and the generic binary class do not override
+        // `getFileParts` — upstream produces no overlay part for them.
+        _ => None,
+    }
+}
+
+/// `XPE::getFileParts(FILEPART_OVERLAY)` — `nMaxOffset` is the largest
+/// of `SizeOfHeaders` and `align_down(raw_ptr, FileAlignment) +
+/// raw_size + (raw_ptr - aligned)` per section (clamped to the file).
+fn pe_overlay_offset(data: &[u8]) -> Option<usize> {
+    let lfanew = parse::rd_u32(data, 0x3C)? as usize;
+    let opt = lfanew.checked_add(0x18)?;
+    let nsec = usize::from(parse::rd_u16(data, lfanew + 6)?).min(96);
+    let opt_size = usize::from(parse::rd_u16(data, lfanew + 0x14)?);
+    let magic = parse::rd_u16(data, opt)?;
+    if magic != 0x10B && magic != 0x20B {
+        return None;
+    }
+    let mut file_align = u64::from(parse::rd_u32(data, opt + 0x24)?);
+    if file_align > 0x10000 {
+        file_align = 0x200;
+    }
+    let file_align = file_align.max(1);
+    let mut end = u64::from(parse::rd_u32(data, opt + 0x3C)?).min(data.len() as u64);
+    let sectab = opt.checked_add(opt_size)?;
+    for i in 0..nsec {
+        let sh = sectab.checked_add(i.checked_mul(40)?)?;
+        let mut raw_ptr = u64::from(parse::rd_u32(data, sh + 0x14)?);
+        let mut raw_size = u64::from(parse::rd_u32(data, sh + 0x10)?);
+        if raw_ptr > data.len() as u64 {
+            raw_ptr = 0;
+        }
+        if raw_ptr + raw_size > data.len() as u64 {
+            raw_size = (data.len() as u64).saturating_sub(raw_ptr);
+        }
+        let aligned = raw_ptr - raw_ptr % file_align;
+        end = end.max(aligned + raw_size + (raw_ptr - aligned));
+    }
+    let end = usize::try_from(end.min(data.len() as u64)).ok()?;
+    (end < data.len()).then_some(end)
+}
+
+/// `NFD_Binary::getInfo` + the format-dedicated `getInfo` paths for one
+/// device. File-part recursion lives in [`scan_recursive`].
+fn scan_file(
+    data: &[u8],
+    hint_ft: u16,
+    opts: ScanOptions,
+    parent_part: crate::promote::FilePart,
+    res_type_id: u32,
+) -> Vec<Detection> {
     let file_type = hint_ft;
     let header_sig = get_signature(data, 0, 150);
 
@@ -268,7 +586,7 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
     let mut strings_m: DetectMap = DetectMap::new();
     let mut types_m: DetectMap = DetectMap::new();
     let mut archive_m: DetectMap = DetectMap::new();
-    let mut misc: DetectMap = DetectMap::new();
+    let mut misc = ResultMaps::default();
     // .NET string-heap scan results feed handle_NETProtection (Phase
     // 21.L); upstream keeps them as intermediate maps, so they are not
     // drained into the output list.
@@ -284,35 +602,6 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
         file_type,
         ft::FT_BINARY,
     );
-    if file_type == ft::FT_BINARY && parse::is_plain_text(data) {
-        // NFD_Binary::handle_Texts — format record "Plain text"/
-        // "UTF-8 text" with the line-ending info, plus the
-        // source-language regex heuristics.
-        crate::miscfmt::text_semantic_scan(data, &mut misc);
-        let mut rec = ScanRecord::from_basic(&crate::records::BasicRecord {
-            variant: 0,
-            ft: ft::FT_BINARY,
-            rtype: rtype::RECORD_TYPE_FORMAT,
-            name: name::RECORD_NAME_PLAIN,
-            version: "",
-            info: "",
-        });
-        let head = &data[..data.len().min(4096)];
-        rec.info = if let Some(lf) = head.iter().position(|&b| b == b'\n') {
-            let crlf =
-                (lf > 0 && head[lf - 1] == b'\r') || (lf + 1 < head.len() && head[lf + 1] == b'\r');
-            if crlf {
-                "CRLF".to_string()
-            } else {
-                "LF".to_string()
-            }
-        } else if head.contains(&b'\r') {
-            "CR".to_string()
-        } else {
-            String::new()
-        };
-        header.insert(name::RECORD_NAME_PLAIN, rec);
-    }
     signature_scan(
         &mut header,
         &header_sig,
@@ -320,6 +609,52 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
         file_type,
         ft::FT_ARCHIVE,
     );
+    if parent_part == crate::promote::FilePart::Overlay {
+        signature_scan(
+            &mut header,
+            &header_sig,
+            t::G_PE_OVERLAY_RECORDS,
+            file_type,
+            ft::FT_BINARY,
+        );
+    }
+    if parent_part == crate::promote::FilePart::DebugData {
+        signature_scan(
+            &mut header,
+            &header_sig,
+            t::G_DEBUGDATA_RECORDS,
+            file_type,
+            ft::FT_BINARY,
+        );
+    }
+    if parent_part == crate::promote::FilePart::Resource && header.is_empty() {
+        let rn = match res_type_id {
+            5 => name::RECORD_NAME_RESOURCE_DIALOG,
+            6 => name::RECORD_NAME_RESOURCE_STRINGTABLE,
+            16 => name::RECORD_NAME_RESOURCE_VERSIONINFO,
+            3 => name::RECORD_NAME_RESOURCE_ICON,
+            1 => name::RECORD_NAME_RESOURCE_CURSOR,
+            4 => name::RECORD_NAME_RESOURCE_MENU,
+            _ => name::RECORD_NAME_UNKNOWN,
+        };
+        if rn != name::RECORD_NAME_UNKNOWN {
+            header.insert(
+                rn,
+                ScanRecord {
+                    ft: file_type,
+                    rtype: rtype::RECORD_TYPE_FORMAT,
+                    name: rn,
+                    variant: 0,
+                    version: String::new(),
+                    info: String::new(),
+                    heuristic: false,
+                    unknown: false,
+                    sname: None,
+                    stype: None,
+                },
+            );
+        }
+    }
 
     match file_type {
         x if x == ft::FT_PE32 || x == ft::FT_PE64 => {
@@ -368,10 +703,10 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
                 file_type,
                 ft::FT_COM,
             );
-            // `NFD_COM::handle_Protection` tail — header->result transfers
-            // are implicit (header drains to output); the observable part
-            // is the MS-DOS/CP-M OS record.
-            crate::miscfmt::com_semantic_scan(data, &header, &mut misc);
+            // `NFD_COM::getInfo` tail — verbose OS record,
+            // `handle_Protection` header->result transfers, conditional
+            // OS re-emit.
+            crate::miscfmt::com_semantic_scan(data, opts.verbose, &header, &mut misc);
         }
         x if x == ft::FT_AMIGAHUNK => {
             // `NFD_Amiga::getInfo` — hunk-derived OS record.
@@ -380,7 +715,7 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
         x if x == ft::FT_CFBF => {
             // `NFD_CFBF::getInfo` — MSI/Word subtype promotion and the
             // deep-scan Advanced Installer marker.
-            crate::miscfmt::cfbf_semantic_scan(data, opts.deep_scan, &mut header, &mut misc);
+            crate::miscfmt::cfbf_semantic_scan(data, opts.deep_scan, &mut misc);
         }
         x if x == ft::FT_PDF => {
             // `NFD_PDF::getInfo` — /Encrypt protector record and
@@ -390,8 +725,14 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
         x if x == ft::FT_JAR => {
             // `NFD_JAR::getInfo` — JVM virtual-machine record (version
             // from the first .class member) and MANIFEST.MF tool
-            // detections.
+            // detections; upstream also runs `NFD_ZIP::handle_Container`
+            // unless an all-types scan is in progress.
             crate::miscfmt::jar_semantic_scan(data, &mut misc);
+            if !opts.all_types
+                && let Some(records) = crate::promote::zip_records(data)
+            {
+                crate::promote::zip_container(&records, &mut misc);
+            }
         }
         x if x == ft::FT_NE => {
             // NFD_NE::getInfo — linker header records plus entry-point
@@ -450,7 +791,10 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
             crate::mach::mach_semantic_scan(data, ft::FT_MACHO, &mut misc);
         }
         x if x == ft::FT_DEX => {
-            // NFD_DEX::getInfo — string-id contents and type descriptors.
+            // NFD_DEX::getInfo — string-id contents and type
+            // descriptors feed the string/type detect maps, then the
+            // semantic handlers emit tool/OS/compiler/protector
+            // records.
             let (strings, types) = parse::dex_strings(data);
             string_scan(
                 &mut strings_m,
@@ -466,11 +810,22 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
                 file_type,
                 ft::FT_DEX,
             );
+            crate::miscfmt::dex_semantic_scan(
+                data,
+                opts.deep_scan,
+                opts.heuristic_scan,
+                &strings,
+                &types,
+                &strings_m,
+                &types_m,
+                &mut misc,
+            );
         }
         x if x == ft::FT_APK => {
             // NFD_APK::getInfo — member-name CRC scan and regex scan over
-            // the ZIP central directory names.
-            let names = parse::zip_member_names(data);
+            // the ZIP central directory names into `mapArchiveDetects`.
+            let members = parse::zip_members(data);
+            let names: Vec<String> = members.iter().map(|m| m.name.clone()).collect();
             archive_scan(
                 &mut archive_m,
                 &names,
@@ -485,106 +840,148 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
                 file_type,
                 ft::FT_APK,
             );
-
-            // `NFD_APK::getInfo` — APK Signature Scheme block ids.
-            // `0x7109871a`=v2, `0xf05368c0`=v3 (mutually exclusive),
-            // `0x71777777`=Walle, `0x2146444e`=Google Play
-            // (`XAPK::getAPKSignaturesBlockRecordsList`).
-            let ids = parse::apk_sig_block_ids(data);
-            let emit = |misc: &mut DetectMap, rtype_id: u8, name_id: u16, ver: &'static str| {
-                misc.entry(name_id).or_insert_with(|| {
-                    ScanRecord::from_basic(&crate::records::BasicRecord {
-                        variant: 0,
-                        ft: ft::FT_APK,
-                        rtype: rtype_id,
-                        name: name_id,
-                        version: ver,
-                        info: "",
-                    })
-                });
-            };
-            // Upstream emits a single signtool record: v2 if present,
-            // else v3.
-            if ids.contains(&0x7109_871A) {
-                emit(
-                    &mut misc,
-                    rtype::RECORD_TYPE_SIGNTOOL,
-                    name::RECORD_NAME_APKSIGNATURESCHEME,
-                    "v2",
+            // `dexInfoClasses` — the classes.dex sub-scan whose protector
+            // records feed the DexGuard check.
+            let mut dex_res = ResultMaps::default();
+            if let Some(dex_member) = members.iter().find(|m| m.name == "classes.dex")
+                && let Some(dex) = parse::zip_member_data(data, dex_member, 64 * 1024 * 1024)
+            {
+                let (dstrings, dtypes) = parse::dex_strings(&dex);
+                let mut ds: DetectMap = DetectMap::new();
+                let mut dt: DetectMap = DetectMap::new();
+                string_scan(
+                    &mut ds,
+                    &dstrings,
+                    t::G_DEX_STRING_RECORDS,
+                    file_type,
+                    ft::FT_DEX,
                 );
-            } else if ids.contains(&0xF053_68C0) {
-                emit(
-                    &mut misc,
-                    rtype::RECORD_TYPE_SIGNTOOL,
-                    name::RECORD_NAME_APKSIGNATURESCHEME,
-                    "v3",
+                string_scan(
+                    &mut dt,
+                    &dtypes,
+                    t::G_DEX_TYPE_RECORDS,
+                    file_type,
+                    ft::FT_DEX,
                 );
-            }
-            if ids.contains(&0x7177_7777) {
-                emit(
-                    &mut misc,
-                    rtype::RECORD_TYPE_TOOL,
-                    name::RECORD_NAME_WALLE,
-                    "",
+                crate::miscfmt::dex_semantic_scan(
+                    &dex,
+                    opts.deep_scan,
+                    opts.heuristic_scan,
+                    &dstrings,
+                    &dtypes,
+                    &ds,
+                    &dt,
+                    &mut dex_res,
                 );
             }
-            if ids.contains(&0x2146_444E) {
-                emit(
-                    &mut misc,
-                    rtype::RECORD_TYPE_TOOL,
-                    name::RECORD_NAME_GOOGLEPLAY,
-                    "",
-                );
-            }
-            // Language: Kotlin iff `META-INF/androidx.core_core-ktx.version`
-            // or `kotlin/kotlin.kotlin_builtins` is present, else Java.
-            let kotlin = names.iter().any(|n| {
-                n == "META-INF/androidx.core_core-ktx.version"
-                    || n == "kotlin/kotlin.kotlin_builtins"
-            });
-            emit(
+            crate::miscfmt::apk_semantic_scan(
+                data,
+                &members,
+                &archive_m,
+                &DetectMap::new(),
+                &dex_res.protectors,
+                opts.verbose,
+                opts.all_types,
                 &mut misc,
-                rtype::RECORD_TYPE_LANGUAGE,
-                if kotlin {
-                    name::RECORD_NAME_KOTLIN
-                } else {
-                    name::RECORD_NAME_JAVA
-                },
-                "",
             );
-            // `XAPK::getFileFormatInfo` — every APK is an Android image.
-            emit(
-                &mut misc,
-                rtype::RECORD_TYPE_OPERATIONSYSTEM,
-                name::RECORD_NAME_ANDROID,
-                "",
-            );
+        }
+        x if x == ft::FT_JPEG => {
+            // `NFD_JPEG::getInfo` — the format record with the JFIF
+            // APP0 version.
+            crate::miscfmt::jpeg_semantic_scan(data, &mut misc);
+        }
+        x if x == ft::FT_ZIP || x == ft::FT_IPA => {
+            // `NFD_ZIP::getInfo` container leg — member metadata record
+            // or the strict central-directory fallback.
+            crate::promote::zip_scan(data, &mut misc);
         }
         _ => {}
     }
 
-    // Post-dispatch fixups mirroring the cheap container metadata of
-    // `NFD_ZIP::handle_Container` and `NFD_PDF::getInfo` format versions.
-    zip_container_fixup(data, file_type, &mut header);
-    pdf_version_fixup(data, file_type, &mut header);
+    // Non-dedicated types take the `NFD_Binary::getInfo` promotion
+    // chain over the intermediate maps (texts -> formats -> databases
+    // -> images -> archives -> certificates -> debug/installer/sfx/
+    // protector/library data -> resources -> fixups). Dedicated formats
+    // run their own `getInfo` handlers above and skip this chain.
+    if !is_dedicated_ft(file_type) {
+        let unicode = parse::unicode_type(data);
+        let is_utf8 = unicode == parse::UnicodeType::None && parse::is_utf8_text(data);
+        let is_plain = unicode == parse::UnicodeType::None && parse::is_plain_text(data);
+        let limit = data.len().min(0x1000);
+        let header_text = if unicode != parse::UnicodeType::None {
+            parse::read_unicode(data, 2, limit.min(data.len().saturating_sub(2)), unicode)
+        } else if is_utf8 {
+            String::from_utf8_lossy(&data[3.min(data.len())..limit.max(3).min(data.len())])
+                .into_owned()
+        } else if is_plain {
+            String::from_utf8_lossy(&data[..limit]).into_owned()
+        } else if data.starts_with(b"#!") {
+            String::from_utf8_lossy(&data[..data.len().min(0x4000)]).into_owned()
+        } else {
+            String::new()
+        };
+        let ctx = crate::promote::PromoteCtx {
+            data,
+            header_sig: &header_sig,
+            header: &header,
+            is_plain_text: is_plain,
+            is_utf8,
+            unicode: unicode != parse::UnicodeType::None,
+            header_text,
+            parent_part,
+            res_type_id,
+        };
+        crate::promote::binary_promote(&ctx, &mut misc);
+    }
 
-    // Assembly order mirrors `_handleResult` (formats first for the
-    // binary path is an approximation — upstream sorts result maps by
-    // fixed category order).
-    let mut out = Vec::new();
-    drain(&header, &mut out);
-    drain(&overlay, &mut out);
-    drain(&entrypoint, &mut out);
-    drain(&imports, &mut out);
-    drain(&resources, &mut out);
-    drain(&section_names, &mut out);
-    drain(&code_section, &mut out);
-    drain(&ep_section, &mut out);
-    drain(&archive_m, &mut out);
-    drain(&strings_m, &mut out);
-    drain(&types_m, &mut out);
-    drain(&misc, &mut out);
+    // `SpecAbstract::_processDetect` — the root scan appends a bare
+    // Unknown record when nothing was detected (`bAddUnknown`), except
+    // for the generic-FAT/binary probing paths where upstream passes
+    // `false`.
+    let add_unknown = file_type != ft::FT_MACHOFAT;
+    let mut out: Vec<Detection> = crate::promote::handle_result(&mut misc)
+        .iter()
+        .map(to_detection)
+        .collect();
+    if out.is_empty() && add_unknown {
+        out.push(Detection {
+            record_type: std::borrow::Cow::Borrowed("Unknown"),
+            record_name: std::borrow::Cow::Borrowed("Unknown"),
+            version: String::new(),
+            info: String::new(),
+            heuristic: false,
+            unknown: true,
+        });
+    }
     out
+}
+
+/// True when `file_type` is served by a dedicated upstream `getInfo`
+/// module rather than the generic `NFD_Binary` promotion chain.
+fn is_dedicated_ft(file_type: u16) -> bool {
+    file_type == ft::FT_PE32
+        || file_type == ft::FT_PE64
+        || file_type == ft::FT_MSDOS
+        || file_type == ft::FT_COM
+        || file_type == ft::FT_AMIGAHUNK
+        || file_type == ft::FT_CFBF
+        || file_type == ft::FT_PDF
+        || file_type == ft::FT_JAR
+        || file_type == ft::FT_APK
+        || file_type == ft::FT_ZIP
+        || file_type == ft::FT_IPA
+        || file_type == ft::FT_NE
+        || file_type == ft::FT_LE
+        || file_type == ft::FT_LX
+        || file_type == ft::FT_ELF
+        || file_type == ft::FT_ELF32
+        || file_type == ft::FT_ELF64
+        || file_type == ft::FT_MACHO
+        || file_type == ft::FT_MACHO32
+        || file_type == ft::FT_MACHO64
+        || file_type == ft::FT_DEX
+        || file_type == ft::FT_JAVACLASS
+        || file_type == ft::FT_JPEG
 }
 
 /// PE scan pipeline: header records, entry-point signature + expression
@@ -594,7 +991,7 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
 fn pe_scan(
     data: &[u8],
     opts: ScanOptions,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
     header_sig: &str,
     header: &mut DetectMap,
     overlay: &mut DetectMap,
@@ -697,7 +1094,13 @@ fn pe_scan(
             actual,
             ft::FT_ARCHIVE,
         );
-        signature_scan(overlay, &ov_sig, t::G_PE_OVERLAY_RECORDS, actual, ftpe);
+        signature_scan(
+            overlay,
+            &ov_sig,
+            t::G_PE_OVERLAY_RECORDS,
+            actual,
+            ft::FT_BINARY,
+        );
     }
 
     // Import hashes.
@@ -955,7 +1358,7 @@ fn msdos_scan(
     header_sig: &str,
     header: &mut DetectMap,
     entrypoint: &mut DetectMap,
-    misc: &mut DetectMap,
+    misc: &mut ResultMaps,
 ) {
     signature_scan(
         header,
@@ -970,6 +1373,19 @@ fn msdos_scan(
         t::G_MSDOS_HEADER_RECORDS,
         ft::FT_MSDOS,
         ft::FT_MSDOS,
+    );
+
+    // `NFD_MSDOS::handle_OperationSystem` — unconditional MS-DOS OS
+    // record from `XMSDOS::getFileFormatInfo` (arch 8086, 16-bit, EXE).
+    crate::scans::push(
+        misc,
+        ft::FT_MSDOS,
+        rtype::RECORD_TYPE_OPERATIONSYSTEM,
+        name::RECORD_NAME_MSDOS,
+        "",
+        "8086, 16-bit, EXE",
+        None,
+        None,
     );
 
     // MZ entry point: header_paragraphs*16 + CS*16 + IP.
@@ -1006,13 +1422,13 @@ fn msdos_scan(
 
 /// `NFD_MSDOS::handle_DosExtenders` — DOS extender banners:
 /// WDOSX at 0x34 (always), CWSDPMI/DOS4G/DOS16M on deep scan only.
-fn msdos_extender_scan(data: &[u8], opts: ScanOptions, misc: &mut DetectMap) {
+fn msdos_extender_scan(data: &[u8], opts: ScanOptions, misc: &mut ResultMaps) {
     // WDOSX: ANSI banner at fixed offset 0x34 ("WDOSX <ver>").
     let wdosx =
         parse::read_ansi_string(data, 0x34).filter(|b| b.split(' ').next() == Some("WDOSX"));
     if let Some(banner) = wdosx {
         let ver = banner.split(' ').nth(1).unwrap_or("").to_string();
-        misc.entry(name::RECORD_NAME_WDOSX).or_insert_with(|| {
+        misc.entry_or_insert(name::RECORD_NAME_WDOSX, || {
             let mut r = ScanRecord::from_basic(&crate::records::BasicRecord {
                 variant: 0,
                 ft: ft::FT_MSDOS,
@@ -1034,7 +1450,7 @@ fn msdos_extender_scan(data: &[u8], opts: ScanOptions, misc: &mut DetectMap) {
         .filter(|b| b.split(' ').next() == Some("CWSDPMI"));
     if let Some(banner) = cwsdpmi {
         let ver = banner.split(' ').nth(1).unwrap_or("").to_string();
-        misc.entry(name::RECORD_NAME_CWSDPMI).or_insert_with(|| {
+        misc.entry_or_insert(name::RECORD_NAME_CWSDPMI, || {
             let mut r = ScanRecord::from_basic(&crate::records::BasicRecord {
                 variant: 0,
                 ft: ft::FT_MSDOS,
@@ -1050,7 +1466,7 @@ fn msdos_extender_scan(data: &[u8], opts: ScanOptions, misc: &mut DetectMap) {
     // DOS/4G and DOS/16M markers in the first 4 KiB.
     let limit = data.len().min(0x1000);
     if parse::find_ansi(data, 0, limit, b"DOS/4G").is_some() {
-        misc.entry(name::RECORD_NAME_DOS4G).or_insert_with(|| {
+        misc.entry_or_insert(name::RECORD_NAME_DOS4G, || {
             ScanRecord::from_basic(&crate::records::BasicRecord {
                 variant: 0,
                 ft: ft::FT_MSDOS,
@@ -1069,7 +1485,7 @@ fn msdos_extender_scan(data: &[u8], opts: ScanOptions, misc: &mut DetectMap) {
     )
     .is_some()
     {
-        misc.entry(name::RECORD_NAME_DOS16M).or_insert_with(|| {
+        misc.entry_or_insert(name::RECORD_NAME_DOS16M, || {
             ScanRecord::from_basic(&crate::records::BasicRecord {
                 variant: 0,
                 ft: ft::FT_MSDOS,
@@ -1085,7 +1501,7 @@ fn msdos_extender_scan(data: &[u8], opts: ScanOptions, misc: &mut DetectMap) {
 /// `NFD_MSDOS::handle_VintageCompilers` — vendor banner strings of
 /// vintage runtime libraries (deep scan only). Order matters: more
 /// specific strings first.
-fn msdos_vintage_scan(data: &[u8], opts: ScanOptions, misc: &mut DetectMap) {
+fn msdos_vintage_scan(data: &[u8], opts: ScanOptions, misc: &mut ResultMaps) {
     if !opts.deep_scan {
         return;
     }
@@ -1205,57 +1621,4 @@ pub fn ft_name(file_type: u16) -> &'static str {
         .get(file_type as usize)
         .copied()
         .unwrap_or("FT_UNKNOWN")
-}
-
-/// `NFD_ZIP::handle_Container`: enrich the ZIP format record with the
-/// inspected-entry count, the minimum reader version and the encryption
-/// flag for ZIP-family containers (ZIP/APK/JAR/IPA/NPM).
-fn zip_container_fixup(data: &[u8], file_type: u16, header: &mut DetectMap) {
-    let is_zip_family = file_type == ft::FT_ZIP
-        || file_type == ft::FT_APK
-        || file_type == ft::FT_JAR
-        || file_type == ft::FT_IPA
-        || file_type == ft::FT_NPM;
-    if !is_zip_family {
-        return;
-    }
-    let members = parse::zip_members(data);
-    if members.is_empty() {
-        return;
-    }
-    let min_ver = members.iter().map(|m| m.version_needed).max().unwrap_or(0);
-    let encrypted = members.iter().any(|m| m.encrypted);
-    let mut info = format!("{} records inspected", members.len());
-    if min_ver != 0 {
-        info.push_str(&format!(
-            ", Declared minimum reader version: {}.{} (inspected entries)",
-            min_ver / 10,
-            min_ver % 10
-        ));
-    }
-    if encrypted {
-        info.push_str(", Encrypted");
-    }
-    if let Some(rec) = header.get_mut(&name::RECORD_NAME_ZIP) {
-        rec.info = info;
-    }
-}
-
-/// `NFD_PDF::getInfo` format record: attach the `%PDF-X.Y` version to the
-/// PDF format detection.
-fn pdf_version_fixup(data: &[u8], file_type: u16, header: &mut DetectMap) {
-    if file_type != ft::FT_PDF || !data.starts_with(b"%PDF-") {
-        return;
-    }
-    let ver: String = data[5..data.len().min(16)]
-        .iter()
-        .take_while(|b| b.is_ascii_digit() || **b == b'.')
-        .map(|b| *b as char)
-        .collect();
-    if ver.is_empty() {
-        return;
-    }
-    if let Some(rec) = header.get_mut(&name::RECORD_NAME_PDF) {
-        rec.version = ver;
-    }
 }

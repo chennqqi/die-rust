@@ -348,6 +348,13 @@ def emit():
                      if r[0]["rtype"] not in type_idx}
     missing_names = {r[0]["name"] for _, _, recs, _ in tables for r in recs
                      if r[0]["name"] not in name_idx}
+    # RECORD_NAME ids referenced by handler code (not by signature tables or
+    # the upstream display-name table), e.g. the binary promotion layer.
+    missing_names |= {
+        "RECORD_NAME_LZIP",
+        "RECORD_NAME_LZMA",
+        "RECORD_NAME_SKATERNET",
+    }
     for n in sorted(missing_names):
         name_idx[n] = len(name_list)
         name_list.append(n)

@@ -117,9 +117,12 @@ pub fn scan_nested_pe(
         let part_name = format!("{parent_path}:{}({})", part.part_type, part.name);
         let child_flags = ScanFlags {
             // Nested scans don't recurse further (avoid infinite loops).
+            // The NFD engine performs its own file-part recursion inside
+            // `diec_nfd::scan`; disable it here to avoid duplicate records.
             recursive: false,
             resources: false,
             overlays: false,
+            nfd: false,
             ..flags.clone()
         };
 

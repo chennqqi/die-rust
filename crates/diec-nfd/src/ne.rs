@@ -5,20 +5,11 @@
 //! entry-point banner scan.
 
 use crate::parse;
-use crate::scans::{DetectMap, ScanRecord};
+use crate::scans::{DetectMap, EmitTarget, ResultMaps};
 use crate::{gen_names::ft, gen_names::name as n, gen_names::rtype as rt};
 
-fn emit(map: &mut DetectMap, ft_id: u16, rtype: u8, name: u16, ver: &str, info: &str) {
-    map.entry(name).or_insert_with(|| ScanRecord {
-        name,
-        rtype,
-        ft: ft_id,
-        variant: 0,
-        version: ver.to_string(),
-        info: info.to_string(),
-        heuristic: false,
-        unknown: false,
-    });
+fn emit(map: &mut impl EmitTarget, ft_id: u16, rtype: u8, name: u16, ver: &str, info: &str) {
+    crate::scans::push(map, ft_id, rtype, name, ver, info, None, None);
 }
 
 /// `get_TurboLinker_vi` — byte 0xFB at 0x1E marks a Turbo-Linker-stamped
@@ -73,7 +64,7 @@ fn le_arch(cpu: u16) -> &'static str {
 }
 
 /// `NFD_NE::getInfo` post-scan block.
-pub fn ne_semantic_scan(data: &[u8], deep: bool, ft: u16, ep: &DetectMap, misc: &mut DetectMap) {
+pub fn ne_semantic_scan(data: &[u8], deep: bool, ft: u16, ep: &DetectMap, misc: &mut ResultMaps) {
     let Some(ne_off) = parse::rd_u32(data, 0x3C).map(|v| v as usize) else {
         return;
     };
@@ -129,7 +120,7 @@ pub fn ne_semantic_scan(data: &[u8], deep: bool, ft: u16, ep: &DetectMap, misc: 
         rt::RECORD_TYPE_OPERATIONSYSTEM,
         os,
         osver,
-        &format!("{arch}, 16SEG, Unknown"),
+        &format!("{arch}, 16SEG, EXE"),
     );
     // TurboLinker trailer.
     if let Some(ver) = turbo_linker_vi(data) {
@@ -159,7 +150,7 @@ pub fn ne_semantic_scan(data: &[u8], deep: bool, ft: u16, ep: &DetectMap, misc: 
 }
 
 /// `NFD_LE::getInfo` post-scan block (shared by LE and LX).
-pub fn le_semantic_scan(data: &[u8], ft: u16, misc: &mut DetectMap) {
+pub fn le_semantic_scan(data: &[u8], ft: u16, misc: &mut ResultMaps) {
     let Some(le_off) = parse::rd_u32(data, 0x3C).map(|v| v as usize) else {
         return;
     };
@@ -176,7 +167,7 @@ pub fn le_semantic_scan(data: &[u8], ft: u16, misc: &mut DetectMap) {
         rt::RECORD_TYPE_OPERATIONSYSTEM,
         os,
         osver,
-        &format!("{}, {}, Unknown", le_arch(cpu), mode),
+        &format!("{}, {}, EXE", le_arch(cpu), mode),
     );
     if let Some(ver) = turbo_linker_vi(data) {
         emit(

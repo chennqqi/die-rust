@@ -448,3 +448,53 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 | COM | `NFD_COM::getInfo` | ⚠ partial | header+exp 签名表 + `handle_Protection` 提升 + MSDOS/CPM OS 记录（`isCPM` BDOS/INT21 计数 + Z80/CP-M 序言启发） | 差分未跑 |
 | Amiga hunk | `NFD_Amiga::getInfo` | ⚠ partial | HUNK_HEADER/UNIT sniff + OS 记录（68K/PPC + 16/32-bit + EXE/Object, BE） | 差分未跑 |
 | 引擎接入 | GUI scan-engine 选择器 | ✅ `ScanFlags::nfd` + CLI `--nfd` + GUI checkbox | 记录带 `engine=nfd` 标记，与 DIE 结果共存不去重 |
+
+## Phase 23: Qt oracle 差分收敛（2026-10-08）
+
+**方法**：`tools/nfd-oracle`（独立 Qt harness，直接调上游 SpecAbstract；Qt
+仅限该 oracle，Rust workspace 不引入/链接 Qt）+ `tools/nfd_diff.py`
+（规范化 type/name/version/info 对比 72 个语料文件）。差分从 32 个差异
+文件收敛到 **0**。
+
+### 结构对齐
+
+- **`ResultMaps`**（`scans.rs`）：按上游 `BASIC_INFO::mapResult*` 命名的
+  category map 集合，insert-overwrite（Qt QMap 语义），按记录 `rtype`
+  路由；`_handleResult` 只汇出 result map，中间 header/EP/overlay map
+  不外泄。
+- **promotion 层**（`promote.rs`）：`handle_Formats/Images/Archives/
+  Databases/DebugData/InstallerData/SFXData/ProtectorData/LibraryData/
+  Resources/Certificates/Texts/FixDetects` 的 header→result else-if
+  提升链按上游源码全量移植；`getLanguage`/`fixLanguage` 聚合对齐
+  （GCC/Clang 族→C/C++ 或 Objective-C，MINGW/MSYS→C/C++，C/C++ 合并）。
+- **子检测引擎**：`archiveheaders.rs`（7z/RAR/LHA/TAR/compress-z/
+  lzip/lzop）、`legacy.rs`（NFDLegacy 全量）、`containers.rs`
+  （DMG/VHD/VHDX/QCOW/VDI/VMDK/CPIO/ar/RPM/git/SQLite/WIM）、
+  `compression_detect.rs`（PowerPacker 比特流校验 + LZMA 解码校验；
+  ancient 解码器缺位，记录为 pending）。
+- **文件分片递归**（`scanProcess` 对齐）：OVERLAY 无条件扫描且以
+  `FT_BINARY` 跑签名表；RESOURCE 经 `varInfo` 传资源类型并受
+  `isScanable`/aggressive 门控；归档成员受 `isScanable` 门控；子扫描
+  `bInit=false` 语义 = 禁用子级分片枚举且抑制 `Unknown` 回退泄漏。
+  overlay 偏移按上游各格式 `getFileParts` 语义（PE 节尾、NE header+
+  段、LE/LX `nFileParts` 请求 quirk、MSDOS imageSize、DEX map 上限）；
+  ELF/Mach-O/ZIP 走基类，无 overlay 分片。
+- **专用 getInfo 补齐**：APK（`AndroidManifest.xml` 解压门控 +
+  META-INF/保护者链）、JAR（XZip FFI OS 记录 `Unknown [NOEXEC, Data,
+  Archive]` + 末尾 ZIP container 记录，非 JVM 记录）、DEX
+  （`valueToHex` + DexGuard/R8/dexlib）、ZIP（`handle_Container` vs
+  严格 `handle_ContainerHeader` 的 "central/local headers verified"
+  边界——空 EOCD 只出 "0 records inspected"）、JPEG（JFIF 版本 +
+  format 记录）、CFBF（base format + 子类型覆盖）、PDF format 记录。
+- **解析对齐**：PE COFF 字符串表节名解析（`/N` → `.debug_info` 等
+  → DWARF `get_DWRAF_vi` 版本）；短 ELF 成员宽松解析（越界字段按
+  上游 `read_*` 返回 0）；PE32+ subsystem/OSversion 偏移修正（与
+  PE32 同为 40/68）；PE `nsects=0` 容忍。
+
+### 语料差分结果
+
+`python3 tools/nfd_diff.py corpus/`：**72 文件，0 差异**。
+
+回归测试：`crates/diec-nfd/tests/oracle_alignment.rs`（UPX MinGW/GCC
+链 + C/C++ 聚合、COFF 字符串表 DWARF、空 ZIP EOCD、Mach-O clang→C/C++、
+嵌套 ZIP 短 ELF 成员 + Unknown 抑制、minimal-NE overlay Unknown）。

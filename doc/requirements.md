@@ -1327,3 +1327,4 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 - 2026-XX: Phase 21.N — handle_FixDetects + Microsoft Rich 链收尾 + AutoIt 2.XX。
 
 - 2026-10-08: 继续顺序完成 — Phase 21.N（FixDetects + Microsoft Rich 链）后进入 Phase 22 非 PE 启发：NE/LE/LX（22.C）、ELF/Mach-O protection+fixdetects（22.A/B）、COM/PDF/CFBF/Amiga/JAR/text（22.D）。
+- 2026-10-08：继续 Phase 23 差分收敛，将 Qt oracle 对比的剩余差异清零。

@@ -903,6 +903,9 @@ pub static RECORD_NAME_STR: &[&str] = &[
     "zlib",
     "Zortech C",
     "ZProtect",
+    "RECORD_NAME_LZIP",
+    "RECORD_NAME_LZMA",
+    "RECORD_NAME_SKATERNET",
 ];
 
 /// Display strings for RECORD_TYPE (index = u8 id).
@@ -2468,6 +2471,9 @@ pub mod name {
     pub const RECORD_NAME_ZLIB: u16 = 894;
     pub const RECORD_NAME_ZORTECHC: u16 = 895;
     pub const RECORD_NAME_ZPROTECT: u16 = 896;
+    pub const RECORD_NAME_LZIP: u16 = 897;
+    pub const RECORD_NAME_LZMA: u16 = 898;
+    pub const RECORD_NAME_SKATERNET: u16 = 899;
 }
 
 pub mod rtype {

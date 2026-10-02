@@ -188,7 +188,7 @@ fn parse_layout(d: &[u8]) -> Option<PeLayout> {
     }
     let coff = pe_off + 4;
     let nsects = rd_u16(d, coff + 2)? as usize;
-    if nsects == 0 || nsects > 96 {
+    if nsects > 96 {
         return None;
     }
     let opt_size = rd_u16(d, coff + 16)? as usize;
@@ -214,14 +214,32 @@ fn parse_layout(d: &[u8]) -> Option<PeLayout> {
             dir_size[i] = s;
         }
     }
+    // `XPE` resolves long section names (`/N`) through the COFF string
+    // table that follows the symbol table.
+    let strtab_off = rd_u32(d, coff + 8)
+        .and_then(|p| rd_u32(d, coff + 12).map(|n| p as usize + n as usize * 18))
+        .filter(|&o| o + 4 <= d.len());
     let sec_off = opt_off + opt_size;
     let mut sections = Vec::with_capacity(nsects);
     for i in 0..nsects {
         let so = sec_off + i * 40;
         let name_raw = d.get(so..so + 8)?;
         let end = name_raw.iter().position(|&b| b == 0).unwrap_or(8);
+        let mut name = String::from_utf8_lossy(&name_raw[..end]).to_uppercase();
+        if let Some(idx) = name
+            .strip_prefix('/')
+            .and_then(|t| t.parse::<usize>().ok())
+            .filter(|&idx| idx >= 4)
+            && let Some(st) = strtab_off
+            && let Some(start) = st.checked_add(idx)
+            && start < d.len()
+        {
+            let tail = &d[start..d.len().min(start + 256)];
+            let tend = tail.iter().position(|&b| b == 0).unwrap_or(tail.len());
+            name = String::from_utf8_lossy(&tail[..tend]).to_uppercase();
+        }
         sections.push(Section {
-            name: String::from_utf8_lossy(&name_raw[..end]).to_uppercase(),
+            name,
             vaddr: rd_u32(d, so + 12)?,
             vsize: rd_u32(d, so + 8)?,
             raw_ptr: rd_u32(d, so + 20)?,
@@ -533,7 +551,9 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
     // handle_Microsoft.
     info.major_linker = d.get(l.opt_off + 2).copied().unwrap_or(0);
     info.minor_linker = d.get(l.opt_off + 3).copied().unwrap_or(0);
-    let (osv_off, subsys_off) = if l.is64 { (44, 72) } else { (40, 68) };
+    // PE32 and PE32+ share these offsets: the wider ImageBase is exactly
+    // compensated by the absent BaseOfData field.
+    let (osv_off, subsys_off) = (40, 68);
     let maj_os = rd_u16(d, l.opt_off + osv_off).unwrap_or(0);
     let min_os = rd_u16(d, l.opt_off + osv_off + 2).unwrap_or(0);
     info.os_version = (u32::from(maj_os) << 16) | u32::from(min_os);

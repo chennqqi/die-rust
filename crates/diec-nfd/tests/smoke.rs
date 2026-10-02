@@ -12,7 +12,14 @@ fn corpus(name: &str) -> Vec<u8> {
 
 fn show(name: &str, d: &[u8]) -> (u16, Vec<Detection>) {
     let ft = sniff_ft(d);
-    let out = scan(d, ft, ScanOptions { deep_scan: true });
+    let out = scan(
+        d,
+        ft,
+        ScanOptions {
+            deep_scan: true,
+            ..Default::default()
+        },
+    );
     eprintln!("== {name} (ft={})", ft_name(ft));
     for x in &out {
         eprintln!(
@@ -28,7 +35,7 @@ fn pe32_packed_detects_upx_related() {
     let d = corpus("upx-pe32-nrv2b.exe");
     let (ft, out) = show("upx-pe32-nrv2b", &d);
     assert!(ft == ft::FT_PE32, "ft={}", ft_name(ft));
-    let names: Vec<&str> = out.iter().map(|r| r.record_name).collect();
+    let names: Vec<&str> = out.iter().map(|r| r.record_name.as_ref()).collect();
     // UPX-packed files must surface UPX via section names / imphash /
     // entrypoint tables at minimum.
     assert!(
@@ -71,7 +78,14 @@ fn malformed_inputs_no_panic() {
     .enumerate()
     {
         let ft = sniff_ft(d);
-        let _ = scan(d, ft, ScanOptions { deep_scan: true });
+        let _ = scan(
+            d,
+            ft,
+            ScanOptions {
+                deep_scan: true,
+                ..Default::default()
+            },
+        );
         let _ = i;
     }
 }
@@ -79,31 +93,51 @@ fn malformed_inputs_no_panic() {
 // ---- Phase 21.F: per-format dispatch coverage ----------------------------
 
 /// Build a minimal ZIP with a single stored member carrying `name`.
+#[allow(dead_code)]
 fn zip_with_member(name: &str) -> Vec<u8> {
-    let nb = name.as_bytes();
+    zip_with_members(&[(name, &[][..])])
+}
+
+/// Multi-member stored-method ZIP: `(name, data)` pairs.
+fn zip_with_members(members: &[(&str, &[u8])]) -> Vec<u8> {
     let mut d = Vec::new();
-    // Local file header.
-    d.extend_from_slice(b"PK\x03\x04");
-    d.extend_from_slice(&[0u8; 4]); // version/flags
-    d.extend_from_slice(&[0u8; 4]); // method+mtime+mdate
-    d.extend_from_slice(&[0u8; 12]); // crc/sizes
-    d.extend_from_slice(&(nb.len() as u16).to_le_bytes());
-    d.extend_from_slice(&[0u8; 2]); // extra len
-    d.extend_from_slice(nb);
-    // Central directory at current offset.
+    let mut cd_entries = Vec::new();
+    for (name, data) in members {
+        let nb = name.as_bytes();
+        let local_off = d.len() as u32;
+        // Local file header.
+        d.extend_from_slice(b"PK\x03\x04");
+        d.extend_from_slice(&[0u8; 4]); // version/flags
+        d.extend_from_slice(&[0u8; 6]); // method+mtime+mdate
+        d.extend_from_slice(&[0u8; 4]); // crc
+        d.extend_from_slice(&(data.len() as u32).to_le_bytes()); // csize
+        d.extend_from_slice(&(data.len() as u32).to_le_bytes()); // usize
+        d.extend_from_slice(&(nb.len() as u16).to_le_bytes());
+        d.extend_from_slice(&[0u8; 2]); // extra len
+        d.extend_from_slice(nb);
+        d.extend_from_slice(data);
+        cd_entries.push((nb, data.len() as u32, local_off));
+    }
     let cd = d.len();
-    d.extend_from_slice(b"PK\x01\x02");
-    d.extend_from_slice(&[0u8; 24]); // version..crc/sizes
-    d.extend_from_slice(&(nb.len() as u16).to_le_bytes());
-    d.extend_from_slice(&[0u8; 8]); // extra/comment/disk/attrs
-    d.extend_from_slice(&[0u8; 8]); // attrs+lho
-    d.extend_from_slice(nb);
+    let mut cd_size = 0u32;
+    for (nb, size, local_off) in &cd_entries {
+        d.extend_from_slice(b"PK\x01\x02");
+        d.extend_from_slice(&[0u8; 16]); // version..crc
+        d.extend_from_slice(&size.to_le_bytes()); // csize
+        d.extend_from_slice(&size.to_le_bytes()); // usize
+        d.extend_from_slice(&(nb.len() as u16).to_le_bytes());
+        d.extend_from_slice(&[0u8; 8]); // extra/comment/disk/attrs
+        d.extend_from_slice(&[0u8; 4]); // attrs
+        d.extend_from_slice(&local_off.to_le_bytes());
+        d.extend_from_slice(nb);
+        cd_size += 46 + nb.len() as u32;
+    }
     // EOCD.
     d.extend_from_slice(b"PK\x05\x06");
     d.extend_from_slice(&[0u8; 4]); // disk
-    d.extend_from_slice(&1u16.to_le_bytes());
-    d.extend_from_slice(&1u16.to_le_bytes());
-    d.extend_from_slice(&(nb.len() as u32 + 46).to_le_bytes()); // cd size
+    d.extend_from_slice(&(cd_entries.len() as u16).to_le_bytes());
+    d.extend_from_slice(&(cd_entries.len() as u16).to_le_bytes());
+    d.extend_from_slice(&cd_size.to_le_bytes());
     d.extend_from_slice(&(cd as u32).to_le_bytes());
     d.extend_from_slice(&[0u8; 2]); // comment len
     d
@@ -138,7 +172,12 @@ fn dex_with_strings(strs: &[&str]) -> Vec<u8> {
 
 #[test]
 fn apk_member_name_scan_hits_protector_record() {
-    let d = zip_with_member("assets/secData0.jar");
+    // Upstream `XAPK::isValid` requires a non-empty AndroidManifest.xml
+    // member before `APK_handle` runs at all.
+    let d = zip_with_members(&[
+        ("AndroidManifest.xml", b"<manifest/>\n"),
+        ("assets/secData0.jar", b"x"),
+    ]);
     let ft = diec_nfd::sniff_ft_named(&d, "x.apk");
     assert_eq!(diec_nfd::ft_name(ft), "FT_APK");
     let out = diec_nfd::scan(&d, ft, diec_nfd::ScanOptions::default());
@@ -172,7 +211,7 @@ fn plain_text_gets_format_record() {
     );
     assert!(
         out.iter()
-            .any(|r| r.record_type == "Format" && r.record_name == "Plain" && r.info == "LF"),
+            .any(|r| r.record_type == "Format" && r.record_name == "Plain text" && r.info == "LF"),
         "expected Plain text format record: {out:?}"
     );
 }
@@ -266,19 +305,29 @@ fn pdf_version_fixup_extracts_header_version() {
 fn apk_with_sig_block(ids: &[u32], members: &[&str]) -> Vec<u8> {
     let mut d = Vec::new();
     let mut cd = Vec::new();
+    // Upstream `XAPK::isValid` gates `APK_handle` on a non-empty
+    // AndroidManifest.xml member.
+    let mut all: Vec<(&str, &[u8])> = vec![("AndroidManifest.xml", b"<manifest/>\n")];
+    all.extend(members.iter().map(|n| (*n, &[][..])));
     // Local headers + central directory entries for each member.
-    for name in members {
+    for (name, data) in &all {
         let local_off = d.len() as u32;
         d.extend_from_slice(&[0x50, 0x4B, 0x03, 0x04]); // local header
-        d.extend_from_slice(&[20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        d.extend_from_slice(&[20, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // ver..mdate
+        d.extend_from_slice(&[0; 4]); // crc
+        d.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        d.extend_from_slice(&(data.len() as u32).to_le_bytes());
         d.extend_from_slice(&(name.len() as u16).to_le_bytes());
         d.extend_from_slice(&[0, 0]);
         d.extend_from_slice(name.as_bytes());
+        d.extend_from_slice(data);
         // Central directory entry.
         cd.extend_from_slice(&[0x50, 0x4B, 0x01, 0x02]);
         // ver_made..usize = 24 bytes.
         cd.extend_from_slice(&[20, 0, 20, 0]);
-        cd.extend_from_slice(&[0; 20]);
+        cd.extend_from_slice(&[0; 12]); // flags..crc
+        cd.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        cd.extend_from_slice(&(data.len() as u32).to_le_bytes());
         cd.extend_from_slice(&(name.len() as u16).to_le_bytes());
         // extralen, commentlen, disk, intattr, extattr = 12 bytes.
         cd.extend_from_slice(&[0; 12]);
@@ -301,8 +350,8 @@ fn apk_with_sig_block(ids: &[u32], members: &[&str]) -> Vec<u8> {
     d.extend_from_slice(&cd);
     d.extend_from_slice(&[0x50, 0x4B, 0x05, 0x06]); // EOCD
     d.extend_from_slice(&[0, 0, 0, 0]);
-    d.extend_from_slice(&(members.len() as u16).to_le_bytes());
-    d.extend_from_slice(&(members.len() as u16).to_le_bytes());
+    d.extend_from_slice(&(all.len() as u16).to_le_bytes());
+    d.extend_from_slice(&(all.len() as u16).to_le_bytes());
     d.extend_from_slice(&(cd.len() as u32).to_le_bytes());
     d.extend_from_slice(&cd_off.to_le_bytes());
     d.extend_from_slice(&[0, 0]);
@@ -381,12 +430,26 @@ fn mz_with_banner(banner: &[u8], at: usize) -> Vec<u8> {
 fn msdos_dos4g_deep_scan_only() {
     let d = mz_with_banner(b"DOS/4G", 0x80);
     let ft = diec_nfd::gen_names::ft::FT_MSDOS;
-    let shallow = diec_nfd::scan(&d, ft, diec_nfd::ScanOptions { deep_scan: false });
+    let shallow = diec_nfd::scan(
+        &d,
+        ft,
+        diec_nfd::ScanOptions {
+            deep_scan: false,
+            ..Default::default()
+        },
+    );
     assert!(
         !shallow.iter().any(|r| r.record_name == "DOS/4G"),
         "DOS/4G must be deep-scan gated: {shallow:?}"
     );
-    let deep = diec_nfd::scan(&d, ft, diec_nfd::ScanOptions { deep_scan: true });
+    let deep = diec_nfd::scan(
+        &d,
+        ft,
+        diec_nfd::ScanOptions {
+            deep_scan: true,
+            ..Default::default()
+        },
+    );
     assert!(
         deep.iter()
             .any(|r| r.record_name == "DOS/4G" && r.record_type == "DOS extender"),
@@ -415,7 +478,10 @@ fn msdos_vintage_pascal_banner() {
     let out = diec_nfd::scan(
         &d,
         diec_nfd::gen_names::ft::FT_MSDOS,
-        diec_nfd::ScanOptions { deep_scan: true },
+        diec_nfd::ScanOptions {
+            deep_scan: true,
+            ..Default::default()
+        },
     );
     assert!(
         out.iter()
@@ -508,7 +574,7 @@ fn elf_comment_gcc_and_os() {
     assert!(
         out.iter().any(|r| r.record_name == "Unix"
             && r.record_type == "Operation system"
-            && r.info.contains("EM_AMD64")
+            && r.info.contains("AMD64")
             && r.info.contains("64-bit")
             && r.info.contains("EXEC")),
         "expected UNIX OS record with arch info: {out:?}"
@@ -715,7 +781,14 @@ fn macho_truncated_inputs_do_not_panic() {
     for cut in [1, 4, 16, 28, 31, 32, 33, 100, 300, 350] {
         let d = &full[..cut.min(full.len())];
         let ft = sniff_ft(d);
-        let _ = scan(d, ft, ScanOptions { deep_scan: true });
+        let _ = scan(
+            d,
+            ft,
+            ScanOptions {
+                deep_scan: true,
+                ..Default::default()
+            },
+        );
     }
     // Big-endian thin Mach-O and a FAT header truncated mid-table.
     let mut be = full.clone();
@@ -723,12 +796,18 @@ fn macho_truncated_inputs_do_not_panic() {
     let _ = scan(
         &be[..32],
         sniff_ft(&be[..32]),
-        ScanOptions { deep_scan: true },
+        ScanOptions {
+            deep_scan: true,
+            ..Default::default()
+        },
     );
     let _ = scan(
         &[0xCA, 0xFE, 0xBA, 0xBE],
         sniff_ft(&[0xCA, 0xFE, 0xBA, 0xBE]),
-        ScanOptions { deep_scan: true },
+        ScanOptions {
+            deep_scan: true,
+            ..Default::default()
+        },
     );
 }
 
@@ -1486,7 +1565,9 @@ fn pe32_dotnet_ansi_heap_promotes_dotfuscator() {
     assert!(
         out.iter().any(|x| x.record_name.contains("Dotfuscator")),
         "{:?}",
-        out.iter().map(|x| x.record_name).collect::<Vec<_>>()
+        out.iter()
+            .map(|x| x.record_name.clone())
+            .collect::<Vec<_>>()
     );
 }
 
@@ -1639,7 +1720,9 @@ fn elf_secneo_tag_at_upx_tail() {
         out.iter()
             .any(|r| r.record_name == "SecNeo" && r.version == "Old" && r.info == "UPX"),
         "{:?}",
-        out.iter().map(|r| r.record_name).collect::<Vec<_>>()
+        out.iter()
+            .map(|r| r.record_name.clone())
+            .collect::<Vec<_>>()
     );
     // The tail block still parses as a (modified) UPX record.
     let upx = out
@@ -1787,7 +1870,14 @@ fn cfbf_subtype_promotion() {
         .take(23)
         .zip(b"Advanced Installer 19.3\r\n")
         .for_each(|(b, s)| *b = *s);
-    let out = diec_nfd::scan(&ai, ft::FT_CFBF, ScanOptions { deep_scan: true });
+    let out = diec_nfd::scan(
+        &ai,
+        ft::FT_CFBF,
+        ScanOptions {
+            deep_scan: true,
+            ..Default::default()
+        },
+    );
     let names: Vec<String> = out
         .iter()
         .map(|r| format!("{}:{} {}", r.record_type, r.record_name, r.version))
@@ -1899,8 +1989,9 @@ fn zip_stored(entries: &[(&str, &[u8])]) -> Vec<u8> {
     d
 }
 
-/// `NFD_JAR::getInfo` — JVM record with the first .class member's JDK
-/// version plus MANIFEST.MF vendor/JDK/Ant tool detections.
+/// `NFD_JAR::getInfo` — upstream emits the XZip FFI OS record
+/// (`Unknown [NOEXEC, Data, Archive]`) plus MANIFEST.MF vendor/JDK/Ant
+/// tool detections and the trailing ZIP container record.
 #[test]
 fn jar_manifest_and_class_version() {
     let mut class = vec![0u8; 16];
@@ -1926,7 +2017,7 @@ fn jar_manifest_and_class_version() {
     assert!(
         names
             .iter()
-            .any(|s| s.contains("Virtual machine:JVM") && s.contains("Java SE 8")),
+            .any(|s| s.contains("Operation system:Unknown") && s.contains("NOEXEC, Data, Archive")),
         "{names:?}"
     );
     assert!(
@@ -1975,4 +2066,22 @@ fn text_source_heuristics() {
             .any(|s| s.contains("Shell") && s.contains("Python3")),
         "{names:?}"
     );
+}
+
+#[test]
+fn apk_debug_members() {
+    let d = zip_with_members(&[
+        ("AndroidManifest.xml", b"<manifest/>\n"),
+        ("assets/secData0.jar", b"x"),
+    ]);
+    let ms = diec_nfd::parse::zip_members(&d);
+    for m in &ms {
+        eprintln!(
+            "member: {} unc={} method={} comp={}",
+            m.name, m.unc_size, m.method, m.comp_size
+        );
+    }
+    let mm = ms.iter().find(|m| m.name == "AndroidManifest.xml").unwrap();
+    let raw = diec_nfd::parse::zip_member_data(&d, mm, 1024);
+    eprintln!("manifest raw: {:?}", raw);
 }

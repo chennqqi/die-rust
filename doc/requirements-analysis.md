@@ -594,3 +594,5 @@ save/restore 机制。通过 DIE-engine 调试追踪确认：Qt Script 中 `var 
 - PE benign 200 样本：99.5% 匹配（1个 NTkrnl Protector 差异）
 - ELF benign 100 样本：96% 匹配（4个版本字符串细微差异）
 - 所有 workspace 测试通过，clippy 无警告
+- 2026-10-08：定位并修复最后 3 类差异（getLanguage C/C++ 映射、ZIP
+  EOCD verified 后缀边界、COFF 字符串表节名→DWARF），差分收敛至 0。

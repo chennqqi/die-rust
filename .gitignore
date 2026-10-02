@@ -34,3 +34,8 @@ __pycache__/
 
 # C smoke test binary (compiled artifact, not source)
 /tests/c/smoke
+
+# NFD oracle harness: Qt build tree + locally unpacked Qt RPMs (not committed)
+/tools/nfd-oracle/build/
+/tools/nfd-oracle/rpms/
+/tools/nfd-oracle/qmake-root/

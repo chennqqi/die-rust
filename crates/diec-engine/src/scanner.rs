@@ -517,6 +517,14 @@ fn run_nfd_pass(
     let ft = diec_nfd::sniff_ft_named(data, file_name);
     let opts = diec_nfd::ScanOptions {
         deep_scan: flags.deep,
+        heuristic_scan: flags.heuristic,
+        verbose: flags.verbose,
+        all_types: flags.all_types,
+        archives_scan: flags.archives,
+        recursive_scan: flags.recursive,
+        resources_scan: flags.resources,
+        overlay_scan: flags.overlays,
+        aggressive_scan: flags.aggressive,
     };
     let ft_label = diec_nfd::ft_name(ft);
     for rec in diec_nfd::scan(data, ft, opts) {
@@ -812,13 +820,23 @@ fn scan_archive_members_inline(
             continue;
         }
 
+        // Upstream `XScanEngine::isScanable` gate: archive members are
+        // scanned only when they sniff as an executable/structured
+        // format; plain text and data members are skipped entirely.
+        if !diec_nfd::is_scanable_ft(diec_nfd::sniff_ft(&member.data)) {
+            continue;
+        }
+
         let member_name = format!("{file_name}:Archive({})", member.name);
         let child_flags = crate::host::ScanFlags {
             // Nested scans don't recurse further (avoid infinite loops).
+            // The NFD engine performs its own file-part recursion inside
+            // `diec_nfd::scan`; disable it here to avoid duplicate records.
             recursive: false,
             resources: false,
             overlays: false,
             archives: false,
+            nfd: false,
             ..flags.clone()
         };
 
@@ -1175,6 +1193,7 @@ impl Scanner {
                 recursive: false,
                 resources: false,
                 overlays: false,
+                nfd: false,
                 ..flags.clone()
             };
 
@@ -1216,12 +1235,21 @@ impl Scanner {
                 continue;
             }
 
+            // Upstream `XScanEngine::isScanable` gate: archive members
+            // are scanned only when they sniff as an executable or
+            // structured format; plain text and data members are
+            // skipped entirely.
+            if !diec_nfd::is_scanable_ft(diec_nfd::sniff_ft(&member.data)) {
+                continue;
+            }
+
             let member_name = format!("{file_name}:Archive({})", member.name);
             let child_flags = crate::host::ScanFlags {
                 recursive: false,
                 resources: false,
                 overlays: false,
                 archives: false,
+                nfd: false,
                 ..flags.clone()
             };
 

@@ -215,7 +215,7 @@ impl HostApi for BufferHost {
         if bytes.is_empty() {
             return String::new();
         }
-        crate::axml::decode_axml(&bytes)
+        diec_nfd::axml::decode_axml(&bytes)
     }
 
     fn read_u16_le(&self, offset: u64) -> Result<u16, HostApiError> {

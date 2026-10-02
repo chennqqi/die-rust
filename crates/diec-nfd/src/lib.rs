@@ -14,8 +14,13 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod archiveheaders;
+pub mod axml;
+mod compression_detect;
+mod containers;
 mod elf;
 mod engine;
+mod legacy;
 mod mach;
 mod mach_tables;
 mod miscfmt;
@@ -25,6 +30,7 @@ pub mod pe;
 mod pe_handlers;
 mod pe_tables;
 pub mod pe_version;
+mod promote;
 mod records;
 mod scans;
 mod signature;
@@ -36,7 +42,7 @@ pub mod gen_names;
 pub mod gen_tables;
 
 pub use engine::{
-    Detection, ScanOptions, ft_name, name_id, rtype_id, scan, sniff_ft, sniff_ft_named,
-    supported_ft,
+    Detection, ScanOptions, ft_name, is_scanable_ft, name_id, rtype_id, scan, sniff_ft,
+    sniff_ft_named, supported_ft,
 };
 pub use scans::ScanRecord;
