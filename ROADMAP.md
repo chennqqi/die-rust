@@ -1918,6 +1918,12 @@ nrv 单测），前端 `npm run build` 通过。
   段表 EP）、LE/LX（linker header）、ELF32/64（PT_LOAD EP scan）、
   DEX（string/type 双 stringScan）、APK（成员名 CRC + fancy-regex
   archiveExpScan）、文本 "Plain text" format 记录（CRLF/LF/CR）。
+- ELF 语义层：`elf_info` 解析器（节表/shstrtab/PT_NOTE+SHT_NOTE/
+  PT_DYNAMIC/PT_INTERP，端序感知）+ `vi.rs` 44 个 `_get_*_string`
+  提取器链（`.comment` 按上游顺序首个命中）+ OS 识别（OSABI→
+  解释器→发行版注释→GNU/Android/Minix/NetBSD/OpenBSD ident）+
+  GCC/.gcc_except_table + symtab/stab/DWARF 版本 + Qt(.qtversion/
+  .qtplugin/libQt5/6)/gold/Android NDK/Go/.NET runpath。
 - 语义 handler 首批：`handle_DosExtenders`（WDOSX@0x34 常开；
   CWSDPMI/DOS4G/DOS16M deep-scan 门控）、`handle_VintageCompilers`
   （15 条 vintage 运行时横幅，deep-scan 门控）、APK Signature Block

@@ -435,7 +435,7 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 | COM | `NFD_COM::getInfo` | ✅ header + exp scan @0 | .com 后缀 + ≤64KiB 判定 |
 | NE | `NFD_NE::getInfo` | ⚠ partial | linker header + CS:IP 段表 EP scan；heuristics 未移植 |
 | LE/LX | `NFD_LE/LX::getInfo` | ⚠ partial | linker header 表；heuristics 未移植 |
-| ELF32/64 | `NFD_ELF::getInfo` | ⚠ partial | PT_LOAD EP→offset + EP scan；format record/handle_* 未移植 |
+| ELF32/64 | `NFD_ELF::getInfo` | ⚠ partial | EP scan + OSABI/解释器/注释/GNU note 识别 OS + `.comment` 44 提取器链 + GCC/.gcc_except_table + symtab/stab/DWARF + Qt/gold/Android NDK/Go/.NET；protection/unknown-protection handle 未移植 |
 | DEX | `NFD_DEX::getInfo` | ✅ string_ids + type_ids 两组 stringScan | |
 | APK | `NFD_APK::getInfo` | ✅ 成员名 scan + 签名块 + Kotlin/Java/OS | v2/v3 签名块互斥、Walle/GooglePlay ID、Kotlin 成员判定；META-INF 证书解压未移植 |
 | JAR | `NFD_JAR::getInfo` | ❌ 走 ZIP/generic 路径 | 上游 JAR 无表驱动记录 |
