@@ -1866,3 +1866,44 @@ Phase 17 显式 deferred 的项目按"阻塞原因 × 可落地性"分层实施�
 
 Phase 18 交付验证：`cargo fmt/clippy/test` 全绿（archive_unpack 31 测试、
 demangle 25 测试），前端 `npm run build` 通过。
+
+## Phase 19：InfoDB 注释/书签 — DONE (2026-10-06)
+
+以旁车 JSON 持久化方案实现（ADR 0037 Superseded，不引入 SQLite）。
+
+- 存储：`<file>.diec.json`（version + file_sha256 + entries），
+  文件哈希变化标 stale 而非删除；畸形 sidecar 静默忽略。
+- 后端 `die-gui::annotations`：`list_annotations` / `upsert_annotation` /
+  `delete_annotation` / `clear_annotations` 四个 Tauri 命令。
+- 前端 `AnnotationsPanel`：kind（bookmark/comment/label）+ offset +
+  文本 + 颜色，HexViewer 与 Disassembler 双挂载；en/zh-CN i18n。
+
+## Phase 20：静态脱壳 — UPX — DONE (2026-10-07)
+
+对齐 DIE `XUPX`/`XStaticUnpacker` 语义（非 `upx -d` 全部行为），
+ADR 0036 按"逐 packer"条件实施 UPX。
+
+- `diec-engine::unpack::upx`：`UPX!` pack-header 解析（版本敏感头长、
+  filter/CTO/MRU、方法/长度边界校验）；PE filter 还原（0x06/0x26/
+  0x36/0x46/0x49，小端）；PE 重建（headers/节表/imports/relocs/
+  exports/resources/overlay，目录清理与上游一致）。
+- `diec-engine::unpack::nrv`：UCL NRV2B/2D/2E 精确移植，8-bit/LE16/
+  LE32 三种位读取器 × 3 算法共 9 变体；重叠回拷、lookbehind/输入/
+  输出越界检查；返回实际产出长度（对齐 `*pnDstSize`）。
+- LZMA（UPX 双字节属性前缀）+ 裸 DEFLATE 分派。
+- CLI：`diec --unpack <file>` 生成 `<file>.unpacked`。
+- GUI：`detect_upx` + `unpack_file` 命令；FileInfoPanel UPX 区块
+  （方法/级别/filter + 一键脱壳）。
+- 语料：UPX 5.2.1 生成 PE32×NRV2B/NRV2E/LZMA/brute、PE64×NRV2B，
+  以 `upx -d` 输出为 oracle 节级字节差分（7 测试全过）。
+
+Phase 20 交付验证：`cargo fmt/clippy/test` 全绿（upx_unpack 7 测试、
+nrv 单测），前端 `npm run build` 通过。
+
+## Phase 21：NFD/SpecAbstract 第二引擎 — GATED
+
+Gate 条件（均未满足即不立项）：specabstract 规则库 MIT 许可证已审计
+通过（✅），但移植工作量等同 DIE 引擎本体（~1.5 MB C++、60+ 文件），
+需独立预算。计划路径：`diec-nfd` crate + 签名表 codegen
+（C 数组 → Rust 静态表）+ 第二扫描 pass（`engine=nfd` 标记）+
+GUI 引擎选择器。

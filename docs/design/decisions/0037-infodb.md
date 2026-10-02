@@ -1,7 +1,7 @@
 # ADR 0037: Defer InfoDB (Bookmarks/Annotations) Infrastructure
 
 **Date**: 2026-10-02  
-**Status**: Deferred
+**Status**: Superseded (annotations implemented via sidecar JSON, Phase 19)
 
 ## Context
 
@@ -36,3 +36,17 @@ reserved.
 - Re-evaluation trigger: when analyst-workflow features (commenting,
   session save/restore) are scheduled; the schema decision should be
   revisited then.
+
+## Resolution (Phase 19, 2026-10-06)
+
+Implemented as a **sidecar JSON file** `<file>.diec.json` instead of a
+SQLite database:
+
+- Pure Rust, human-diffable, no native dependencies — satisfies the
+  "prefer pure Rust" constraint without pulling `tauri-plugin-sql`.
+- Schema: `version`, `file_sha256`, `entries[]` (`kind`: bookmark /
+  comment / label, `offset`, `text`, `color`, `created`).
+- File-hash mismatch marks entries `stale` rather than deleting them.
+- Tauri commands: `list_annotations`, `upsert_annotation`,
+  `delete_annotation`, `clear_annotations`; shared `AnnotationsPanel`
+  mounted in both HexViewer and Disassembler.

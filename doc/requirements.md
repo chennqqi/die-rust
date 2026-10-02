@@ -1298,3 +1298,9 @@ ISO9660（自实现 base-spec reader）归档 list/extract；18.C 评估
 SSDeep/TLSH/BZ2/XZ/LZMA → ADR 0039/0040，其中 BZ2/XZ/LZMA 用
 `bzip2-rs`+`lzma-rs` 实现单流解码；18.D 反汇编架构评估 → ADR 0041
 （deferred，无完整纯 Rust 路径）。更新 COMPATIBILITY/ROADMAP。
+
+## 顺序完成 Phase 19/20/21（用户澄清：Phase 23 不存在，按 19→20→21 推进）
+
+Phase 19 InfoDB 注释/书签（旁车 JSON + Tauri 命令 + Hex/Disasm UI）；
+Phase 20 UPX 静态脱壳（NRV2B/2D/2E+LZMA+DEFLATE+PE 重建，CLI/GUI）；
+Phase 21 NFD/SpecAbstract 第二引擎（待立项）。

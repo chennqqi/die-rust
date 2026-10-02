@@ -399,3 +399,26 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 - ADR 0040：BZ2/XZ/LZMA 纯 Rust 解码（本 Phase 已实现）。
 - ADR 0041：MIPS/PPC/RISC-V 反汇编 deferred——无完整纯 Rust 覆盖，
   capstone native 绑定是唯一全架构路径但增加构建负担。
+
+## Phase 19/20: InfoDB & Static Unpack（2026-10-07）
+
+### Annotations（19，对应上游 XInfoDB 子集）
+
+| 能力 | 上游 | diec-rust | 差异 |
+|------|------|-----------|------|
+| 持久化 | XInfoDB（进程内 DB） | `<file>.diec.json` 旁车 | 跨进程持久化；无会话间共享 DB |
+| 条目类型 | bookmark/comment/label/… | bookmark/comment/label | 核心三类对齐 |
+| 失效策略 | — | file_sha256 变化标 stale | 上游无文件级失效 |
+| UI | hex/disasm 行内注释 | AnnotationsPanel 共享面板 | 形态不同，功能等价 |
+
+### UPX 静态脱壳（20，对齐 XUPX/_unpackPE）
+
+| 能力 | 上游 DIE | diec-rust | 备注 |
+|------|----------|-----------|------|
+| pack-header | `_read_packheader` 版本敏感头长 | ✅ 对齐（v≤3:24、4–9:20/25/28、≥10:22/27/32） | |
+| NRV2B/2D/2E | UCL 9 变体 | ✅ 精确移植（含 `*pnDstSize` 语义） | |
+| LZMA | UPX 属性前缀 | ✅ | |
+| DEFLATE | raw deflate | ✅ | |
+| PE filter | `_applyFilter` 小端 call/jmp | ✅ 0x06/0x26/0x36/0x46/0x49 + CTO | |
+| PE 重建 | `_unpackPE` | ✅ headers/节/imports/relocs/exports/resources/overlay | `upx -d` 节级字节差分通过 |
+| 其他壳 | ASPack/PECompact/… | ❌ deferred | ADR 0036 |
