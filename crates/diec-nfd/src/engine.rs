@@ -407,6 +407,11 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
         _ => {}
     }
 
+    // Post-dispatch fixups mirroring the cheap container metadata of
+    // `NFD_ZIP::handle_Container` and `NFD_PDF::getInfo` format versions.
+    zip_container_fixup(data, file_type, &mut header);
+    pdf_version_fixup(data, file_type, &mut header);
+
     // Assembly order mirrors `_handleResult` (formats first for the
     // binary path is an approximation — upstream sorts result maps by
     // fixed category order).
@@ -735,4 +740,57 @@ pub fn ft_name(file_type: u16) -> &'static str {
         .get(file_type as usize)
         .copied()
         .unwrap_or("FT_UNKNOWN")
+}
+
+/// `NFD_ZIP::handle_Container`: enrich the ZIP format record with the
+/// inspected-entry count, the minimum reader version and the encryption
+/// flag for ZIP-family containers (ZIP/APK/JAR/IPA/NPM).
+fn zip_container_fixup(data: &[u8], file_type: u16, header: &mut DetectMap) {
+    let is_zip_family = file_type == ft::FT_ZIP
+        || file_type == ft::FT_APK
+        || file_type == ft::FT_JAR
+        || file_type == ft::FT_IPA
+        || file_type == ft::FT_NPM;
+    if !is_zip_family {
+        return;
+    }
+    let members = parse::zip_members(data);
+    if members.is_empty() {
+        return;
+    }
+    let min_ver = members.iter().map(|m| m.version_needed).max().unwrap_or(0);
+    let encrypted = members.iter().any(|m| m.encrypted);
+    let mut info = format!("{} records inspected", members.len());
+    if min_ver != 0 {
+        info.push_str(&format!(
+            ", Declared minimum reader version: {}.{} (inspected entries)",
+            min_ver / 10,
+            min_ver % 10
+        ));
+    }
+    if encrypted {
+        info.push_str(", Encrypted");
+    }
+    if let Some(rec) = header.get_mut(&name::RECORD_NAME_ZIP) {
+        rec.info = info;
+    }
+}
+
+/// `NFD_PDF::getInfo` format record: attach the `%PDF-X.Y` version to the
+/// PDF format detection.
+fn pdf_version_fixup(data: &[u8], file_type: u16, header: &mut DetectMap) {
+    if file_type != ft::FT_PDF || !data.starts_with(b"%PDF-") {
+        return;
+    }
+    let ver: String = data[5..data.len().min(16)]
+        .iter()
+        .take_while(|b| b.is_ascii_digit() || **b == b'.')
+        .map(|b| *b as char)
+        .collect();
+    if ver.is_empty() {
+        return;
+    }
+    if let Some(rec) = header.get_mut(&name::RECORD_NAME_PDF) {
+        rec.version = ver;
+    }
 }

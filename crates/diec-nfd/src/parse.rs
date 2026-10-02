@@ -177,13 +177,24 @@ pub fn dex_strings(d: &[u8]) -> (Vec<String>, Vec<String>) {
     (strings, types)
 }
 
-/// Collect ZIP member names from the central directory — the
-/// `listArchiveRecords` input of `NFD_APK::getInfo`.
+/// One ZIP central-directory member (`XArchive::RECORD` subset).
+pub struct ZipMember {
+    /// Entry name.
+    pub name: String,
+    /// "Version needed to extract" low byte (reader compatibility).
+    pub version_needed: u16,
+    /// Whether the entry carries the encrypted flag (bit 0).
+    pub encrypted: bool,
+}
+
+/// Collect ZIP member metadata from the central directory — the
+/// `listArchiveRecords` input of `NFD_APK`/`NFD_ZIP::getInfo`.
 ///
 /// The EOCD record is located by scanning the trailing 64 KiB for the
 /// `PK\x05\x06` signature; entries are walked via the central directory
-/// header fields (name length @+28, extra @+30, comment @+32, name @+46).
-pub fn zip_member_names(d: &[u8]) -> Vec<String> {
+/// header fields (version_needed @+6, flags @+8, name length @+28,
+/// extra @+30, comment @+32, name @+46).
+pub fn zip_members(d: &[u8]) -> Vec<ZipMember> {
     let mut names = Vec::new();
     // End of central directory signature.
     let lo = d.len().saturating_sub(65557);
@@ -207,7 +218,9 @@ pub fn zip_member_names(d: &[u8]) -> Vec<String> {
         if d.get(p..p + 4) != Some(&[0x50, 0x4B, 0x01, 0x02]) {
             break;
         }
-        let (Some(nl), Some(el), Some(cl)) = (
+        let (Some(ver), Some(flags), Some(nl), Some(el), Some(cl)) = (
+            rd_u16(d, p + 6),
+            rd_u16(d, p + 8),
             rd_u16(d, p + 28).map(|v| v as usize),
             rd_u16(d, p + 30).map(|v| v as usize),
             rd_u16(d, p + 32).map(|v| v as usize),
@@ -215,15 +228,26 @@ pub fn zip_member_names(d: &[u8]) -> Vec<String> {
             break;
         };
         let name_off = p + 46;
-        if let Some(nb) = d.get(name_off..name_off + nl) {
-            names.push(String::from_utf8_lossy(nb).into_owned());
-        }
+        let name = d
+            .get(name_off..name_off + nl)
+            .map(|nb| String::from_utf8_lossy(nb).into_owned())
+            .unwrap_or_default();
+        names.push(ZipMember {
+            name,
+            version_needed: ver & 0xFF,
+            encrypted: flags & 1 != 0,
+        });
         let Some(next) = name_off.checked_add(nl + el + cl) else {
             break;
         };
         p = next;
     }
     names
+}
+
+/// ZIP member names only — convenience wrapper of [`zip_members`].
+pub fn zip_member_names(d: &[u8]) -> Vec<String> {
+    zip_members(d).into_iter().map(|m| m.name).collect()
 }
 
 /// ANSI plain-text classification (`XBinary::isPlainTextType`):

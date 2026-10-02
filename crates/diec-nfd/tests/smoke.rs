@@ -190,3 +190,73 @@ fn com_suffix_sniffs_to_com() {
         "FT_BINARY"
     );
 }
+
+#[test]
+fn zip_container_info_enriches_record() {
+    // Two members -> "2 records inspected" info on the ZIP format record.
+    let mut d2 = Vec::new();
+    let mut locals = Vec::new();
+    for (i, nm) in ["a.txt", "b.bin"].iter().enumerate() {
+        let nb = nm.as_bytes();
+        locals.extend_from_slice(b"PK\x03\x04");
+        locals.extend_from_slice(&[20u8, 0]); // version needed 2.0
+        locals.extend_from_slice(&[0u8; 16]);
+        locals.extend_from_slice(&(nb.len() as u16).to_le_bytes());
+        locals.extend_from_slice(&[0u8; 2]);
+        locals.extend_from_slice(nb);
+        let _ = i;
+    }
+    let cd = locals.len();
+    let mut cd_entries = Vec::new();
+    let mut lho = 0u32;
+    for nm in ["a.txt", "b.bin"] {
+        let nb = nm.as_bytes();
+        cd_entries.extend_from_slice(b"PK\x01\x02");
+        cd_entries.extend_from_slice(&[0u8; 2]); // version made by
+        cd_entries.extend_from_slice(&20u16.to_le_bytes()); // version needed
+        cd_entries.extend_from_slice(&[0u8; 20]);
+        cd_entries.extend_from_slice(&(nb.len() as u16).to_le_bytes());
+        cd_entries.extend_from_slice(&[0u8; 8]);
+        cd_entries.extend_from_slice(&[0u8; 4]);
+        cd_entries.extend_from_slice(&lho.to_le_bytes());
+        cd_entries.extend_from_slice(nb);
+        lho += 30 + nb.len() as u32;
+    }
+    d2.extend_from_slice(&locals);
+    d2.extend_from_slice(&cd_entries);
+    d2.extend_from_slice(b"PK\x05\x06");
+    d2.extend_from_slice(&[0u8; 4]);
+    d2.extend_from_slice(&2u16.to_le_bytes());
+    d2.extend_from_slice(&2u16.to_le_bytes());
+    d2.extend_from_slice(&(cd_entries.len() as u32).to_le_bytes());
+    d2.extend_from_slice(&(cd as u32).to_le_bytes());
+    d2.extend_from_slice(&[0u8; 2]);
+
+    let out = diec_nfd::scan(
+        &d2,
+        diec_nfd::gen_names::ft::FT_ZIP,
+        diec_nfd::ScanOptions::default(),
+    );
+    let zip_rec = out.iter().find(|r| r.record_name == "ZIP");
+    assert!(
+        zip_rec.is_some_and(|r| r.info.contains("2 records inspected")
+            && r.info.contains("Declared minimum reader version: 2.0")),
+        "expected container info on ZIP record: {out:?}"
+    );
+}
+
+#[test]
+fn pdf_version_fixup_extracts_header_version() {
+    let mut d = b"%PDF-1.7\n".to_vec();
+    d.extend_from_slice(&[0u8; 64]);
+    let out = diec_nfd::scan(
+        &d,
+        diec_nfd::gen_names::ft::FT_PDF,
+        diec_nfd::ScanOptions::default(),
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "PDF" && r.version == "1.7"),
+        "expected PDF 1.7 version: {out:?}"
+    );
+}
