@@ -40,7 +40,10 @@ fn print_usage() {
         "  --recursivescan, -r       Enable intra-file recursive scan (PE resources + overlay)"
     );
     eprintln!("  --recursive-dir, -R       Recursively scan directories");
-    eprintln!("  --archives                Extract and scan archive members (ZIP/7Z/RAR)");
+    eprintln!(
+        "  --archives                Extract and scan archive members (ZIP/7Z/RAR/CAB/ISO9660)
+  --nfd                     Also run the NFD/SpecAbstract engine (records tagged engine=nfd)"
+    );
     eprintln!("  --deepscan, -d            Enable deep scan mode");
     eprintln!("  --heuristicscan           Enable heuristic scan mode");
     eprintln!("  --verbose                 Enable verbose output");
@@ -172,6 +175,11 @@ fn main() -> ExitCode {
             // --archives: extract and scan archive members (ZIP/7Z/RAR).
             "--archives" => {
                 flags.archives = true;
+            }
+            // --nfd: also run the NFD/SpecAbstract table engine as a second
+            // scan pass (results tagged engine="nfd").
+            "--nfd" => {
+                flags.nfd = true;
             }
             "--deepscan" | "-d" => {
                 flags.deep = true;

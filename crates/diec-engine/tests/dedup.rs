@@ -173,6 +173,7 @@ fn scan_detection_has_dedup_key_fields() {
         is_heuristic: None,
         is_a_heuristic: None,
         original_name: None,
+        engine: None,
     };
     // Verify the fields used in dedup key are accessible.
     assert_eq!(d.type_name, "format");

@@ -387,6 +387,11 @@ pub struct ScanDetection {
     pub is_a_heuristic: Option<bool>,
     /// Optional original name for archive/container entries.
     pub original_name: Option<String>,
+    /// Engine that produced this detection.
+    ///
+    /// `None`/`"die"` for the script-rule engine; `"nfd"` for the
+    /// SpecAbstract-compatible table engine (Phase 21, ADR 0035).
+    pub engine: Option<String>,
 }
 
 /// A structured diagnostic entry with file/line context.
@@ -461,6 +466,56 @@ fn detection_from_result(
         is_heuristic: result.is_heuristic,
         is_a_heuristic: result.is_a_heuristic,
         original_name: result.original_name,
+        engine: None,
+    }
+}
+
+/// Convert an NFD engine output record into a `ScanDetection`.
+///
+/// The `engine` marker is `"nfd"`; the reported `file_type` is the
+/// sniffed SpecAbstract `FT_*` display name.
+fn detection_from_nfd(file_type: &str, rec: diec_nfd::Detection) -> ScanDetection {
+    ScanDetection {
+        file_type: file_type.to_string(),
+        type_name: rec.record_type.to_string(),
+        name: rec.record_name.to_string(),
+        version: if rec.version.is_empty() {
+            None
+        } else {
+            Some(rec.version)
+        },
+        options: if rec.info.is_empty() {
+            None
+        } else {
+            Some(rec.info)
+        },
+        signature_path: None,
+        id: None,
+        parent_id: None,
+        file_part: None,
+        offset: None,
+        size: None,
+        is_heuristic: if rec.heuristic { Some(true) } else { None },
+        is_a_heuristic: None,
+        original_name: None,
+        engine: Some("nfd".to_string()),
+    }
+}
+
+/// Run the NFD/SpecAbstract second engine over `data` and append its
+/// records to `detections`.
+///
+/// `diec_nfd::sniff_ft` recovers the broad file class from magic bytes,
+/// mirroring the `SpecAbstract::_processDetect` dispatch. Only the deep
+/// scan flag is currently consulted by the ported paths.
+fn run_nfd_pass(data: &[u8], flags: &crate::host::ScanFlags, detections: &mut Vec<ScanDetection>) {
+    let ft = diec_nfd::sniff_ft(data);
+    let opts = diec_nfd::ScanOptions {
+        deep_scan: flags.deep,
+    };
+    let ft_label = diec_nfd::ft_name(ft);
+    for rec in diec_nfd::scan(data, ft, opts) {
+        detections.push(detection_from_nfd(ft_label, rec));
     }
 }
 
@@ -663,6 +718,13 @@ pub fn scan_bytes(
         detections.extend(archive_detections);
     }
 
+    // NFD/SpecAbstract second engine (--nfd / GUI engine selector).
+    // Its records are appended after the DIE results and carry the
+    // `engine = "nfd"` marker. See ADR 0035.
+    if flags.nfd {
+        run_nfd_pass(&data, &flags, &mut detections);
+    }
+
     // Add "Unknown" placeholder when no detections were found.
     // Matches upstream XScanEngine::_processDetect with bAddUnknown=true:
     // when listRecords is empty, an "Unknown" record is appended so that
@@ -690,6 +752,7 @@ pub fn scan_bytes(
             is_heuristic: None,
             is_a_heuristic: None,
             original_name: None,
+            engine: None,
         });
     }
 
@@ -1035,6 +1098,13 @@ impl Scanner {
             detections.extend(archive_detections);
         }
 
+        // NFD/SpecAbstract second engine (--nfd / GUI engine selector).
+        // Its records are appended after the DIE results and carry the
+        // `engine = "nfd"` marker. See ADR 0035.
+        if flags.nfd {
+            run_nfd_pass(&data, &flags, &mut detections);
+        }
+
         // Add "Unknown" placeholder when no detections were found.
         // Matches upstream XScanEngine::_processDetect with bAddUnknown=true.
         if detections.is_empty() && !flags.hide_unknown {
@@ -1057,6 +1127,7 @@ impl Scanner {
                 is_heuristic: None,
                 is_a_heuristic: None,
                 original_name: None,
+                engine: None,
             });
         }
 

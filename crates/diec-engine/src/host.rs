@@ -59,6 +59,11 @@ pub struct ScanFlags {
     /// Scan archive members (--archives). When true, archive members are
     /// extracted and recursively scanned. See ADR 0030.
     pub archives: bool,
+    /// Run the NFD/SpecAbstract second engine (--nfd).
+    ///
+    /// When true, detections produced by the table-driven NFD engine are
+    /// appended to the DIE results with `engine = "nfd"`. See ADR 0035.
+    pub nfd: bool,
 }
 
 /// A host API implementation backed by an in-memory byte buffer.

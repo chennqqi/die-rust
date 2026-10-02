@@ -145,6 +145,11 @@ pub fn render_json(result: &ScanResult) -> String {
             out.push_str(&escape_json(on));
             out.push('"');
         }
+        if let Some(eng) = &det.engine {
+            out.push_str(",\"engine\":\"");
+            out.push_str(&escape_json(eng));
+            out.push('"');
+        }
         out.push('}');
     }
     out.push(']');
