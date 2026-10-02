@@ -13,8 +13,7 @@ use crate::parse;
 use crate::pe;
 use crate::records::SignatureRecord;
 use crate::scans::{
-    DetectMap, ScanRecord, archive_exp_scan, archive_scan, const_scan, msrich_scan, signature_scan,
-    string_scan,
+    DetectMap, ScanRecord, archive_exp_scan, archive_scan, const_scan, signature_scan, string_scan,
 };
 use crate::signature::get_signature;
 
@@ -752,16 +751,6 @@ fn pe_scan(
         );
     }
 
-    // Rich records -> MSDOS table (upstream reuses it for PE).
-    if !pe.rich.is_empty() {
-        let entries: Vec<crate::scans::MsRichEntry> = pe
-            .rich
-            .iter()
-            .map(|&(id, build, _count)| crate::scans::MsRichEntry { id, build })
-            .collect();
-        msrich_scan(header, &entries, t::G_MS_RICH_RECORDS, actual, ftpe);
-    }
-
     // Deep scans over code / entrypoint sections.
     if opts.deep_scan {
         if let Some((off, size)) = pe.code_section_extent(data) {
@@ -843,7 +832,16 @@ fn pe_scan(
         entrypoint,
         misc,
     );
-    crate::pe_handlers::microsoft(data, &pe, opts.deep_scan, ftpe, header, entrypoint, misc);
+    crate::pe_handlers::microsoft(
+        data,
+        &pe,
+        opts.deep_scan,
+        ftpe,
+        header,
+        entrypoint,
+        dot_ansi,
+        misc,
+    );
     crate::pe_handlers::borland(
         data,
         &pe,
@@ -908,6 +906,7 @@ fn pe_scan(
         entrypoint,
         misc,
     );
+    crate::pe_handlers::fix_detects(misc);
 }
 
 /// MSDOS scan pipeline: linker-header + header records, entry-point

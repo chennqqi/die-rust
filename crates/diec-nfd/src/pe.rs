@@ -667,7 +667,9 @@ fn collect_imports(d: &[u8], l: &PeLayout, info: &mut PeInfo) {
 }
 
 fn collect_rich(d: &[u8], info: &mut PeInfo) {
-    // Rich header: search first 1 KiB for "Rich" marker; backwards XOR walk.
+    // `getRichSignatureRecords`: "Rich" inside the DOS stub; backwards
+    // 4-byte XOR walk to "DanS", then a forward pass of (id<<16|build,
+    // count) pairs.
     let limit = d.len().min(0x400);
     let Some(pos) = d[..limit].windows(4).position(|w| w == b"Rich") else {
         return;
@@ -676,17 +678,19 @@ fn collect_rich(d: &[u8], info: &mut PeInfo) {
         return;
     };
     let mut off = pos as i64 - 4;
-    while off >= 4 {
+    while off > 0x40 {
         let v = rd_u32(d, off as usize).unwrap_or(0) ^ key;
         if v == 0x536E_6144 {
-            break; // "DanS"
+            let mut i = off as usize + 16;
+            while i + 4 < pos {
+                let v1 = rd_u32(d, i).unwrap_or(0) ^ key;
+                let count = rd_u32(d, i + 4).unwrap_or(0) ^ key;
+                info.rich.push(((v1 >> 16) as u16, v1 & 0xFFFF, count));
+                i += 8;
+            }
+            break;
         }
-        let id_raw = v;
-        let count = rd_u32(d, off as usize + 4).unwrap_or(0) ^ key;
-        let compid = (id_raw & 0xFFFF) as u16;
-        let build = id_raw >> 16;
-        info.rich.push((compid, build, count));
-        off -= 8;
+        off -= 4;
     }
 }
 

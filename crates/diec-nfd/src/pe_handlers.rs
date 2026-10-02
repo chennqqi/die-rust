@@ -5,6 +5,7 @@
 //! Visual-Studio version chain). Rich-derived linker/compiler version
 //! enrichment remains deferred.
 
+use crate::gen_tables as t;
 use crate::pe::{PeInfo, SectionExtent};
 use crate::pe_tables::{MSVC_BUILD_VS, MSVC_LINKER_VS};
 use crate::scans::{DetectMap, ScanRecord};
@@ -400,6 +401,7 @@ fn map_versions(major: &str) -> &'static str {
 /// fallback, compiler CPP version derivation, Visual Studio version
 /// (build table then linker-major table), MASM32 combo and .NET
 /// library/compiler records.
+#[allow(clippy::too_many_arguments)]
 pub fn microsoft(
     data: &[u8],
     pe: &PeInfo,
@@ -407,6 +409,7 @@ pub fn microsoft(
     ftpe: u16,
     header: &DetectMap,
     entrypoint: &DetectMap,
+    dot_ansi: &DetectMap,
     misc: &mut DetectMap,
 ) {
     // ssLinker initial state.
@@ -449,8 +452,71 @@ pub fn microsoft(
         }
     }
 
-    // VB compiler (non-.NET images only).
-    let mut compiler_vb: Option<(u16, String, String)> = None;
+    // Rich toolchain chain: `MSDOS_richScan` list + `_fixRichSignatures`
+    // minor-version reconstruction + highest-version selection.
+    // Upstream else-if precedence: rich VB > rich CPP > rich MASM.
+    let mut rich_vb: Option<(String, String)> = None;
+    let mut rich_cpp: Option<String> = None;
+    let mut rich_masm: Option<String> = None;
+    if !pe.rich.is_empty() {
+        let entries: Vec<crate::scans::MsRichEntry> = pe
+            .rich
+            .iter()
+            .map(|&(id, build, _)| crate::scans::MsRichEntry { id, build })
+            .collect();
+        let mut descs =
+            crate::scans::msrich_scan_list(&entries, t::G_MS_RICH_RECORDS, ftpe, ft::FT_MSDOS);
+        fix_rich(&mut descs, pe.minor_linker);
+        let mut rich_linker: Option<(u16, String)> = None;
+        for r in descs.iter().rev() {
+            if r.rtype == rt::RECORD_TYPE_LINKER {
+                if rich_linker.as_ref().is_none_or(|(_, v)| r.version > *v) {
+                    rich_linker = Some((r.name, r.version.clone()));
+                }
+            } else if r.rtype == rt::RECORD_TYPE_COMPILER {
+                if r.name == n::RECORD_NAME_UNIVERSALTUPLECOMPILER {
+                    if r.info != "Basic" {
+                        if rich_cpp.as_ref().is_none_or(|v| r.version > *v) {
+                            rich_cpp = Some(r.version.clone());
+                        }
+                    } else if rich_vb.as_ref().is_none_or(|(v, _)| r.version > *v) {
+                        // `mapVersions.key(ver.section(".",0,0))` — reverse
+                        // lookup of the era major, then reattach the rest.
+                        let major = r.version.split('.').next().unwrap_or("");
+                        let rest: Vec<&str> = r.version.split('.').skip(1).take(2).collect();
+                        let key = map_versions_rev(major);
+                        let ver = if key.is_empty() {
+                            r.version.clone()
+                        } else {
+                            format!("{}.{}", key, rest.join("."))
+                        };
+                        rich_vb = Some((ver, "Native".to_string()));
+                    }
+                } else if r.name == n::RECORD_NAME_MASM {
+                    if rich_masm.as_ref().is_none_or(|v| r.version > *v) {
+                        rich_masm = Some(r.version.clone());
+                    }
+                } else if rich_cpp.as_ref().is_none_or(|v| r.version > *v) {
+                    rich_cpp = Some(r.version.clone());
+                }
+            }
+        }
+        if let Some((nm, ver)) = rich_linker {
+            linker = Some((nm, ver));
+        }
+    }
+    let mut compiler_masm: Option<(u16, String)> = if rich_vb.is_none() && rich_cpp.is_none() {
+        rich_masm.map(|v| (n::RECORD_NAME_MASM, v))
+    } else {
+        None
+    };
+    let rich_cpp_ver = if rich_vb.is_none() { rich_cpp } else { None };
+    let rich_vb_rec = rich_vb;
+
+    // VB compiler (non-.NET images only); import-based records override
+    // the rich-derived VB record (`ssCompilerVB = _recordCompiler`).
+    let mut compiler_vb: Option<(u16, String, String)> =
+        rich_vb_rec.map(|(v, i)| (n::RECORD_NAME_VISUALBASIC, v, i));
     let mut net: Option<(String, String)> = None;
     if !pe.is_dotnet {
         let mut vb_new = false;
@@ -491,13 +557,19 @@ pub fn microsoft(
     } else {
         net = Some((pe.dotnet_version.clone(), String::new()));
         compiler_dot.get_or_insert((n::RECORD_NAME_VISUALCSHARP, String::new()));
+        if dot_ansi.contains_key(&n::RECORD_NAME_VBNET) {
+            compiler_vb = Some((n::RECORD_NAME_VBNET, String::new(), String::new()));
+        }
+        if dot_ansi.contains_key(&n::RECORD_NAME_JSCRIPT) {
+            compiler_vb = Some((n::RECORD_NAME_JSCRIPT, String::new(), String::new()));
+        }
     }
 
     // Cross-derivations.
     let mut compiler_cpp: Option<(u16, String)> = if mfc.is_some() {
         Some((n::RECORD_NAME_VISUALCCPP, String::new()))
     } else {
-        None
+        rich_cpp_ver.map(|v| (n::RECORD_NAME_VISUALCCPP, v))
     };
     if let Some((ver, _)) = &mfc
         && let Some((_, cver)) = compiler_cpp.as_mut()
@@ -591,6 +663,9 @@ pub fn microsoft(
         emit(misc, ftpe, rt::RECORD_TYPE_COMPILER, nm, &ver, &info);
     }
     if let Some((nm, ver)) = compiler_dot {
+        emit(misc, ftpe, rt::RECORD_TYPE_COMPILER, nm, &ver, "");
+    }
+    if let Some((nm, ver)) = compiler_masm.take() {
         emit(misc, ftpe, rt::RECORD_TYPE_COMPILER, nm, &ver, "");
     }
     if let Some(ver) = tool {
@@ -1677,8 +1752,17 @@ pub fn tools(
             "3.XX",
             "",
         );
+    } else if pe.res_version.value("FileDescription") == "Compiled AutoIt Script" {
+        // `getFileVersionMS` — dwFileVersionMS as "hiWord.loWord".
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_LIBRARY,
+            n::RECORD_NAME_AUTOIT,
+            &pe.res_version.file_version_ms_str(),
+            "",
+        );
     }
-    // (AutoIt 2.XX FileDescription/version-resource branch deferred.)
 
     // TinyC: msvcrt.dll import + linker 6.0 + exact section shapes.
     if has_lib(pe, "msvcrt.dll") && pe.major_linker == 6 && pe.minor_linker == 0 {
@@ -5374,4 +5458,135 @@ pub fn unknown_protection(
         unknown: false,
     };
     misc.insert(r.name, r);
+}
+
+/// `handle_FixDetects` — result suppression rules run after all
+/// handlers (upstream keeps per-category maps; we apply the same
+/// name-based removals against the merged `misc` map).
+pub fn fix_detects(misc: &mut DetectMap) {
+    let has = |m: &DetectMap, nm: u16| m.contains_key(&nm);
+    if has(misc, n::RECORD_NAME_RLPACK) || has(misc, n::RECORD_NAME_BACKDOORPECOMPRESSPROTECTOR) {
+        misc.remove(&n::RECORD_NAME_MICROSOFTLINKER);
+        misc.remove(&n::RECORD_NAME_MASM);
+        misc.remove(&n::RECORD_NAME_MASM32);
+    }
+    if has(misc, n::RECORD_NAME_AHPACKER) || has(misc, n::RECORD_NAME_EPEXEPACK) {
+        misc.remove(&n::RECORD_NAME_AHPACKER);
+    }
+    if has(misc, n::RECORD_NAME_VISUALCCPP) && has(misc, n::RECORD_NAME_BORLANDOBJECTPASCALDELPHI) {
+        misc.remove(&n::RECORD_NAME_BORLANDOBJECTPASCALDELPHI);
+    }
+    if has(misc, n::RECORD_NAME_MICROSOFTLINKER) && has(misc, n::RECORD_NAME_TURBOLINKER) {
+        misc.remove(&n::RECORD_NAME_TURBOLINKER);
+    }
+    if has(misc, n::RECORD_NAME_MICROSOFTVISUALSTUDIO) && has(misc, n::RECORD_NAME_BORLANDDELPHI) {
+        misc.remove(&n::RECORD_NAME_BORLANDDELPHI);
+    }
+    if has(misc, n::RECORD_NAME_SIMPLEPACK) && has(misc, n::RECORD_NAME_FASM) {
+        misc.remove(&n::RECORD_NAME_FASM);
+    }
+}
+
+/// `mapVersions.key(value)` — reverse lookup of `map_versions`: find the
+/// key whose mapped value equals `value`.
+fn map_versions_rev(value: &str) -> &'static str {
+    match value {
+        "8" => "1",
+        "9" => "2",
+        "10" => "4",
+        "11" => "5",
+        "12" => "6",
+        "13" => "7",
+        "14" => "8",
+        "15" => "9",
+        "16" => "10",
+        "17" => "11",
+        "18" => "12",
+        "19" => "14",
+        _ => "",
+    }
+}
+
+/// `_fixRichSignatures`: rebuild `major.minor.build` versions for rich
+/// records whose build exceeds 25000. The minor component comes from the
+/// PE optional-header linker minor (10..=40) for MICROSOFTLINKER records,
+/// otherwise from the upstream build-threshold table.
+fn fix_rich(descs: &mut [ScanRecord], minor_linker: u8) {
+    for r in descs.iter_mut() {
+        let mut parts = r.version.split('.');
+        let major_s = parts.next().unwrap_or("");
+        parts.next();
+        let build_s = parts.next().unwrap_or("");
+        let Ok(build) = build_s.parse::<u32>() else {
+            continue;
+        };
+        if build <= 25000 {
+            continue;
+        }
+        let major = major_s.parse::<u32>().unwrap_or(0);
+        let mut minor: u32 = 0;
+        let mut fix = false;
+        if r.name == n::RECORD_NAME_UNIVERSALTUPLECOMPILER && major >= 19 {
+            fix = true;
+        } else if major >= 14 {
+            if r.name == n::RECORD_NAME_MICROSOFTLINKER && (10..=40).contains(&minor_linker) {
+                minor = minor_linker as u32;
+            }
+            fix = true;
+        }
+        if !fix {
+            continue;
+        }
+        if minor == 0 {
+            minor = rich_minor_from_build(build);
+        }
+        r.version = format!("{major_s}.{minor}.{build_s}");
+    }
+}
+
+/// `_fixRichSignatures` build → linker-minor threshold table.
+fn rich_minor_from_build(build: u32) -> u32 {
+    const TABLE: &[(u32, u32)] = &[
+        (25506, 10),
+        (25830, 11),
+        (26128, 12),
+        (26428, 13),
+        (26726, 14),
+        (26926, 15),
+        (27508, 16),
+        (27702, 20),
+        (27905, 21),
+        (28105, 22),
+        (28314, 23),
+        (28610, 24),
+        (28805, 25),
+        (29110, 26),
+        (29333, 27),
+        (30133, 28),
+        (30401, 29),
+        (30818, 30),
+        (31114, 31),
+        (31424, 32),
+        (31721, 33),
+        (32019, 34),
+        (32323, 35),
+        (32532, 36),
+        (32543, 36),
+        (32822, 36),
+        (33130, 37),
+        (33520, 38),
+        (33811, 39),
+        (34120, 40),
+        (34436, 41),
+        (34808, 42),
+        (35000, 43),
+        (35214, 44),
+        (36000, 50),
+    ];
+    for &(limit, minor) in TABLE {
+        if build < limit {
+            return minor;
+        }
+    }
+    50
 }

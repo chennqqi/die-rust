@@ -17,8 +17,8 @@
 | handler（nfd_pe.cpp） | 行数 | 状态 |
 |---|---|---|
 | `handle_Protection` | 1651 | 未移植（最大单块） |
-| `handle_Microsoft` | 676 | 已移植非 Rich 子集；Rich→工具描述链 deferred |
-| `handle_FixDetects` | 584 | 未移植（后置去重/抑制） |
+| `handle_Microsoft` | 676 | ✅ 全量（含 Rich→工具描述链 + `_fixRichSignatures`） |
+| `handle_FixDetects` | ~30 | ✅ 已移植（6 组名称抑制规则；实际行数远小于初估） |
 | `handle_Installers` | 563 | 未移植 |
 | `handle_NETProtection` | 326 | 未移植 |
 | `handle_VisualBasicCryptors` | 319 | 未移植 |
@@ -98,12 +98,27 @@
   跳转在 compareEntryPoint 中用平坦文件偏移语义（`$$` 近似）——
   Phase 23 差分验证。
 
-### 21.N — 后置修正与 .NET 精化
+### 21.N — 后置修正与 .NET 精化 ✅ 已落地
 
-- `handle_FixDetects`（584 行）：结果抑制/修正规则（上游大量
-  "如果 X 且 Y 则移除/改写"），必须在 handler 覆盖足够后做，
-  否则修正逻辑无可修正对象。
-- `handle_NETProtection` 精化 + `handle_Microsoft` Rich 链收尾。
+- `handle_FixDetects`：6 组名称抑制规则已移植
+  （RLPACK/BACKDOORPECOMPRESS→移除 MSLINKER/MASM/MASM32，
+  EPEXEPACK→移除 AHPACKER，VC+++Delphi→移除 Delphi，
+  MSLINKER+TURBOLINKER→移除 TURBOLINKER，VS+BorlandDelphi→移除
+  Delphi tool，SIMPLEPACK+FASM→移除 FASM）。
+- `handle_Microsoft` Rich 链收尾：`MSDOS_richScan` 列表形式
+  （`msrich_scan_list`）+ `_fixRichSignatures`（build>25000 →
+  36 行 minor 阈值表重建 major.minor.build；MSLINKER 优先取
+  optional header linker minor 10..=40）+ 逆序遍历选最高版本
+  linker/compiler（UTC→VC++、UTC/Basic→VB `mapVersions.key`
+  反向查找、MASM）；import-VB 覆盖 rich-VB、.NET else 补
+  VBNET/JSCRIPT。
+- AutoIt 2.XX：`FileDescription == "Compiled AutoIt Script"` →
+  `getFileVersionMS`（dwFileVersionMS hi.lo）。
+- 修正两处既有偏差：`collect_rich` 的 compid/build 高低位曾反
+  序且回扫步长误为 -8（上游 -4 单 dword 找 DanS，命中后 +16
+  正向 +8 读条目）；engine 曾把原始 rich 记录灌入 header map
+  （上游仅 handle_Microsoft 消费 rich——已移除，`msrich_scan`
+  删除，留 `msrich_scan_list`）。
 
 ### Phase 22 — 非 PE 格式启发残余（原 21.O，独立成 phase）
 

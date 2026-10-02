@@ -1533,3 +1533,70 @@ fn pe32_aspack_section_heuristic() {
     assert!(a.heuristic, "ASPack record must be flagged heuristic");
     assert_eq!(a.version, "2.12-2.XX");
 }
+
+/// PE32 with an encoded Rich header in the DOS stub: `DanS` + 3 zero
+/// dwords + entries {MSLINKER id=258 build=30000, UTC id=261 build=30000}.
+/// `handle_Microsoft` should derive linker `14.29.30000` (minor from the
+/// optional header) and Visual C++ `19.28.30000` (build threshold table).
+fn pe32_rich_fixture() -> Vec<u8> {
+    let mut d = vec![0u8; 0x800];
+    let key: u32 = 0x1234_5678;
+    let w32 = |d: &mut [u8], off: usize, v: u32| {
+        d[off..off + 4].copy_from_slice(&v.to_le_bytes());
+    };
+    d[0..2].copy_from_slice(b"MZ");
+    w32(&mut d, 0x3C, 0x200); // e_lfanew
+    // Rich block inside the stub region.
+    w32(&mut d, 0x180, 0x536E_6144 ^ key); // DanS
+    w32(&mut d, 0x184, key); // zero
+    w32(&mut d, 0x188, key);
+    w32(&mut d, 0x18C, key);
+    w32(&mut d, 0x190, ((258u32 << 16) | 30000) ^ key); // MICROSOFTLINKER
+    w32(&mut d, 0x194, 3 ^ key);
+    w32(&mut d, 0x198, ((261u32 << 16) | 30000) ^ key); // UTC C/C++
+    w32(&mut d, 0x19C, 1 ^ key);
+    d[0x1A0..0x1A4].copy_from_slice(b"Rich");
+    w32(&mut d, 0x1A4, key);
+    // PE headers.
+    d[0x200..0x204].copy_from_slice(b"PE\0\0");
+    w32(&mut d, 0x204, 0);
+    d[0x204..0x206].copy_from_slice(&0x014Cu16.to_le_bytes()); // I386
+    d[0x206..0x208].copy_from_slice(&1u16.to_le_bytes());
+    d[0x214..0x216].copy_from_slice(&0xE0u16.to_le_bytes());
+    d[0x216..0x218].copy_from_slice(&0x010Fu16.to_le_bytes());
+    let opt = 0x218;
+    d[opt..opt + 2].copy_from_slice(&0x010Bu16.to_le_bytes());
+    d[opt + 2] = 14; // MajorLinkerVersion
+    d[opt + 3] = 29; // MinorLinkerVersion
+    w32(&mut d, opt + 16, 0x1000); // EP rva
+    w32(&mut d, opt + 28, 0x0040_0000);
+    w32(&mut d, opt + 32, 0x1000);
+    w32(&mut d, opt + 36, 0x200);
+    d[opt + 68..opt + 70].copy_from_slice(&3u16.to_le_bytes());
+    w32(&mut d, opt + 92, 16);
+    // .text @0x2F8: vaddr 0x1000, raw 0x400/0x200.
+    let sec = opt + 0xE0;
+    d[sec..sec + 5].copy_from_slice(b".text");
+    w32(&mut d, sec + 8, 0x200);
+    w32(&mut d, sec + 12, 0x1000);
+    w32(&mut d, sec + 16, 0x200);
+    w32(&mut d, sec + 20, 0x400);
+    w32(&mut d, sec + 36, 0x6000_0020);
+    d
+}
+
+#[test]
+fn pe32_rich_toolchain_chain() {
+    let d = pe32_rich_fixture();
+    let (_ft, out) = show("pe32-rich-synth", &d);
+    let linker = out
+        .iter()
+        .find(|x| x.record_type == "Linker" && x.record_name.contains("Microsoft"))
+        .expect("rich-derived Microsoft linker");
+    assert_eq!(linker.version, "14.29.30000");
+    let cpp = out
+        .iter()
+        .find(|x| x.record_type == "Compiler" && x.record_name.contains("Visual C/C++"))
+        .expect("rich-derived Visual C++");
+    assert_eq!(cpp.version, "19.28.30000");
+}

@@ -1987,8 +1987,15 @@ nrv 单测），前端 `npm run build` 通过。
   3 层递归 + FixedFileInfo + FileDescription 键查询）、`.NET`
   `#Strings`/`#US` heap 提取 + dotAnsi/dotUnicode 内部扫描 map
   （不下泄输出，供 21.L 消费）、`binary_entropy`/`is_packed(6.5)`/
-  `has_section_name`/`entrypoint_section_index` 原语。Rich 表此前
-  已生成，`_fixRichSignatures` 归 21.N。
+  `has_section_name`/`entrypoint_section_index` 原语。
+- **21.K/21.L/21.M 已完成**：installers/SFX/wxWidgets、.NET 保护 +
+  Delphi.NET、`handle_Protection` 全量 + 保护组 + VB/Delphi
+  cryptors + PrivateEXEProtector + UnknownProtection。
+- **21.N 已完成**：`handle_FixDetects` 6 组抑制规则、`handle_Microsoft`
+  Rich→工具描述链（`_fixRichSignatures` build>25000 minor 重建 +
+  最高版本 linker/compiler 选择 + VBNET/JSCRIPT）、AutoIt 2.XX。
+  顺带修正 `collect_rich` 的 compid/build 高低位与回扫语义、移除
+  引擎层非上游语义的 rich→header 直灌。
 
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。

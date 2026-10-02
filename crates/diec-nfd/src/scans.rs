@@ -244,19 +244,19 @@ pub struct MsRichEntry {
     pub build: u32,
 }
 
-/// Port of `NFD_MSDOS::MSDOS_richScan` (`g_MS_rich_records`): `id` and
-/// `build` each accept an all-ones wildcard; a wildcard build appends
-/// `.{build}` to the record version (matching `sVersion += ".%1"`).
-pub fn msrich_scan(
-    map: &mut DetectMap,
+/// `MSDOS_richScan` list form — every matching record per rich entry
+/// (name duplicates preserved), used by `handle_Microsoft`'s toolchain
+/// selection which compares versions across matches.
+pub fn msrich_scan_list(
     entries: &[MsRichEntry],
     records: &[MsRichRecord],
     ft1: u16,
     ft2: u16,
-) {
+) -> Vec<ScanRecord> {
+    let mut out = Vec::new();
     for e in entries {
         for rec in records {
-            if !ft_matches(rec.basic.ft, ft1, ft2) || map.contains_key(&rec.basic.name) {
+            if !ft_matches(rec.basic.ft, ft1, ft2) {
                 continue;
             }
             let id_ok = rec.id == e.id || rec.id == 0xFFFF;
@@ -266,8 +266,9 @@ pub fn msrich_scan(
                 if rec.build == 0xFFFF_FFFF {
                     sr.version = format!("{}.{}", sr.version, e.build);
                 }
-                map.insert(rec.basic.name, sr);
+                out.push(sr);
             }
         }
     }
+    out
 }
