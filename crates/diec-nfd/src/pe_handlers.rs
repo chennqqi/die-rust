@@ -993,21 +993,10 @@ pub fn watcom(
     }
 
     // get_Watcom_vi over [EP, EP+0x100).
-    if pe.entry_point_offset >= 0 {
-        let off = pe.entry_point_offset as usize;
-        let sz = 0x100usize;
-        if let Some(hit) = crate::parse::find_ansi(data, off, sz, b"Open Watcom") {
-            let _ = hit;
-            let ver = crate::parse::find_ansi(data, off, sz, b" 2002-")
-                .and_then(|o| crate::parse::read_ansi_string_len(data, o + 6, 4))
-                .unwrap_or_else(|| "2002".to_string());
-            compiler = Some((n::RECORD_NAME_OPENWATCOMCCPP, ver, String::new()));
-        } else if crate::parse::find_ansi(data, off, sz, b"WATCOM").is_some() {
-            let ver = crate::parse::find_ansi(data, off, sz, b". 1988-")
-                .and_then(|o| crate::parse::read_ansi_string_len(data, o + 7, 4))
-                .unwrap_or_else(|| "1988".to_string());
-            compiler = Some((n::RECORD_NAME_WATCOMCCPP, ver, String::new()));
-        }
+    if pe.entry_point_offset >= 0
+        && let Some((nm, ver)) = watcom_vi(data, pe.entry_point_offset as usize, 0x100)
+    {
+        compiler = Some((nm, ver, String::new()));
     }
     if linker.is_some() && compiler.is_none() {
         compiler = Some((n::RECORD_NAME_WATCOMCCPP, String::new(), String::new()));
@@ -3588,7 +3577,12 @@ fn protection_present(misc: &DetectMap) -> bool {
 /// Bounded UPX! header parse (`NFD_Binary::_get_UPX_vi` subset): format
 /// whitelist per file type, version/method/level sanity checks, and the
 /// method→info mapping.
-fn upx_header_vi(d: &[u8], off: usize, size: usize, ftpe: u16) -> Option<(String, String)> {
+pub(crate) fn upx_header_vi(
+    d: &[u8],
+    off: usize,
+    size: usize,
+    ftpe: u16,
+) -> Option<(String, String)> {
     if size < 22 || off.checked_add(size)? > d.len() {
         return None;
     }
@@ -3691,7 +3685,7 @@ fn upx_header_vi(d: &[u8], off: usize, size: usize, ftpe: u16) -> Option<(String
 
 /// `NFD_Binary::get_UPX_vi` — "$Id: UPX" version banner + UPX! header
 /// info + "$Id: NRV " sub-version.
-fn upx_vi(d: &[u8], off: usize, size: usize, ftpe: u16) -> Option<(String, String)> {
+pub(crate) fn upx_vi(d: &[u8], off: usize, size: usize, ftpe: u16) -> Option<(String, String)> {
     let pos1 = crate::parse::find_ansi(d, off, size, b"$Id: UPX");
     let pos2 = crate::parse::find_ansi(d, off, size, b"UPX!");
     let mut version = String::new();
@@ -5589,4 +5583,22 @@ fn rich_minor_from_build(build: u32) -> u32 {
         }
     }
     50
+}
+
+/// `NFD_Binary::get_Watcom_vi` — "Open Watcom"/"WATCOM" banner scan of
+/// `[off, off+size)`; returns `(record_name, version)`.
+pub(crate) fn watcom_vi(d: &[u8], off: usize, size: usize) -> Option<(u16, String)> {
+    if crate::parse::find_ansi(d, off, size, b"Open Watcom").is_some() {
+        let ver = crate::parse::find_ansi(d, off, size, b" 2002-")
+            .and_then(|o| crate::parse::read_ansi_string_len(d, o + 6, 4))
+            .unwrap_or_else(|| "2002".to_string());
+        return Some((n::RECORD_NAME_OPENWATCOMCCPP, ver));
+    }
+    if crate::parse::find_ansi(d, off, size, b"WATCOM").is_some() {
+        let ver = crate::parse::find_ansi(d, off, size, b". 1988-")
+            .and_then(|o| crate::parse::read_ansi_string_len(d, o + 7, 4))
+            .unwrap_or_else(|| "1988".to_string());
+        return Some((n::RECORD_NAME_WATCOMCCPP, ver));
+    }
+    None
 }

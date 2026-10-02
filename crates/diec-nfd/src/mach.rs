@@ -679,4 +679,12 @@ pub fn mach_semantic_scan(data: &[u8], ft: u16, misc: &mut DetectMap) {
             "",
         );
     }
+
+    // handle_FixDetects: upstream suppresses CCPP when OBJECTIVEC is
+    // present; our merged map holds no LANGUAGE records (upstream
+    // Mach-O never emits them either — the rule is a no-op upstream),
+    // applied for structural parity.
+    if misc.contains_key(&n::RECORD_NAME_OBJECTIVEC) || misc.contains_key(&n::RECORD_NAME_CCPP) {
+        misc.remove(&n::RECORD_NAME_CCPP);
+    }
 }

@@ -1325,3 +1325,5 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 - [2026-10-02] 要求：所有 ⚠ partial 缺口都要补齐对齐，phase 不够可加；Qt 可用于 oracle harness，Rust 项目不得引入 Qt。
 - 2026-10-08：顺序执行 Phase 21.J–23 NFD 全量对齐计划；21.J 共享原语层（VS_VERSIONINFO/.NET heaps/Rich 表/entropy）完成。
 - 2026-XX: Phase 21.N — handle_FixDetects + Microsoft Rich 链收尾 + AutoIt 2.XX。
+
+- 2026-10-08: 继续顺序完成 — Phase 21.N（FixDetects + Microsoft Rich 链）后进入 Phase 22 非 PE 启发：NE/LE/LX（22.C）、ELF/Mach-O protection+fixdetects（22.A/B）、COM/PDF/CFBF/Amiga/JAR/text（22.D）。

@@ -207,6 +207,15 @@ pub fn sniff_ft(data: &[u8]) -> u16 {
         if data.starts_with(&[0xD0, 0xCF, 0x11, 0xE0]) {
             return ft::FT_CFBF;
         }
+        // `XAmigaHunk::isValid` — HUNK_HEADER (0x3F3) or HUNK_UNIT (0x3E7)
+        // big-endian magic; upstream checks it in the executables group
+        // once no other type claimed the file.
+        if data.len() > 8 {
+            match u32::from_be_bytes([data[0], data[1], data[2], data[3]]) {
+                0x3E7 | 0x3F3 => return ft::FT_AMIGAHUNK,
+                _ => {}
+            }
+        }
     }
     ft::FT_BINARY
 }
@@ -277,8 +286,9 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
     );
     if file_type == ft::FT_BINARY && parse::is_plain_text(data) {
         // NFD_Binary::handle_Texts — format record "Plain text"/
-        // "UTF-8 text" with the line-ending info. The C++/script regex
-        // heuristics of handle_Texts are not ported.
+        // "UTF-8 text" with the line-ending info, plus the
+        // source-language regex heuristics.
+        crate::miscfmt::text_semantic_scan(data, &mut misc);
         let mut rec = ScanRecord::from_basic(&crate::records::BasicRecord {
             variant: 0,
             ft: ft::FT_BINARY,
@@ -358,10 +368,36 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
                 file_type,
                 ft::FT_COM,
             );
+            // `NFD_COM::handle_Protection` tail — header->result transfers
+            // are implicit (header drains to output); the observable part
+            // is the MS-DOS/CP-M OS record.
+            crate::miscfmt::com_semantic_scan(data, &header, &mut misc);
+        }
+        x if x == ft::FT_AMIGAHUNK => {
+            // `NFD_Amiga::getInfo` — hunk-derived OS record.
+            crate::miscfmt::amiga_semantic_scan(data, &mut misc);
+        }
+        x if x == ft::FT_CFBF => {
+            // `NFD_CFBF::getInfo` — MSI/Word subtype promotion and the
+            // deep-scan Advanced Installer marker.
+            crate::miscfmt::cfbf_semantic_scan(data, opts.deep_scan, &mut header, &mut misc);
+        }
+        x if x == ft::FT_PDF => {
+            // `NFD_PDF::getInfo` — /Encrypt protector record and
+            // /Producer//Creator tool records.
+            crate::miscfmt::pdf_semantic_scan(data, &mut misc);
+        }
+        x if x == ft::FT_JAR => {
+            // `NFD_JAR::getInfo` — JVM virtual-machine record (version
+            // from the first .class member) and MANIFEST.MF tool
+            // detections.
+            crate::miscfmt::jar_semantic_scan(data, &mut misc);
         }
         x if x == ft::FT_NE => {
             // NFD_NE::getInfo — linker header records plus entry-point
-            // signatures at the CS:IP-derived offset.
+            // signatures at the CS:IP-derived offset, then the semantic
+            // fixups (EP promotion, deep banners, OS, TurboLinker,
+            // Watcom).
             signature_scan(
                 &mut header,
                 &header_sig,
@@ -379,10 +415,11 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
                     ft::FT_NE,
                 );
             }
+            crate::ne::ne_semantic_scan(data, opts.deep_scan, ft::FT_NE, &entrypoint, &mut misc);
         }
         x if x == ft::FT_LE || x == ft::FT_LX => {
-            // NFD_LE/NFD_LX::getInfo — header linker records (the rest of
-            // each module is heuristic fixup, not yet ported).
+            // NFD_LE/NFD_LX::getInfo — header linker records + OS record,
+            // TurboLinker trailer and Watcom entry-point banner.
             signature_scan(
                 &mut header,
                 &header_sig,
@@ -390,6 +427,7 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
                 file_type,
                 ft::FT_MSDOS,
             );
+            crate::ne::le_semantic_scan(data, file_type, &mut misc);
         }
         x if x == ft::FT_ELF32 || x == ft::FT_ELF64 || x == ft::FT_ELF => {
             // NFD_ELF::getInfo — entry-point signatures plus the
@@ -405,7 +443,7 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
                     ft::FT_ELF,
                 );
             }
-            crate::elf::elf_semantic_scan(data, ft::FT_ELF, &mut misc);
+            crate::elf::elf_semantic_scan(data, ft::FT_ELF, &entrypoint, &mut misc);
         }
         x if x == ft::FT_MACHO32 || x == ft::FT_MACHO64 || x == ft::FT_MACHO => {
             // NFD_MACH::getInfo — load-command driven semantic handlers.

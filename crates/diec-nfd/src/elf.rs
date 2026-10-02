@@ -141,7 +141,7 @@ fn u32_of(e: &parse::ElfInfo, b: &[u8], off: usize) -> Option<u32> {
 type Extractor = (fn(&str) -> vi::Vi, u8, u16);
 
 /// Run the full `NFD_ELF` semantic handler set over parsed ELF info.
-pub fn elf_semantic_scan(data: &[u8], ft: u16, misc: &mut DetectMap) {
+pub fn elf_semantic_scan(data: &[u8], ft: u16, ep: &DetectMap, misc: &mut DetectMap) {
     let Some(e) = parse::elf_info(data) else {
         return;
     };
@@ -746,5 +746,123 @@ pub fn elf_semantic_scan(data: &[u8], ft: u16, misc: &mut DetectMap) {
             "",
             "",
         );
+    }
+
+    // ---- handle_Protection ----
+    // UPX: tail block (size-0x24) + full-file scan; merge order —
+    // tail version/info applied first, full-scan wins when non-empty.
+    let tail_vi = data
+        .len()
+        .checked_sub(0x24)
+        .and_then(|o| crate::pe_handlers::upx_header_vi(data, o, 0x24, ft));
+    let scan_vi = crate::pe_handlers::upx_vi(data, 0, data.len(), ft);
+    if tail_vi.is_some() || scan_vi.is_some() {
+        let mut ver = String::new();
+        let mut info = String::new();
+        if let Some((v, i)) = &tail_vi {
+            if !v.is_empty() {
+                ver.clone_from(v);
+            }
+            if !i.is_empty() {
+                info.clone_from(i);
+            }
+        }
+        if let Some((v, i)) = &scan_vi {
+            if !v.is_empty() {
+                ver.clone_from(v);
+            }
+            if !i.is_empty() {
+                info.clone_from(i);
+            }
+        }
+        emit(
+            misc,
+            ft,
+            rt::RECORD_TYPE_PACKER,
+            n::RECORD_NAME_UPX,
+            &ver,
+            &info,
+        );
+    }
+    // Protector tags occupying the UPX! magic position of the tail block
+    // (`viUPXEnd.vValue`): SEC! -> SecNeo "Old", 00010203 -> SecNeo,
+    // AJM! -> iJiami.
+    if data.len() >= 0x24
+        && let Some(vv) = parse::rd_u32(data, data.len() - 0x24)
+    {
+        let (name, ver) = match vv {
+            0x2143_4553 => (n::RECORD_NAME_SECNEO, "Old"),
+            0x0001_0203 => (n::RECORD_NAME_SECNEO, ""),
+            0x214D_4A41 => (n::RECORD_NAME_IJIAMI, ""),
+            _ => (0, ""),
+        };
+        if name != 0 {
+            emit(misc, ft, rt::RECORD_TYPE_PROTECTOR, name, ver, "UPX");
+        }
+    }
+    // BurnEye: promoted EP record; "Modified" info when the TEEE banner
+    // is absent from [0x1000, 0x1200).
+    if let Some(r) = ep.get(&n::RECORD_NAME_BURNEYE) {
+        let mut r = r.clone();
+        if parse::find_ansi(
+            data,
+            0x1000,
+            0x200,
+            b"TEEE burneye - TESO ELF Encryption Engine",
+        )
+        .is_none()
+        {
+            r.info = "Modified".to_string();
+        }
+        misc.insert(r.name, r);
+    }
+    // Comment-section detects -> protector/tool results.
+    for nm in [
+        n::RECORD_NAME_OBFUSCATORLLVM,
+        n::RECORD_NAME_WANGZEHUALLVM,
+        n::RECORD_NAME_BYTEGUARD,
+        n::RECORD_NAME_ALIPAYOBFUSCATOR,
+        n::RECORD_NAME_TENCENTLEGU,
+        n::RECORD_NAME_SAFEENGINELLVM,
+        n::RECORD_NAME_TENCENTPROTECTION,
+        n::RECORD_NAME_HIKARIOBFUSCATOR,
+        n::RECORD_NAME_SNAPPROTECT,
+        n::RECORD_NAME_BYTEDANCESECCOMPILER,
+        n::RECORD_NAME_DINGBAOZENGNATIVEOBFUSCATOR,
+        n::RECORD_NAME_NAGAINLLVM,
+        n::RECORD_NAME_IJIAMILLVM,
+        n::RECORD_NAME_OLLVMTLL,
+    ] {
+        if let Some(r) = comment_detects.get(&nm) {
+            misc.insert(nm, r.clone());
+        }
+    }
+    if let Some(r) = comment_detects.get(&n::RECORD_NAME_APPIMAGE) {
+        misc.insert(n::RECORD_NAME_APPIMAGE, r.clone());
+    }
+    // Virbox: first PT_NOTE segment contents == "Virbox Protector".
+    if let Some(&(off, sz)) = e.note_ranges.first()
+        && parse::read_ansi_string_len(data, off, sz).as_deref() == Some("Virbox Protector")
+    {
+        emit(
+            misc,
+            ft,
+            rt::RECORD_TYPE_PROTECTOR,
+            n::RECORD_NAME_VIRBOXPROTECTOR,
+            "",
+            "",
+        );
+    }
+
+    // ---- handle_FixDetects ----
+    // GCC or ApportableClang present while the GCC record carries no
+    // version -> drop GCC.
+    if (misc.contains_key(&n::RECORD_NAME_GCC)
+        || misc.contains_key(&n::RECORD_NAME_APPORTABLECLANG))
+        && misc
+            .get(&n::RECORD_NAME_GCC)
+            .is_some_and(|r| r.version.is_empty())
+    {
+        misc.remove(&n::RECORD_NAME_GCC);
     }
 }

@@ -1996,6 +1996,20 @@ nrv 单测），前端 `npm run build` 通过。
   最高版本 linker/compiler 选择 + VBNET/JSCRIPT）、AutoIt 2.XX。
   顺带修正 `collect_rich` 的 compid/build 高低位与回扫语义、移除
   引擎层非上游语义的 rich→header 直灌。
+- **Phase 22.A–22.D 已完成**：ELF `handle_Protection`（UPX!/SEC! 尾块
+  变体、UPX vi + Modified 信息、PT_NOTE Virbox）+ ELF/Mach-O
+  `handle_FixDetects`；NE（EP 提升、exetyp→OS/arch、deep 版权串、
+  TurboLinker/Watcom）与 LE/LX（对象表 EP 页映射、cpu/os/mode 表）；
+  22.D 小格式 `miscfmt.rs`：COM `handle_Protection` 提升 + MSDOS/CPM
+  OS 记录（`isCPM` 启发）、PDF `/Encrypt`→Unknown protector +
+  `/Producer`/`/Creator` tool 记录、CFBF 子类型提升（MSI/Word
+  97-2003）+ AI_PACKAGING_TOOL→Advanced Installer、Amiga hunk OS
+  记录（68K/PPC、16/32-bit、BE）、JAR JVM VM 记录 + `.class`
+  `_getJDKVersion` 表 + MANIFEST.MF 厂商/Build-Jdk/Ant 工具链、
+  文本 `handle_Texts` 全量（C/C++ guard/include、HTML、Python、
+  XML version、PHP、shebang）。新增 `flate2` 依赖（JAR manifest
+  解压；与 workspace 既有版本一致）。
+  待办：Phase 23 差分 oracle（Qt harness）收敛后逐行升 ✅。
 
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。

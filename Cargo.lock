@@ -1565,6 +1565,7 @@ version = "0.9.1"
 dependencies = [
  "diec-core",
  "fancy-regex",
+ "flate2",
 ]
 
 [[package]]

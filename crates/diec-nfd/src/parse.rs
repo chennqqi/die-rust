@@ -187,6 +187,12 @@ pub struct ZipMember {
     pub version_needed: u16,
     /// Whether the entry carries the encrypted flag (bit 0).
     pub encrypted: bool,
+    /// Compression method (0 = stored, 8 = deflate).
+    pub method: u16,
+    /// Compressed size.
+    pub comp_size: u32,
+    /// File offset of the local header.
+    pub local_off: u32,
 }
 
 /// Collect ZIP member metadata from the central directory — the
@@ -234,10 +240,18 @@ pub fn zip_members(d: &[u8]) -> Vec<ZipMember> {
             .get(name_off..name_off + nl)
             .map(|nb| String::from_utf8_lossy(nb).into_owned())
             .unwrap_or_default();
+        let (method, comp_size, local_off) = (
+            rd_u16(d, p + 10).unwrap_or(0),
+            rd_u32(d, p + 20).unwrap_or(0),
+            rd_u32(d, p + 42).unwrap_or(0),
+        );
         names.push(ZipMember {
             name,
             version_needed: ver & 0xFF,
             encrypted: flags & 1 != 0,
+            method,
+            comp_size,
+            local_off,
         });
         let Some(next) = name_off.checked_add(nl + el + cl) else {
             break;
@@ -500,6 +514,9 @@ pub struct ElfInfo {
     pub comments: Vec<String>,
     /// PT_NOTE + SHT_NOTE entries as `(name, desc)`.
     pub notes: Vec<(String, Vec<u8>)>,
+    /// Raw PT_NOTE program-header segment ranges `(offset, filesz)`
+    /// (bounded to 1 MiB) — needed by the Virbox note-string check.
+    pub note_ranges: Vec<(usize, usize)>,
     /// DT_NEEDED library names.
     pub needed: Vec<String>,
     /// DT_RUNPATH / DT_RPATH value.
@@ -592,7 +609,10 @@ pub fn elf_info(d: &[u8]) -> Option<ElfInfo> {
                             .to_string();
                     }
                 }
-                4 => elf_notes(d, poff, filesz.min(1 << 20), &ru32, &mut info.notes),
+                4 => {
+                    elf_notes(d, poff, filesz.min(1 << 20), &ru32, &mut info.notes);
+                    info.note_ranges.push((poff, filesz.min(1 << 20)));
+                }
                 2 => dyn_seg = Some((poff, filesz.min(1 << 20))),
                 _ => {}
             }
@@ -783,6 +803,117 @@ pub fn binary_entropy(d: &[u8], off: i64, size: i64) -> f64 {
 /// `XBinary::isPacked` — the upstream `D_ENTROPY_THRESHOLD` is 6.5.
 pub fn is_packed(entropy: f64) -> bool {
     entropy >= 6.5
+}
+
+/// `XLE` entry-point file offset: `startobj`/`eip` resolve through the
+/// object table and page map to an enumerated-data-page offset.
+/// Approximation of `getMemoryMap`/`addressToOffset` for LE/LX images.
+pub fn le_entry_offset(d: &[u8]) -> Option<usize> {
+    let le = rd_u32(d, 0x3C)? as usize;
+    let sig = d.get(le..le + 2)?;
+    let is_lx = sig == b"LX";
+    if !is_lx && sig != b"LE" {
+        return None;
+    }
+    let startobj = rd_u32(d, le + 0x18)?;
+    if startobj == 0 {
+        return None;
+    }
+    let eip = u64::from(rd_u32(d, le + 0x1C)?);
+    let pagesize = u64::from(rd_u32(d, le + 0x28)?);
+    let pageshift = rd_u32(d, le + 0x2C)?;
+    let objtab = rd_u32(d, le + 0x40)? as usize;
+    let objcnt = rd_u32(d, le + 0x44)?.min(100) as u64;
+    if u64::from(startobj) > objcnt {
+        return None;
+    }
+    let obj = le
+        .checked_add(objtab)?
+        .checked_add(usize::try_from(startobj - 1).ok()?.checked_mul(24)?)?;
+    let o_base = u64::from(rd_u32(d, obj + 4)?);
+    let o_pagemap = u64::from(rd_u32(d, obj + 12)?);
+    let o_mapsize = u64::from(rd_u32(d, obj + 16)?);
+    let _ = o_base;
+    let (page_idx, in_page) = if is_lx {
+        if pageshift == 0 || pageshift >= 32 {
+            return None;
+        }
+        (eip >> pageshift, eip & ((1u64 << pageshift) - 1))
+    } else {
+        if pagesize == 0 {
+            return None;
+        }
+        (eip / pagesize, eip % pagesize)
+    };
+    if page_idx >= o_mapsize {
+        return None;
+    }
+    let objmap = rd_u32(d, le + 0x48)? as usize;
+    let idx = o_pagemap.checked_add(page_idx)?.checked_sub(1)?;
+    let ent = le
+        .checked_add(objmap)?
+        .checked_add(usize::try_from(idx).ok()?.checked_mul(8)?)?;
+    let dataoff = u64::from(rd_u32(d, ent)?);
+    let datapage = rd_u32(d, le + 0x80)? as usize;
+    let page_off = if is_lx {
+        dataoff.checked_shl(pageshift)?
+    } else {
+        dataoff.checked_mul(pagesize)?
+    };
+    le.checked_add(datapage)?
+        .checked_add(usize::try_from(page_off).ok()?)?
+        .checked_add(usize::try_from(in_page).ok()?)
+}
+
+/// Extract up to `cap` bytes of a stored or deflated ZIP member
+/// (`XArchive::decompress`). Returns `None` for encrypted/unsupported
+/// methods or malformed local headers.
+pub fn zip_member_data(d: &[u8], member: &ZipMember, cap: usize) -> Option<Vec<u8>> {
+    let lo = member.local_off as usize;
+    if d.get(lo..lo + 4) != Some(&[0x50, 0x4B, 0x03, 0x04]) {
+        return None;
+    }
+    let (nl, el) = (rd_u16(d, lo + 26)? as usize, rd_u16(d, lo + 28)? as usize);
+    let data_off = lo.checked_add(30 + nl + el)?;
+    let comp_end = data_off.checked_add(member.comp_size as usize)?;
+    let comp = d.get(data_off..comp_end.min(d.len()))?;
+    match member.method {
+        0 => Some(comp.iter().take(cap).copied().collect()),
+        8 => {
+            use std::io::Read;
+            let dec = flate2::read::DeflateDecoder::new(comp);
+            let mut out = Vec::new();
+            dec.take(cap as u64 + 1).read_to_end(&mut out).ok()?;
+            out.truncate(cap);
+            Some(out)
+        }
+        _ => None,
+    }
+}
+
+/// `XNE::getOverlayOffset` — end of the last segment entry
+/// (`(fileOffset << ne_align) + fileSize`), or `None` when the segment
+/// table is malformed.
+pub fn ne_overlay_offset(d: &[u8]) -> Option<usize> {
+    let ne = rd_u32(d, 0x3C)? as usize;
+    if d.get(ne..ne + 2) != Some(b"NE") {
+        return None;
+    }
+    let cseg = rd_u16(d, ne + 0x1C)? as usize;
+    let segtab = ne.checked_add(rd_u16(d, ne + 0x22)? as usize)?;
+    let align = rd_u16(d, ne + 0x32)? as u32;
+    if cseg == 0 || align > 20 {
+        return None;
+    }
+    let mut end = 0u64;
+    for i in 0..cseg.min(4096) {
+        let rec = segtab.checked_add(i.checked_mul(8)?)?;
+        let off = (rd_u16(d, rec)? as u64) << align;
+        let size = rd_u16(d, rec + 2)? as u64;
+        let size = if size == 0 { 0x1_0000 } else { size };
+        end = end.max(off.checked_add(size)?);
+    }
+    usize::try_from(end).ok().filter(|&e| e < d.len())
 }
 
 #[cfg(test)]

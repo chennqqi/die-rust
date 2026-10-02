@@ -11,3 +11,4 @@ repository.workspace = true
 [dependencies]
 diec-core = { workspace = true }
 fancy-regex = "0.14"
+flate2 = "1.1"

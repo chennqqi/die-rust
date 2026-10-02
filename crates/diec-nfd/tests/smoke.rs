@@ -1600,3 +1600,379 @@ fn pe32_rich_toolchain_chain() {
         .expect("rich-derived Visual C++");
     assert_eq!(cpp.version, "19.28.30000");
 }
+
+/// ELF64 + a 0x24-byte UPX tail block (`_get_UPX_vi` at size-0x24):
+/// `magic` occupies the UPX! position; format=10/method=2(NRV2B_LE32)/
+/// level=8(best), u_len 0x2000 > c_len 0x1000.
+fn elf_upx_tail(magic: u32) -> Vec<u8> {
+    let mut d = elf64_with(&[], 0, 0x3E, 2);
+    let base = d.len();
+    d.resize(base + 0x40, 0); // pad so the tail block lands at end
+    let off = d.len() - 0x24;
+    d[off..off + 4].copy_from_slice(&magic.to_le_bytes());
+    d[off + 4] = 4; // version
+    d[off + 5] = 10; // format
+    d[off + 6] = 2; // method NRV2B_LE32
+    d[off + 7] = 8; // level best
+    d[off + 16..off + 20].copy_from_slice(&0x2000u32.to_le_bytes());
+    d[off + 20..off + 24].copy_from_slice(&0x1000u32.to_le_bytes());
+    d
+}
+
+#[test]
+fn elf_upx_tail_protection() {
+    let d = elf_upx_tail(0x2158_5055); // "UPX!"
+    let (_ft, out) = show("elf-upx-tail", &d);
+    let upx = out
+        .iter()
+        .find(|r| r.record_name == "UPX")
+        .expect("UPX packer record");
+    assert!(upx.info.contains("NRV2B_LE32"), "info: {}", upx.info);
+    assert!(upx.info.contains("best"));
+}
+
+#[test]
+fn elf_secneo_tag_at_upx_tail() {
+    let d = elf_upx_tail(0x2143_4553); // "SEC!"
+    let (_ft, out) = show("elf-secneo-tail", &d);
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "SecNeo" && r.version == "Old" && r.info == "UPX"),
+        "{:?}",
+        out.iter().map(|r| r.record_name).collect::<Vec<_>>()
+    );
+    // The tail block still parses as a (modified) UPX record.
+    let upx = out
+        .iter()
+        .find(|r| r.record_name == "UPX")
+        .expect("UPX packer record");
+    assert!(upx.info.contains("Modified"), "info: {}", upx.info);
+}
+
+/// Minimal NE image: MZ stub with e_lfanew=0x40, NE header with
+/// exetyp=2 (Windows) and a single segment covering 0x80..0x180; EP
+/// (CS:IP) lands in that segment where a Watcom banner sits; byte 0xFB
+/// at 0x1E + 0x40 at 0x1F emulates the TurboLinker trailer
+/// (0x40/16 = 4.0).
+fn ne_fixture() -> Vec<u8> {
+    let mut d = vec![0u8; 0x400];
+    d[0..2].copy_from_slice(b"MZ");
+    d[0x1E] = 0xFB;
+    d[0x1F] = 0x40;
+    d[0x3C..0x40].copy_from_slice(&0x40u32.to_le_bytes());
+    let ne = 0x40;
+    d[ne..ne + 2].copy_from_slice(b"NE");
+    d[ne + 0x0C..ne + 0x0E].copy_from_slice(&0x0000u16.to_le_bytes()); // flags
+    d[ne + 0x14..ne + 0x16].copy_from_slice(&0x10u16.to_le_bytes()); // IP
+    d[ne + 0x16..ne + 0x18].copy_from_slice(&1u16.to_le_bytes()); // CS = seg 1
+    d[ne + 0x1C..ne + 0x1E].copy_from_slice(&1u16.to_le_bytes()); // cseg
+    d[ne + 0x22..ne + 0x24].copy_from_slice(&0x40u16.to_le_bytes()); // segtab rel
+    d[ne + 0x32..ne + 0x34].copy_from_slice(&4u16.to_le_bytes()); // align = 4
+    d[ne + 0x36] = 2; // exetyp = Windows
+    // Segment entry @0x80: sector 8 (=> file 0x80), size 0x100.
+    d[0x80..0x82].copy_from_slice(&8u16.to_le_bytes());
+    d[0x82..0x84].copy_from_slice(&0x100u16.to_le_bytes());
+    // EP = sector 8<<4 + 0x10 = 0x90; Watcom banner there.
+    d[0x90..0x9E].copy_from_slice(b"Open Watcom C\0");
+    d[0xA0..0xAB].copy_from_slice(b"x 2002-1234");
+    d
+}
+
+#[test]
+fn ne_semantic_handlers() {
+    let d = ne_fixture();
+    let (ft, out) = show("ne-synth", &d);
+    assert_eq!(ft_name(ft), "FT_NE");
+    let names: Vec<String> = out
+        .iter()
+        .map(|r| format!("{}:{}", r.record_type, r.record_name))
+        .collect();
+    assert!(names.iter().any(|s| s.contains("Windows")), "{names:?}");
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Turbo linker" && r.version == "4.0"),
+        "{names:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Open Watcom C/C++" && r.version == "1234"),
+        "{names:?}"
+    );
+    assert!(out.iter().any(|r| r.record_name == "Watcom linker"));
+}
+
+/// `NFD_COM::handle_Protection` — a HACKSTOP header detection promotes
+/// the MS-DOS OS record; CP/M-call dominance flips it to CP/M.
+#[test]
+fn com_protection_os_record() {
+    let mut d = vec![0u8; 256];
+    d[..6].copy_from_slice(&[0xFA, 0xBD, 0x00, 0x00, 0xFF, 0xE5]);
+    let out = diec_nfd::scan(&d, ft::FT_COM, ScanOptions::default());
+    let names: Vec<String> = out
+        .iter()
+        .map(|r| {
+            format!(
+                "{}:{} {} {}",
+                r.record_type, r.record_name, r.version, r.info
+            )
+        })
+        .collect();
+    eprintln!("com: {names:?}");
+    assert!(names.iter().any(|s| s.contains("HackStop")), "{names:?}");
+    assert!(
+        names
+            .iter()
+            .any(|s| s.contains("MS-DOS") && s.contains("8086, 16-bit, EXE")),
+        "{names:?}"
+    );
+
+    // CP/M flavour: BDOS calls (CD 05 00) outnumber INT 21h (CD 21).
+    let mut d2 = vec![0u8; 64];
+    d2[..6].copy_from_slice(&[0xFA, 0xBD, 0x00, 0x00, 0xFF, 0xE5]);
+    d2[16..19].copy_from_slice(&[0xCD, 0x05, 0x00]);
+    d2[24..27].copy_from_slice(&[0xCD, 0x05, 0x00]);
+    let out2 = diec_nfd::scan(&d2, ft::FT_COM, ScanOptions::default());
+    let n2: Vec<String> = out2
+        .iter()
+        .map(|r| format!("{}:{} {}", r.record_type, r.record_name, r.info))
+        .collect();
+    assert!(
+        n2.iter()
+            .any(|s| s.contains("CP/M") && s.contains("8080/Z80")),
+        "{n2:?}"
+    );
+}
+
+/// `NFD_CFBF::getInfo` — the u16 at 0x200/0x1000 promotes the compound
+/// document to Microsoft Installer / Word 97-2003; deep scan finds the
+/// Advanced Installer marker.
+#[test]
+fn cfbf_subtype_promotion() {
+    let mut msi = vec![0u8; 0x1200];
+    msi[..8].copy_from_slice(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]);
+    msi[0x1000..0x1002].copy_from_slice(&0xFFFDu16.to_le_bytes());
+    let out = diec_nfd::scan(&msi, ft::FT_CFBF, ScanOptions::default());
+    let names: Vec<String> = out.iter().map(|r| r.record_name.to_string()).collect();
+    assert!(
+        names.iter().any(|s| s.starts_with("Microsoft Installer")),
+        "{names:?}"
+    );
+    assert!(
+        !names.iter().any(|s| s == "Microsoft Compound"),
+        "{names:?}"
+    );
+
+    let mut word = vec![0u8; 0x400];
+    word[..8].copy_from_slice(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]);
+    word[0x200..0x202].copy_from_slice(&0xA5ECu16.to_le_bytes());
+    let out = diec_nfd::scan(&word, ft::FT_CFBF, ScanOptions::default());
+    let names: Vec<String> = out
+        .iter()
+        .map(|r| format!("{}:{}", r.record_name, r.version))
+        .collect();
+    assert!(
+        names.iter().any(|s| s == "Microsoft Office Word:97-2003"),
+        "{names:?}"
+    );
+
+    let mut ai = vec![0u8; 0x400];
+    ai[..8].copy_from_slice(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]);
+    ai[0x100..]
+        .iter_mut()
+        .take(17)
+        .zip(b"AI_PACKAGING_TOOL")
+        .for_each(|(b, s)| *b = *s);
+    ai[0x111..]
+        .iter_mut()
+        .take(23)
+        .zip(b"Advanced Installer 19.3\r\n")
+        .for_each(|(b, s)| *b = *s);
+    let out = diec_nfd::scan(&ai, ft::FT_CFBF, ScanOptions { deep_scan: true });
+    let names: Vec<String> = out
+        .iter()
+        .map(|r| format!("{}:{} {}", r.record_type, r.record_name, r.version))
+        .collect();
+    assert!(
+        names
+            .iter()
+            .any(|s| s.contains("Advanced Installer") && s.contains("19.3")),
+        "{names:?}"
+    );
+}
+
+/// `NFD_PDF::getInfo` — `/Encrypt` becomes an `Unknown` protector with
+/// the encryption description; `/Producer` becomes a tool record.
+#[test]
+fn pdf_encrypt_and_producer() {
+    let pdf = b"%PDF-1.4\n1 0 obj\n<< /Encrypt << /V 4 /R 4 /Length 128 /CF << /CFM /AESV2 >> /P -3904 >> /Producer (Acrobat Distiller 9.0) >>\nendobj\n%%EOF";
+    let out = diec_nfd::scan(pdf, ft::FT_PDF, ScanOptions::default());
+    let names: Vec<String> = out
+        .iter()
+        .map(|r| {
+            format!(
+                "{}:{} {} {}",
+                r.record_type, r.record_name, r.version, r.info
+            )
+        })
+        .collect();
+    eprintln!("pdf: {names:?}");
+    assert!(names.iter().any(|s| s.contains("PDF")), "{names:?}");
+    assert!(
+        names.iter().any(|s| {
+            s.contains("Protector")
+                && s.contains("V4 R4 128-bit AESV2 P=-3904")
+                && s.contains("Encrypted")
+        }),
+        "{names:?}"
+    );
+    assert!(
+        names.iter().any(|s| s.contains("Acrobat Distiller 9.0")),
+        "{names:?}"
+    );
+}
+
+/// `NFD_Amiga::getInfo` — hunk magic sniffs to FT_AMIGAHUNK and emits
+/// the Amiga OS record with 68K/16-bit info.
+#[test]
+fn amiga_hunk_os_record() {
+    let mut d = vec![0u8; 32];
+    d[..4].copy_from_slice(&[0x00, 0x00, 0x03, 0xF3]);
+    assert_eq!(ft_name(sniff_ft(&d)), "FT_AMIGAHUNK");
+    let out = diec_nfd::scan(&d, ft::FT_AMIGAHUNK, ScanOptions::default());
+    let names: Vec<String> = out
+        .iter()
+        .map(|r| format!("{}:{} {}", r.record_type, r.record_name, r.info))
+        .collect();
+    assert!(
+        names
+            .iter()
+            .any(|s| s.contains("Amiga") && s.contains("68K, 16-bit, EXE, BE")),
+        "{names:?}"
+    );
+}
+
+/// Build a minimal stored-method ZIP with the given members.
+fn zip_stored(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut d = Vec::new();
+    let mut centrals = Vec::new();
+    for (name, body) in entries {
+        let local_off = d.len() as u32;
+        d.extend_from_slice(&[0x50, 0x4B, 0x03, 0x04]);
+        d.extend_from_slice(&20u16.to_le_bytes()); // version needed
+        d.extend_from_slice(&0u16.to_le_bytes()); // flags
+        d.extend_from_slice(&0u16.to_le_bytes()); // stored
+        d.extend_from_slice(&0u32.to_le_bytes()); // time/date
+        d.extend_from_slice(&0u32.to_le_bytes()); // crc
+        d.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        d.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        d.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        d.extend_from_slice(&0u16.to_le_bytes()); // extra len
+        d.extend_from_slice(name.as_bytes());
+        d.extend_from_slice(body);
+        centrals.push((name.to_string(), body.len() as u32, local_off));
+    }
+    let cd_off = d.len() as u32;
+    for (name, size, local_off) in &centrals {
+        d.extend_from_slice(&[0x50, 0x4B, 0x01, 0x02]);
+        d.extend_from_slice(&20u16.to_le_bytes()); // version made
+        d.extend_from_slice(&20u16.to_le_bytes()); // version needed
+        d.extend_from_slice(&0u16.to_le_bytes()); // flags
+        d.extend_from_slice(&0u16.to_le_bytes()); // method
+        d.extend_from_slice(&0u32.to_le_bytes()); // time/date
+        d.extend_from_slice(&0u32.to_le_bytes()); // crc
+        d.extend_from_slice(&size.to_le_bytes());
+        d.extend_from_slice(&size.to_le_bytes());
+        d.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        d.extend_from_slice(&[0u8; 8]); // extra+comment+disk+int attr
+        d.extend_from_slice(&0u32.to_le_bytes()); // ext attr
+        d.extend_from_slice(&local_off.to_le_bytes());
+        d.extend_from_slice(name.as_bytes());
+    }
+    let cd_size = d.len() as u32 - cd_off;
+    d.extend_from_slice(&[0x50, 0x4B, 0x05, 0x06]);
+    d.extend_from_slice(&[0u8; 4]); // disk numbers
+    d.extend_from_slice(&(centrals.len() as u16).to_le_bytes());
+    d.extend_from_slice(&(centrals.len() as u16).to_le_bytes());
+    d.extend_from_slice(&cd_size.to_le_bytes());
+    d.extend_from_slice(&cd_off.to_le_bytes());
+    d.extend_from_slice(&0u16.to_le_bytes());
+    d
+}
+
+/// `NFD_JAR::getInfo` — JVM record with the first .class member's JDK
+/// version plus MANIFEST.MF vendor/JDK/Ant tool detections.
+#[test]
+fn jar_manifest_and_class_version() {
+    let mut class = vec![0u8; 16];
+    class[..4].copy_from_slice(&[0xCA, 0xFE, 0xBA, 0xBE]);
+    class[4..6].copy_from_slice(&0u16.to_be_bytes()); // minor
+    class[6..8].copy_from_slice(&0x34u16.to_be_bytes()); // major 52 -> Java SE 8
+    let manifest = b"Manifest-Version: 1.0\r\nCreated-By: 1.8.0_252 (Oracle Corporation)\r\nAnt-Version: Apache Ant 1.10.12\r\n";
+    let jar = zip_stored(&[
+        ("META-INF/MANIFEST.MF", manifest),
+        ("com/acme/Main.class", &class),
+    ]);
+    let out = diec_nfd::scan(&jar, ft::FT_JAR, ScanOptions::default());
+    let names: Vec<String> = out
+        .iter()
+        .map(|r| {
+            format!(
+                "{}:{} {} {}",
+                r.record_type, r.record_name, r.version, r.info
+            )
+        })
+        .collect();
+    eprintln!("jar: {names:?}");
+    assert!(
+        names
+            .iter()
+            .any(|s| s.contains("Virtual machine:JVM") && s.contains("Java SE 8")),
+        "{names:?}"
+    );
+    assert!(
+        names
+            .iter()
+            .any(|s| s.contains("JDK") && s.contains("1.8.0_252")),
+        "{names:?}"
+    );
+    assert!(
+        names
+            .iter()
+            .any(|s| s.contains("Apache Ant") && s.contains("1.10.12")),
+        "{names:?}"
+    );
+}
+
+/// `NFD_Binary::handle_Texts` — source-language heuristics: include-guard
+/// C header, shebang interpreter, Python class/def/self/imports.
+#[test]
+fn text_source_heuristics() {
+    let c_hdr = b"#ifndef MY_HEADER_H\n#define MY_HEADER_H\n\nint square(int);\n#endif\n";
+    let out = diec_nfd::scan(c_hdr, ft::FT_BINARY, ScanOptions::default());
+    let names: Vec<String> = out
+        .iter()
+        .map(|r| format!("{}:{} {}", r.record_type, r.record_name, r.info))
+        .collect();
+    eprintln!("hdr: {names:?}");
+    assert!(
+        names
+            .iter()
+            .any(|s| s.contains("C/C++") && s.contains("header")),
+        "{names:?}"
+    );
+
+    let py = b"#!/usr/bin/env python3\nimport os\nclass Foo:\n    def bar(self):\n        pass\n";
+    let out = diec_nfd::scan(py, ft::FT_BINARY, ScanOptions::default());
+    let names: Vec<String> = out
+        .iter()
+        .map(|r| format!("{}:{} {}", r.record_type, r.record_name, r.info))
+        .collect();
+    eprintln!("py: {names:?}");
+    assert!(names.iter().any(|s| s.contains("Python")), "{names:?}");
+    assert!(
+        names
+            .iter()
+            .any(|s| s.contains("Shell") && s.contains("Python3")),
+        "{names:?}"
+    );
+}

@@ -18,6 +18,8 @@ mod elf;
 mod engine;
 mod mach;
 mod mach_tables;
+mod miscfmt;
+mod ne;
 pub mod parse;
 pub mod pe;
 mod pe_handlers;
