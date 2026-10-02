@@ -362,8 +362,9 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
             );
         }
         x if x == ft::FT_ELF32 || x == ft::FT_ELF64 || x == ft::FT_ELF => {
-            // NFD_ELF::getInfo — entry-point signatures only; the format
-            // record and handle_* fixups are heuristic and not ported.
+            // NFD_ELF::getInfo — entry-point signatures plus the
+            // semantic handlers (OS, .comment toolchain strings, GCC
+            // fixup, debug data, tools).
             if let Some(ep_off) = parse::elf_entry_offset(data) {
                 let ep_sig = get_signature(data, ep_off, 150);
                 signature_scan(
@@ -374,6 +375,7 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
                     ft::FT_ELF,
                 );
             }
+            crate::elf::elf_semantic_scan(data, ft::FT_ELF, &mut misc);
         }
         x if x == ft::FT_DEX => {
             // NFD_DEX::getInfo — string-id contents and type descriptors.

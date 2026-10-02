@@ -276,6 +276,37 @@ pub fn is_plain_text(d: &[u8]) -> bool {
     (print + ext) as f64 / n >= 0.85 && ctl as f64 / n <= 0.05 && ext as f64 / n <= 0.50
 }
 
+/// Endianness-aware `u16`/`u32`/`u64` readers (`XBinary::read_uint*`
+/// with explicit `bIsBigEndian`).
+pub fn rd_u16_be_le(d: &[u8], off: usize, big: bool) -> Option<u16> {
+    let b = d.get(off..off + 2)?;
+    Some(if big {
+        u16::from_be_bytes([b[0], b[1]])
+    } else {
+        u16::from_le_bytes([b[0], b[1]])
+    })
+}
+
+/// See [`rd_u16_be_le`].
+pub fn rd_u32_be_le(d: &[u8], off: usize, big: bool) -> Option<u32> {
+    let b = d.get(off..off + 4)?;
+    Some(if big {
+        u32::from_be_bytes([b[0], b[1], b[2], b[3]])
+    } else {
+        u32::from_le_bytes([b[0], b[1], b[2], b[3]])
+    })
+}
+
+/// See [`rd_u16_be_le`].
+pub fn rd_u64_be_le(d: &[u8], off: usize, big: bool) -> Option<u64> {
+    let b = d.get(off..off + 8)?;
+    Some(if big {
+        u64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])
+    } else {
+        u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])
+    })
+}
+
 /// Find an ANSI byte string inside `[offset, offset+size)`
 /// (`XBinary::find_ansiString`). Returns the offset or `None`.
 pub fn find_ansi(d: &[u8], offset: usize, size: usize, needle: &[u8]) -> Option<usize> {
@@ -362,6 +393,283 @@ pub fn apk_sig_block_ids(d: &[u8]) -> Vec<u32> {
     ids
 }
 
+/// Parsed ELF section record (name resolved via shstrtab).
+#[derive(Debug, Clone)]
+pub struct ElfSection {
+    /// Section name (shstrtab).
+    pub name: String,
+    /// `sh_type`.
+    pub typ: u32,
+    /// `sh_offset`.
+    pub off: usize,
+    /// `sh_size`.
+    pub size: usize,
+    /// `sh_entsize`.
+    pub entsize: usize,
+}
+
+/// ELF structural summary used by the `NFD_ELF` handlers.
+#[derive(Debug, Default)]
+pub struct ElfInfo {
+    /// ELFCLASS64.
+    pub is64: bool,
+    /// ELFDATA2MSB.
+    pub big_endian: bool,
+    /// EI_OSABI (ident[7]).
+    pub osabi: u8,
+    /// PT_INTERP interpreter path.
+    pub interp: String,
+    /// Section records.
+    pub sections: Vec<ElfSection>,
+    /// `.comment` contents split on NUL (`XELF::getCommentStrings`).
+    pub comments: Vec<String>,
+    /// PT_NOTE + SHT_NOTE entries as `(name, desc)`.
+    pub notes: Vec<(String, Vec<u8>)>,
+    /// DT_NEEDED library names.
+    pub needed: Vec<String>,
+    /// DT_RUNPATH / DT_RPATH value.
+    pub runpath: String,
+}
+
+/// Parse ELF headers, sections, notes, dynamic tags and the `.comment`
+/// strings (`XELF::getFileFormatInfo` inputs). Returns `None` for
+/// non-ELF input; every field is bounded.
+pub fn elf_info(d: &[u8]) -> Option<ElfInfo> {
+    if !d.starts_with(b"\x7FELF") {
+        return None;
+    }
+    let is64 = d.get(4) == Some(&2);
+    let big = d.get(5) == Some(&2);
+    let osabi = *d.get(7)?;
+    let ru16 = |o: usize| -> Option<u16> {
+        let b = d.get(o..o + 2)?;
+        Some(if big {
+            u16::from_be_bytes([b[0], b[1]])
+        } else {
+            u16::from_le_bytes([b[0], b[1]])
+        })
+    };
+    let ru32 = |o: usize| -> Option<u32> {
+        let b = d.get(o..o + 4)?;
+        Some(if big {
+            u32::from_be_bytes([b[0], b[1], b[2], b[3]])
+        } else {
+            u32::from_le_bytes([b[0], b[1], b[2], b[3]])
+        })
+    };
+    let ru64 = |o: usize| -> Option<u64> {
+        let b = d.get(o..o + 8)?;
+        Some(if big {
+            u64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])
+        } else {
+            u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])
+        })
+    };
+
+    let (phoff, phentsize, phnum, shoff, shentsize, shnum, shstrndx) = if is64 {
+        (
+            ru64(0x20)? as usize,
+            ru16(0x36)? as usize,
+            ru16(0x38)? as usize,
+            ru64(0x28)? as usize,
+            ru16(0x3A)? as usize,
+            ru16(0x3C)? as usize,
+            ru16(0x3E)? as usize,
+        )
+    } else {
+        (
+            ru32(0x1C)? as usize,
+            ru16(0x2A)? as usize,
+            ru16(0x2C)? as usize,
+            ru32(0x20)? as usize,
+            ru16(0x2E)? as usize,
+            ru16(0x30)? as usize,
+            ru16(0x32)? as usize,
+        )
+    };
+
+    let mut info = ElfInfo {
+        is64,
+        big_endian: big,
+        osabi,
+        ..Default::default()
+    };
+
+    // Program headers: PT_INTERP(3) path, PT_NOTE(4) notes, PT_DYNAMIC(2).
+    let mut dyn_seg: Option<(usize, usize)> = None;
+    if phentsize > 0 {
+        for i in 0..phnum.min(1024) {
+            let Some(p) = phoff.checked_add(i.checked_mul(phentsize)?) else {
+                break;
+            };
+            let (ptype, poff, filesz) = if is64 {
+                (ru32(p)?, ru64(p + 8)? as usize, ru64(p + 32)? as usize)
+            } else {
+                (ru32(p)?, ru32(p + 4)? as usize, ru32(p + 16)? as usize)
+            };
+            match ptype {
+                3 => {
+                    if let Some(end) = poff.checked_add(filesz.min(4096))
+                        && let Some(s) = d.get(poff..end.min(d.len()))
+                    {
+                        info.interp = String::from_utf8_lossy(s)
+                            .trim_end_matches('\0')
+                            .to_string();
+                    }
+                }
+                4 => elf_notes(d, poff, filesz.min(1 << 20), &ru32, &mut info.notes),
+                2 => dyn_seg = Some((poff, filesz.min(1 << 20))),
+                _ => {}
+            }
+        }
+    }
+
+    // Sections via shstrtab.
+    if shentsize > 0 && shnum > 0 && shstrndx < shnum {
+        let mut raw: Vec<(u32, u32, usize, usize, usize)> = Vec::new(); // name_off, type, off, size, entsize
+        for i in 0..shnum.min(4096) {
+            let Some(p) = shoff.checked_add(i.checked_mul(shentsize)?) else {
+                break;
+            };
+            let (name_off, typ, off, size, entsize) = if is64 {
+                (
+                    ru32(p)?,
+                    ru32(p + 4)?,
+                    ru64(p + 24)? as usize,
+                    ru64(p + 32)? as usize,
+                    ru64(p + 56)? as usize,
+                )
+            } else {
+                (
+                    ru32(p)?,
+                    ru32(p + 4)?,
+                    ru32(p + 16)? as usize,
+                    ru32(p + 20)? as usize,
+                    ru32(p + 36)? as usize,
+                )
+            };
+            raw.push((name_off, typ, off, size, entsize));
+        }
+        if let Some(shstr) = raw.get(shstrndx) {
+            let strs = d
+                .get(shstr.2..shstr.2.saturating_add(shstr.3).min(d.len()))
+                .unwrap_or(&[]);
+            for &(name_off, typ, off, size, entsize) in &raw {
+                let noff = name_off as usize;
+                let mut e = noff;
+                while e < strs.len() && strs[e] != 0 {
+                    e += 1;
+                }
+                let name = String::from_utf8_lossy(strs.get(noff..e).unwrap_or(&[])).into_owned();
+                info.sections.push(ElfSection {
+                    name,
+                    typ,
+                    off,
+                    size,
+                    entsize,
+                });
+            }
+        }
+    }
+
+    // SHT_NOTE(7) sections supplement PT_NOTE notes (Go buildid etc.).
+    let sec_notes: Vec<(usize, usize)> = info
+        .sections
+        .iter()
+        .filter(|s| s.typ == 7)
+        .map(|s| (s.off, s.size))
+        .collect();
+    for (off, size) in sec_notes {
+        elf_notes(d, off, size.min(1 << 20), &ru32, &mut info.notes);
+    }
+
+    // `.comment` strings.
+    if let Some(c) = info.sections.iter().find(|s| s.name == ".comment")
+        && let Some(buf) = d.get(c.off..c.off.saturating_add(c.size).min(d.len()))
+    {
+        info.comments = buf
+            .split(|b| *b == 0)
+            .filter(|s| !s.is_empty())
+            .map(|s| String::from_utf8_lossy(s).into_owned())
+            .collect();
+    }
+
+    // Dynamic tags from PT_DYNAMIC (fall back to SHT_DYNAMIC section).
+    let dyn_rng = dyn_seg.or_else(|| {
+        info.sections
+            .iter()
+            .find(|s| s.typ == 6)
+            .map(|s| (s.off, s.size.min(1 << 20)))
+    });
+    if let Some((doff, dsize)) = dyn_rng {
+        let dynstr = info.sections.iter().find(|s| s.name == ".dynstr");
+        let (str_off, str_size) = dynstr.map(|s| (s.off, s.size)).unwrap_or((0, 0));
+        let entsz = if is64 { 16 } else { 8 };
+        let mut p = doff;
+        while p + entsz <= doff + dsize && p + entsz <= d.len() {
+            let (tag, val) = if is64 {
+                (ru64(p)? as i64, ru64(p + 8)?)
+            } else {
+                (ru32(p)? as i32 as i64, ru32(p + 4)? as u64)
+            };
+            if tag == 0 {
+                break;
+            }
+            if let Some(so) = str_off.checked_add(val as usize)
+                && so < str_off + str_size
+                && let Some(s) = read_ansi_string(d, so)
+            {
+                match tag {
+                    1 => info.needed.push(s),                               // DT_NEEDED
+                    15 | 29 if info.runpath.is_empty() => info.runpath = s, // RPATH/RUNPATH
+                    _ => {}
+                }
+            }
+            p += entsz;
+        }
+    }
+
+    Some(info)
+}
+
+/// Parse ELF note entries inside `[off, off+size)`: each note is
+/// `[u32 namesz][u32 descsz][u32 type][name][desc]`, 4-aligned.
+fn elf_notes(
+    d: &[u8],
+    off: usize,
+    size: usize,
+    ru32: &dyn Fn(usize) -> Option<u32>,
+    out: &mut Vec<(String, Vec<u8>)>,
+) {
+    let end = off.saturating_add(size).min(d.len());
+    let mut p = off;
+    while p + 12 <= end && out.len() < 256 {
+        let (Some(nsz), Some(dsz), Some(_typ)) = (ru32(p), ru32(p + 4), ru32(p + 8)) else {
+            break;
+        };
+        let (nsz, dsz) = (nsz as usize, dsz as usize);
+        if nsz > 4096 || dsz > (1 << 20) {
+            break;
+        }
+        let name_off = p + 12;
+        let desc_off = (name_off + nsz + 3) & !3;
+        let Some(name_raw) = d.get(name_off..name_off + nsz) else {
+            break;
+        };
+        let name = String::from_utf8_lossy(name_raw)
+            .trim_end_matches('\0')
+            .to_string();
+        let desc = d.get(desc_off..desc_off + dsz).unwrap_or(&[]).to_vec();
+        out.push((name, desc));
+        let Some(next) = desc_off.checked_add(dsz + 3).map(|v| v & !3) else {
+            break;
+        };
+        if next <= p {
+            break;
+        }
+        p = next;
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

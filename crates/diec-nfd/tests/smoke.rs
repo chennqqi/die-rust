@@ -423,3 +423,153 @@ fn msdos_vintage_pascal_banner() {
         "expected Microsoft Pascal 4.00: {out:?}"
     );
 }
+
+/// Build a minimal ELF64 with the given section payloads. Sections are
+/// `[("name", type, bytes)]`; shstrtab is appended automatically.
+fn elf64_with(sections: &[(&str, u32, &[u8])], osabi: u8, machine: u16, etype: u16) -> Vec<u8> {
+    let mut names = String::from("\0");
+    let mut offs = Vec::new();
+    let mut d = vec![0u8; 0x40];
+    d[0..4].copy_from_slice(b"\x7FELF");
+    d[4] = 2; // ELFCLASS64
+    d[5] = 1; // LSB
+    d[7] = osabi;
+    d[0x10..0x12].copy_from_slice(&etype.to_le_bytes());
+    d[0x12..0x14].copy_from_slice(&machine.to_le_bytes());
+    d[0x14..0x18].copy_from_slice(&1u32.to_le_bytes());
+    for (name, _, payload) in sections {
+        offs.push((names.len() as u32, d.len()));
+        names.push_str(name);
+        names.push('\0');
+        d.extend_from_slice(payload);
+        while !d.len().is_multiple_of(8) {
+            d.push(0);
+        }
+    }
+    // shstrtab holds the full name pool.
+    let shstr_off_in_names = names.len() as u32;
+    names.push_str(".shstrtab\0");
+    let shstr_file_off = d.len();
+    d.extend_from_slice(names.as_bytes());
+    while !d.len().is_multiple_of(8) {
+        d.push(0);
+    }
+    let shoff = d.len();
+    // shnum = 1 (null) + sections + shstrtab.
+    let shnum = 1 + sections.len() + 1;
+    let mut sh = vec![0u8; 64]; // null section
+    for (i, (_, typ, payload)) in sections.iter().enumerate() {
+        let (name_off, file_off) = offs[i];
+        sh.extend_from_slice(&name_off.to_le_bytes());
+        sh.extend_from_slice(&typ.to_le_bytes());
+        sh.extend_from_slice(&[0u8; 16]); // flags+addr
+        sh.extend_from_slice(&(file_off as u64).to_le_bytes());
+        sh.extend_from_slice(&(payload.len() as u64).to_le_bytes());
+        sh.extend_from_slice(&[0u8; 16]); // link+info+align
+        // entsize
+        let entsz: u64 = if *typ == 2 { 24 } else { 0 };
+        sh.extend_from_slice(&entsz.to_le_bytes());
+    }
+    // shstrtab section (type STRTAB=3).
+    sh.extend_from_slice(&shstr_off_in_names.to_le_bytes());
+    sh.extend_from_slice(&3u32.to_le_bytes());
+    sh.extend_from_slice(&[0u8; 16]);
+    sh.extend_from_slice(&(shstr_file_off as u64).to_le_bytes());
+    sh.extend_from_slice(&(names.len() as u64).to_le_bytes());
+    sh.extend_from_slice(&[0u8; 24]);
+    d.extend_from_slice(&sh);
+    d[0x28..0x30].copy_from_slice(&(shoff as u64).to_le_bytes());
+    d[0x3A..0x3C].copy_from_slice(&64u16.to_le_bytes());
+    d[0x3C..0x3E].copy_from_slice(&(shnum as u16).to_le_bytes());
+    d[0x3E..0x40].copy_from_slice(&(shnum as u16 - 1).to_le_bytes());
+    d
+}
+
+#[test]
+fn elf_comment_gcc_and_os() {
+    let d = elf64_with(
+        &[(".comment", 1, b"GCC: (GNU) 11.4.0\0")],
+        0,  // ELFOSABI_SYSV
+        62, // EM_AMD64
+        2,  // ET_EXEC
+    );
+    let out = diec_nfd::scan(
+        &d,
+        diec_nfd::gen_names::ft::FT_ELF64,
+        diec_nfd::ScanOptions::default(),
+    );
+    assert!(
+        out.iter().any(|r| r.record_name == "GCC"
+            && r.version == "11.4.0"
+            && r.record_type == "Compiler"),
+        "expected GCC 11.4.0 compiler record: {out:?}"
+    );
+    // SysV OSABI defaults to UNIX; sInfo carries arch/mode/type.
+    assert!(
+        out.iter().any(|r| r.record_name == "Unix"
+            && r.record_type == "Operation system"
+            && r.info.contains("EM_AMD64")
+            && r.info.contains("64-bit")
+            && r.info.contains("EXEC")),
+        "expected UNIX OS record with arch info: {out:?}"
+    );
+}
+
+#[test]
+fn elf_comment_clang_and_ubuntu_os() {
+    let d = elf64_with(
+        &[(".comment", 1, b"Ubuntu clang version 14.0.0-1ubuntu1\0")],
+        3, // ELFOSABI_LINUX
+        183,
+        3,
+    );
+    let out = diec_nfd::scan(
+        &d,
+        diec_nfd::gen_names::ft::FT_ELF64,
+        diec_nfd::ScanOptions::default(),
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Ubuntu clang" && r.version == "14.0.0-1ubuntu1"),
+        "expected Ubuntu clang 14.0.0: {out:?}"
+    );
+    assert!(
+        out.iter().any(|r| r.record_name == "Ubuntu Linux"),
+        "expected Ubuntu Linux OS record: {out:?}"
+    );
+}
+
+#[test]
+fn elf_debug_sections() {
+    // 3 fake symbols (entsize 24 each → count 3).
+    let d = elf64_with(
+        &[
+            (".symtab", 2, &[0u8; 72]),
+            (".stab", 1, &[0u8; 12]),
+            (".stabstr", 3, &[0u8; 4]),
+            (".debug_info", 1, &[0, 0, 0, 0, 5, 0, 0, 0, 0, 0]),
+        ],
+        3,
+        62,
+        3,
+    );
+    let out = diec_nfd::scan(
+        &d,
+        diec_nfd::gen_names::ft::FT_ELF64,
+        diec_nfd::ScanOptions::default(),
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Symbol Table" && r.info.contains("3 symbols")),
+        "expected symbol table record: {out:?}"
+    );
+    assert!(
+        out.iter().any(|r| r.record_name == "STABS Debug Info"),
+        "{out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "DWARF Debug Info" && r.version == "5.0"),
+        "{out:?}"
+    );
+}

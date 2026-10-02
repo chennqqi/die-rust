@@ -14,12 +14,14 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod elf;
 mod engine;
-mod parse;
+pub mod parse;
 mod pe;
 mod records;
 mod scans;
 mod signature;
+mod vi;
 
 /// Generated name/type/filetype display tables and id constants.
 pub mod gen_names;
