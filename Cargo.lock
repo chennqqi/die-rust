@@ -1526,6 +1526,7 @@ dependencies = [
  "diec-core",
  "diec-formats",
  "diec-rules",
+ "flate2",
  "hex",
  "lzma-rs",
  "md-5",

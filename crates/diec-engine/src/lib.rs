@@ -18,6 +18,7 @@ pub mod host;
 mod nested_scan;
 mod scanner;
 pub mod struct_mode;
+pub mod unpack;
 
 pub use archive_unpack::{ArchiveKind, ArchiveMemberInfo, extract_member, list_archive_members};
 pub use database::{Database, DatabaseBuilder, DatabaseError, DatabaseVersion};
@@ -26,6 +27,7 @@ pub use scanner::{ScanDetection, ScanError, ScanResult, Scanner, scan_bytes, sca
 pub use struct_mode::{
     StructNode, StructSelector, evaluate_struct, evaluate_struct_default, general_method_names,
 };
+pub use unpack::{UnpackError, UpxInfo, detect_upx, is_upx_packed, unpack as unpack_static};
 
 #[cfg(test)]
 mod tests {

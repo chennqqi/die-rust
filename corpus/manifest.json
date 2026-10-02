@@ -157,6 +157,54 @@
       "name": "tone.wav",
       "sha256": "373324023416a5dc3809e647e041fc48a13db20648d5782ac989cba17014203b",
       "size": 46
+    },
+    {
+      "intended_format": "PE32 (UPX packed)",
+      "name": "upx-pe32-lzma.exe",
+      "sha256": "829bc542a51ce8bc1d0e136a7e211d1dceb23e3c6c66ee5207f24d8bc90361c6",
+      "size": 38441
+    },
+    {
+      "intended_format": "PE32 (UPX oracle)",
+      "name": "upx-pe32-lzma.unpacked.exe",
+      "sha256": "202d05d48641b4b25e0e7fed6dc109c02faf3243de892108558c8570185112dd",
+      "size": 56873
+    },
+    {
+      "intended_format": "PE32 (UPX packed)",
+      "name": "upx-pe32-nrv2b.exe",
+      "sha256": "b2e355e0b50c07ec9fe9f0766c8ec77cd18234f7d32c798f87779409c2ed75c8",
+      "size": 36905
+    },
+    {
+      "intended_format": "PE32 (UPX oracle)",
+      "name": "upx-pe32-nrv2b.unpacked.exe",
+      "sha256": "202d05d48641b4b25e0e7fed6dc109c02faf3243de892108558c8570185112dd",
+      "size": 56873
+    },
+    {
+      "intended_format": "PE32 (UPX packed)",
+      "name": "upx-pe32-nrv2e.exe",
+      "sha256": "ac42a694a3c3b9e3b4be15096f178b88fff2aee474d0fbf609b410a6b460763c",
+      "size": 36905
+    },
+    {
+      "intended_format": "PE32 (UPX oracle)",
+      "name": "upx-pe32-nrv2e.unpacked.exe",
+      "sha256": "202d05d48641b4b25e0e7fed6dc109c02faf3243de892108558c8570185112dd",
+      "size": 56873
+    },
+    {
+      "intended_format": "PE64 (UPX packed)",
+      "name": "upx-pe64-nrv2b.exe",
+      "sha256": "2038487ff6800b99fc0869741023c7f89cd6b3754bde394da58b5958ee2de7b0",
+      "size": 2560
+    },
+    {
+      "intended_format": "PE64 (UPX oracle)",
+      "name": "upx-pe64-nrv2b.unpacked.exe",
+      "sha256": "ac5d7e6fe202afdcb9bc58bc222576607062a82618728f3bb75a9b1588283e89",
+      "size": 3072
     }
   ],
   "schema_version": 1
