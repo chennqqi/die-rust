@@ -799,12 +799,15 @@ fn pe_scan(
         }
     }
 
-    // Semantic handlers (bounded handle_* subset).
-    crate::pe_handlers::operation_system(&pe, ftpe, misc);
+    // Semantic handlers — upstream `getInfo` call order:
+    // import -> OS -> Protection -> small protector handlers ->
+    // NETProtection -> PolyMorph -> Microsoft -> Borland -> Watcom ->
+    // Tools -> wxWidgets -> GCC -> Signtools -> SFX -> Installers ->
+    // Dongle -> NeoLite -> PrivateEXE -> VBCryptors -> DelphiCryptors ->
+    // Joiners -> PETools -> DebugData -> UnknownProtection -> FixDetects.
     crate::pe_handlers::import_heuristics(&pe, ftpe, imports);
-    crate::pe_handlers::debug_data(data, &pe, ftpe, misc);
-    crate::pe_handlers::microsoft(data, &pe, opts.deep_scan, ftpe, header, entrypoint, misc);
-    crate::pe_handlers::gcc(
+    crate::pe_handlers::operation_system(&pe, ftpe, misc);
+    crate::pe_handlers::protection(
         data,
         &pe,
         opts.deep_scan,
@@ -812,36 +815,21 @@ fn pe_scan(
         header,
         overlay,
         entrypoint,
-        misc,
-    );
-    crate::pe_handlers::watcom(data, &pe, ftpe, header, entrypoint, misc);
-    crate::pe_handlers::signtools(data, &pe, ftpe, misc);
-    crate::pe_handlers::dongle(&pe, ftpe, misc);
-    crate::pe_handlers::neolite(data, &pe, opts.deep_scan, ftpe, misc);
-    crate::pe_handlers::petools(section_names, ftpe, misc);
-    crate::pe_handlers::joiners(data, &pe, ftpe, imports, entrypoint, misc);
-    crate::pe_handlers::installers(
-        data,
-        &pe,
-        opts.deep_scan,
-        ftpe,
-        overlay,
-        header,
+        ep_section,
         section_names,
+        imports,
         misc,
     );
-    crate::pe_handlers::sfx(data, &pe, opts.deep_scan, ftpe, overlay, misc);
-    crate::pe_handlers::wx_widgets(data, &pe, opts.deep_scan, ftpe, misc);
-    crate::pe_handlers::borland(
-        data,
-        &pe,
-        opts.deep_scan,
-        ftpe,
-        header,
-        entrypoint,
-        dot_ansi,
-        misc,
-    );
+    crate::pe_handlers::safeengine(data, &pe, ftpe, entrypoint, misc);
+    crate::pe_handlers::vprotect(data, &pe, opts.deep_scan, ftpe, misc);
+    crate::pe_handlers::ttprotect(&pe, ftpe, misc);
+    crate::pe_handlers::vmprotect(&pe, entrypoint, misc);
+    crate::pe_handlers::telock(&pe, entrypoint, misc);
+    crate::pe_handlers::armadillo(&pe, ftpe, imports, misc);
+    crate::pe_handlers::obsidium(data, &pe, ftpe, misc);
+    crate::pe_handlers::themida(&pe, ftpe, entrypoint, misc);
+    crate::pe_handlers::starforce(&pe, ftpe, misc);
+    crate::pe_handlers::petite(&pe, entrypoint, section_names, misc);
     crate::pe_handlers::net_protection(
         data,
         &pe,
@@ -855,6 +843,18 @@ fn pe_scan(
         entrypoint,
         misc,
     );
+    crate::pe_handlers::microsoft(data, &pe, opts.deep_scan, ftpe, header, entrypoint, misc);
+    crate::pe_handlers::borland(
+        data,
+        &pe,
+        opts.deep_scan,
+        ftpe,
+        header,
+        entrypoint,
+        dot_ansi,
+        misc,
+    );
+    crate::pe_handlers::watcom(data, &pe, ftpe, header, entrypoint, misc);
     crate::pe_handlers::tools(
         data,
         &pe,
@@ -865,6 +865,47 @@ fn pe_scan(
         entrypoint,
         section_names,
         code_section,
+        misc,
+    );
+    crate::pe_handlers::wx_widgets(data, &pe, opts.deep_scan, ftpe, misc);
+    crate::pe_handlers::gcc(
+        data,
+        &pe,
+        opts.deep_scan,
+        ftpe,
+        header,
+        overlay,
+        entrypoint,
+        misc,
+    );
+    crate::pe_handlers::signtools(data, &pe, ftpe, misc);
+    crate::pe_handlers::sfx(data, &pe, opts.deep_scan, ftpe, overlay, misc);
+    crate::pe_handlers::installers(
+        data,
+        &pe,
+        opts.deep_scan,
+        ftpe,
+        overlay,
+        header,
+        section_names,
+        misc,
+    );
+    crate::pe_handlers::dongle(&pe, ftpe, misc);
+    crate::pe_handlers::neolite(data, &pe, opts.deep_scan, ftpe, misc);
+    crate::pe_handlers::private_exe(&pe, ftpe, header, misc);
+    crate::pe_handlers::vb_cryptors(&pe, overlay, imports, misc);
+    crate::pe_handlers::delphi_cryptors(&pe, imports, misc);
+    crate::pe_handlers::joiners(data, &pe, ftpe, imports, entrypoint, misc);
+    crate::pe_handlers::petools(section_names, ftpe, misc);
+    crate::pe_handlers::debug_data(data, &pe, ftpe, misc);
+    crate::pe_handlers::unknown_protection(
+        data,
+        &pe,
+        ftpe,
+        header,
+        section_names,
+        imports,
+        entrypoint,
         misc,
     );
 }

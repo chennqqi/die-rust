@@ -100,6 +100,16 @@ pub struct PeInfo {
     pub manifest: String,
     /// Parsed `VS_VERSIONINFO` (`getResourcesVersion` subset).
     pub res_version: crate::pe_version::ResourcesVersion,
+    /// Entry-point RVA (`nEntryPointAddress`).
+    pub entry_rva: u32,
+    /// COFF `e_lfanew` — PE header file offset (MKFpack "llydd" probe).
+    pub e_lfanew: u32,
+    /// COFF `TimeDateStamp` (ExeFog header gate).
+    pub time_stamp: u32,
+    /// PE32 optional-header `BaseOfData` (0 for PE32+).
+    pub base_of_data: u32,
+    /// Optional-header `MinorImageVersion` (WinUpack build probe).
+    pub minor_image: u16,
 }
 
 fn rd_u16(d: &[u8], off: usize) -> Option<u16> {
@@ -135,6 +145,10 @@ struct Section {
     vsize: u32,
     raw_ptr: u32,
     raw_size: u32,
+    /// `PointerToRelocations` — PECompact build-number probe.
+    ptr_reloc: u32,
+    /// `PointerToLinenumbers` — PECompact build-number probe.
+    ptr_linenum: u32,
     flags: u32,
 }
 
@@ -150,6 +164,14 @@ pub struct PeLayout {
     /// Image base.
     #[allow(dead_code)] // retained for RVA arithmetic in Exp scans.
     pub image_base: u64,
+    /// COFF `e_lfanew` — PE header file offset (MKFpack "llydd" probe).
+    pub e_lfanew: u32,
+    /// COFF `TimeDateStamp` (ExeFog header gate).
+    pub time_stamp: u32,
+    /// PE32 optional-header `BaseOfData` (0 for PE32+).
+    pub base_of_data: u32,
+    /// Optional-header `MinorImageVersion` (WinUpack build probe).
+    pub minor_image: u16,
     dir_rva: [u32; 16],
     #[allow(dead_code)] // retained for future resource/debug scans.
     dir_size: [u32; 16],
@@ -204,6 +226,8 @@ fn parse_layout(d: &[u8]) -> Option<PeLayout> {
             vsize: rd_u32(d, so + 8)?,
             raw_ptr: rd_u32(d, so + 20)?,
             raw_size: rd_u32(d, so + 16)?,
+            ptr_reloc: rd_u32(d, so + 24)?,
+            ptr_linenum: rd_u32(d, so + 28)?,
             flags: rd_u32(d, so + 36)?,
         });
     }
@@ -214,6 +238,14 @@ fn parse_layout(d: &[u8]) -> Option<PeLayout> {
         sections,
         entry_rva,
         image_base,
+        e_lfanew: pe_off as u32,
+        time_stamp: rd_u32(d, coff + 4).unwrap_or(0),
+        base_of_data: if is64 {
+            0
+        } else {
+            rd_u32(d, opt_off + 24).unwrap_or(0)
+        },
+        minor_image: rd_u16(d, opt_off + 46).unwrap_or(0),
         dir_rva,
         dir_size,
     })
@@ -530,6 +562,11 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
     info.tls_present = l.dir_rva[9] != 0;
     info.cert_offset = l.dir_rva[4] as usize;
     info.cert_size = l.dir_size[4] as usize;
+    info.entry_rva = l.entry_rva;
+    info.e_lfanew = l.e_lfanew;
+    info.time_stamp = l.time_stamp;
+    info.base_of_data = l.base_of_data;
+    info.minor_image = l.minor_image;
 
     info.extents = l
         .sections
@@ -542,6 +579,8 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
             code: s.flags & 0x2000_0000 != 0,
             vaddr: s.vaddr,
             vsize: s.vsize,
+            ptr_reloc: s.ptr_reloc,
+            ptr_linenum: s.ptr_linenum,
         })
         .collect();
 
@@ -867,6 +906,10 @@ pub struct SectionExtent {
     pub vaddr: u32,
     /// `VirtualSize` (`Misc.VirtualSize`).
     pub vsize: u32,
+    /// `PointerToRelocations` — PECompact build-number probe.
+    pub ptr_reloc: u32,
+    /// `PointerToLinenumbers` — PECompact build-number probe.
+    pub ptr_linenum: u32,
 }
 
 /// Parse and return the PE layout for signature-expression resolution.

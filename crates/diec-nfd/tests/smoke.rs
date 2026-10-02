@@ -1484,9 +1484,52 @@ fn pe32_dotnet_ansi_heap_promotes_dotfuscator() {
     let d = pe32_dotnet_fixture_heap(b"DotfuscatorAttribute\0");
     let out = diec_nfd::scan(&d, diec_nfd::sniff_ft(&d), diec_nfd::ScanOptions::default());
     assert!(
-        out.iter()
-            .any(|x| x.record_name.contains("Dotfuscator")),
+        out.iter().any(|x| x.record_name.contains("Dotfuscator")),
         "{:?}",
-        out.iter().map(|x| x.record_name.clone()).collect::<Vec<_>>()
+        out.iter().map(|x| x.record_name).collect::<Vec<_>>()
     );
+}
+
+/// Two-section PE32 named `.aspack`/`.adata` exercising
+/// `handle_UnknownProtection`'s ASPack section-name heuristic.
+fn pe32_aspack_sections_fixture() -> Vec<u8> {
+    let mut d = vec![0u8; 0x600];
+    d[0..2].copy_from_slice(b"MZ");
+    d[0x3C..0x40].copy_from_slice(&0x40u32.to_le_bytes());
+    d[0x40..0x44].copy_from_slice(b"PE\0\0");
+    d[0x44..0x46].copy_from_slice(&0x014Cu16.to_le_bytes());
+    d[0x46..0x48].copy_from_slice(&2u16.to_le_bytes()); // 2 sections
+    d[0x54..0x56].copy_from_slice(&0xE0u16.to_le_bytes());
+    let opt = 0x58;
+    d[opt..opt + 2].copy_from_slice(&0x010Bu16.to_le_bytes());
+    d[opt + 2] = 2;
+    d[opt + 3] = 25;
+    d[opt + 16..opt + 20].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[opt + 28..opt + 32].copy_from_slice(&0x0040_0000u32.to_le_bytes());
+    d[opt + 92..opt + 96].copy_from_slice(&16u32.to_le_bytes());
+    let sec = opt + 0xE0;
+    d[sec..sec + 7].copy_from_slice(b".aspack");
+    d[sec + 8..sec + 12].copy_from_slice(&0x200u32.to_le_bytes());
+    d[sec + 12..sec + 16].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[sec + 16..sec + 20].copy_from_slice(&0x200u32.to_le_bytes());
+    d[sec + 20..sec + 24].copy_from_slice(&0x200u32.to_le_bytes());
+    d[sec + 36..sec + 40].copy_from_slice(&0xE000_0060u32.to_le_bytes());
+    let s2 = sec + 40;
+    d[s2..s2 + 6].copy_from_slice(b".adata");
+    d[s2 + 8..s2 + 12].copy_from_slice(&0x200u32.to_le_bytes());
+    d[s2 + 12..s2 + 16].copy_from_slice(&0x2000u32.to_le_bytes());
+    d[s2 + 16..s2 + 20].copy_from_slice(&0x200u32.to_le_bytes());
+    d[s2 + 20..s2 + 24].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s2 + 36..s2 + 40].copy_from_slice(&0xE000_0060u32.to_le_bytes());
+    d
+}
+
+#[test]
+fn pe32_aspack_section_heuristic() {
+    let d = pe32_aspack_sections_fixture();
+    let (_ft, out) = show("pe32-aspack-synth", &d);
+    let a = out.iter().find(|r| r.record_name == "ASPack");
+    let a = a.unwrap_or_else(|| panic!("no ASPack in {out:?}"));
+    assert!(a.heuristic, "ASPack record must be flagged heuristic");
+    assert_eq!(a.version, "2.12-2.XX");
 }

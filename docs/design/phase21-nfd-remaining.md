@@ -72,16 +72,31 @@
 
 依赖：21.J 的 `#US` heap。
 
-### 21.M — Cryptor/Packer 保护组（最大工作量）
+### 21.M — Cryptor/Packer 保护组（最大工作量）✅ 已落地
 
-- `handle_Protection`（1651 行）：按信号源切片落地——
-  EP-detect 链 / section-name 链 / import 链 / overlay 链 /
-  linker+compiler 组合链，每片独立可测。
-- `handle_VisualBasicCryptors`（319）、`handle_DelphiCryptors`（281）：
-  VB/Delphi 特征 + cryptor 节名/字符串。
-- `handle_PrivateEXEProtector`（68）。
-- `handle_UnknownProtection`（201）：兜底启发（EP 节特征/熵/非标准
-  节数），**最后做**——它依赖"其余 handler 均无命中"的全量状态。
+- `handle_Protection`（1651 行）已全量移植（`pe_handlers::protection`）：
+  MPRESS/HyperTech/Spoon-Xenocode/SerGreen/MoleBoxUltra/NativeCryptor/
+  ActiveMark/SecuROM/ZLIB→PyInstaller、UPX vi（`upx_vi`/`upx_header_vi`
+  含格式白名单+方法→info 表）、PECompact 构建号表、Enigma、PESpin/
+  WinUpack/ORIEN/WWPACK32/FSG 版本表、NPACK/EncryptPE/PEPack/VCasm/
+  EXE32Pack 横幅、~80 个 import+EP/section/header 机械转发、
+  ZProtect 双路径（签名比较+空首节+熵>7.6）、ExeFog 头门、
+  ASPack EP-follow（复用管线内既有 loop）、LARP64（64 位分支）。
+- `handle_VisualBasicCryptors`（39 名转发 + 1337EXECRYPTER/AGAIN
+  NATIVITY 特例）、`handle_DelphiCryptors`（34 名 + CIGICIGI 的
+  AYARLAR 资源门）已移植。
+- `handle_PrivateEXEProtector`（PEP/TurboLinker + 节特征 + 导入形状）。
+- `handle_UnknownProtection`：UNK_UPXLIKE、EP 启发提升、UPX vi 兜底、
+  .aspack+.adata、PECompact 兜底、KKRUNCHY、generic 节/熵报告
+  （isProtectionPresent 门 = packer+protector+sfx+installer+
+  netobfuscator+dongle 已存在）。
+- 小 handler：SafeengineShielden/VProtect/TTProtect/VMProtect/tElock/
+  Armadillo/Obsidium/Themida/StarForce/Petite。
+- `pe_scan` 调用序已重排为上游 getInfo 顺序。
+- 未完成项：`handle_FixDetects`（→21.N）、`handle_PolyMorph`（E2.
+  已含于 petools 转发）、EP 签名的 `match_signature_pe` RVA-相对
+  跳转在 compareEntryPoint 中用平坦文件偏移语义（`$$` 近似）——
+  Phase 23 差分验证。
 
 ### 21.N — 后置修正与 .NET 精化
 

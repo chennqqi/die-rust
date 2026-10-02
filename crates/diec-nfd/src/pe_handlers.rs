@@ -3415,3 +3415,1963 @@ pub fn net_protection(
         take(entrypoint, n::RECORD_NAME_CODEVEIL, misc);
     }
 }
+
+// ===== Phase 21.M — protection family handlers =====
+//
+// Bounded ports of `NFD_PE::handle_Protection`, the small protector
+// handlers (SafeengineShielden/VProtect/TTProtect/VMProtect/tElock/
+// Armadillo/Obsidium/Themida/StarForce/Petite), `handle_PrivateEXEProtector`,
+// `handle_VisualBasicCryptors`, `handle_DelphiCryptors`, and
+// `handle_UnknownProtection`. Emitted records merge into `misc`; where
+// upstream overwrites an existing map entry (`QMap::insert`) we use `put`
+// to keep last-write-wins parity.
+
+/// `QMap::insert` semantics — replace an existing record of the same
+/// name (`emit` keeps the first).
+fn put(map: &mut DetectMap, ft_id: u16, rtype: u8, name: u16, ver: &str, info: &str) {
+    map.insert(
+        name,
+        ScanRecord {
+            name,
+            rtype,
+            ft: ft_id,
+            variant: 0,
+            version: ver.to_string(),
+            info: info.to_string(),
+            heuristic: false,
+            unknown: false,
+        },
+    );
+}
+
+/// Clone `name` from `src` into `misc` with replace semantics.
+fn take_put(src: &DetectMap, name: u16, misc: &mut DetectMap) {
+    if let Some(r) = src.get(&name) {
+        misc.insert(name, r.clone());
+    }
+}
+
+/// Clone `name` from `src` into `misc` and post-edit the copy.
+fn take_edit(src: &DetectMap, name: u16, misc: &mut DetectMap, edit: impl Fn(&mut ScanRecord)) {
+    if let Some(r) = src.get(&name) {
+        let mut r = r.clone();
+        edit(&mut r);
+        misc.insert(name, r);
+    }
+}
+
+/// Case-sensitive import-library presence (`isImportLibraryPresent` —
+/// used for the deliberately mis-cased `KeRnEl32.dLl` probe).
+fn has_lib_exact(pe: &PeInfo, name: &str) -> bool {
+    pe.import_headers.iter().any(|h| h.name == name)
+}
+
+/// Case-insensitive function presence inside a library
+/// (`isImportFunctionPresentI`); `func` may be an ordinal string.
+fn has_func_i(pe: &PeInfo, lib: &str, func: &str) -> bool {
+    pe.import_headers.iter().any(|h| {
+        h.name.eq_ignore_ascii_case(lib) && h.positions.iter().any(|p| p.eq_ignore_ascii_case(func))
+    })
+}
+
+/// `XBinary::checkVersionString` — nonempty string of digits and dots.
+fn check_version_str(s: &str) -> bool {
+    !s.trim().is_empty() && s.chars().all(|c| c.is_ascii_digit() || c == '.')
+}
+
+/// Qt `QString::section(sep, start, end)` subset used by the version
+/// probes: split on `sep`, take `start`, trimmed.
+fn section<'a>(s: &'a str, sep: &str, start: usize) -> &'a str {
+    s.splitn(start + 2, sep).nth(start).unwrap_or("").trim()
+}
+
+/// `isProtectionPresent` — true when any result record of a
+/// protection-flavoured type is already present in `misc`.
+fn protection_present(misc: &DetectMap) -> bool {
+    misc.values().any(|r| {
+        matches!(
+            r.rtype,
+            rt::RECORD_TYPE_PACKER
+                | rt::RECORD_TYPE_PROTECTOR
+                | rt::RECORD_TYPE_SFX
+                | rt::RECORD_TYPE_INSTALLER
+                | rt::RECORD_TYPE_NETOBFUSCATOR
+                | rt::RECORD_TYPE_DONGLEPROTECTION
+        )
+    })
+}
+
+/// Bounded UPX! header parse (`NFD_Binary::_get_UPX_vi` subset): format
+/// whitelist per file type, version/method/level sanity checks, and the
+/// method→info mapping.
+fn upx_header_vi(d: &[u8], off: usize, size: usize, ftpe: u16) -> Option<(String, String)> {
+    if size < 22 || off.checked_add(size)? > d.len() {
+        return None;
+    }
+    let version = d.get(off + 4).copied().unwrap_or(0);
+    let format = d.get(off + 5).copied().unwrap_or(0);
+    let method = d.get(off + 6).copied().unwrap_or(0);
+    let level = d.get(off + 7).copied().unwrap_or(0);
+    let rd32 = |o: usize, be: bool| -> Option<u32> {
+        let b = d.get(o..o + 4)?;
+        let a: [u8; 4] = b.try_into().ok()?;
+        Some(if be {
+            u32::from_be_bytes(a)
+        } else {
+            u32::from_le_bytes(a)
+        })
+    };
+    let (mut u_len, mut c_len) = (0u32, 0u32);
+    let mut valid = true;
+    if format < 128 {
+        if format == 1 || format == 2 {
+            if size >= 22 {
+                u_len = u32::from(crate::parse::rd_u16(d, off + 16).unwrap_or(0));
+                c_len = u32::from(crate::parse::rd_u16(d, off + 18).unwrap_or(0));
+            } else {
+                valid = false;
+            }
+        } else if format == 3 {
+            if size >= 27 {
+                let rd24 = |o: usize| -> Option<u32> {
+                    let b = d.get(o..o + 3)?;
+                    let mut a = [0u8; 4];
+                    a[..3].copy_from_slice(b);
+                    Some(u32::from_le_bytes(a))
+                };
+                u_len = rd24(off + 16).unwrap_or(0);
+                c_len = rd24(off + 19).unwrap_or(0);
+            } else {
+                valid = false;
+            }
+        } else if size >= 32 {
+            u_len = rd32(off + 16, false).unwrap_or(0);
+            c_len = rd32(off + 20, false).unwrap_or(0);
+        } else {
+            valid = false;
+        }
+    } else if size >= 32 {
+        u_len = rd32(off + 8, true).unwrap_or(0);
+        c_len = rd32(off + 12, true).unwrap_or(0);
+    } else {
+        valid = false;
+    }
+    if valid {
+        if format == 0
+            || (format > 42 && format < 129)
+            || format > 142
+            || format == 7
+            || format == 6
+            || format == 11
+            || format == 13
+            || format == 17
+            || format == 130
+        {
+            valid = false;
+        }
+        if ftpe == ft::FT_PE && format != 9 && format != 21 && format != 36 {
+            valid = false;
+        }
+        if version > 14 || !(2..=15).contains(&method) || level > 10 || c_len > u_len {
+            valid = false;
+        }
+    }
+    if !valid {
+        return None;
+    }
+    let mut info = String::new();
+    let add = match method {
+        2 => "NRV2B_LE32",
+        3 => "NRV2B_8",
+        4 => "NRV2B_LE16",
+        5 => "NRV2D_LE32",
+        6 => "NRV2D_8",
+        7 => "NRV2D_LE16",
+        8 => "NRV2E_LE32",
+        9 => "NRV2E_8",
+        10 => "NRV2E_LE16",
+        14 => "LZMA",
+        15 => "zlib",
+        _ => "",
+    };
+    append_comma(&mut info, add);
+    if !info.is_empty() {
+        append_comma(&mut info, if level == 8 { "best" } else { "brute" });
+    }
+    if crate::parse::rd_u32(d, off).unwrap_or(0) != 0x2158_5055 {
+        let v = crate::parse::rd_u32(d, off).unwrap_or(0);
+        append_comma(&mut info, &format!("Modified(0x{v:08X})"));
+    }
+    Some((String::new(), info))
+}
+
+/// `NFD_Binary::get_UPX_vi` — "$Id: UPX" version banner + UPX! header
+/// info + "$Id: NRV " sub-version.
+fn upx_vi(d: &[u8], off: usize, size: usize, ftpe: u16) -> Option<(String, String)> {
+    let pos1 = crate::parse::find_ansi(d, off, size, b"$Id: UPX");
+    let pos2 = crate::parse::find_ansi(d, off, size, b"UPX!");
+    let mut version = String::new();
+    let mut info = String::new();
+    let mut valid = false;
+    if let Some(p) = pos1 {
+        valid = true;
+        let v = crate::parse::read_ansi_string_len(d, p + 9, 10).unwrap_or_default();
+        version = section(&v, " ", 0).to_string();
+        if !check_version_str(&version) {
+            version.clear();
+        }
+        if let Some(n) = crate::parse::find_ansi(d, off, size, b"$Id: NRV ") {
+            let nv = crate::parse::read_ansi_string_len(d, n + 9, 10).unwrap_or_default();
+            let nv = section(&nv, " ", 0);
+            if check_version_str(nv) {
+                append_comma(&mut info, &format!("NRV {nv}"));
+            }
+        }
+    }
+    if let Some(p) = pos2 {
+        if let Some((_v, inf)) = upx_header_vi(d, p, 0x24, ftpe) {
+            append_comma(&mut info, &inf);
+            if version.is_empty() {
+                version = _v;
+            }
+        }
+        valid = true;
+        if version.is_empty() && p >= 5 {
+            version = crate::parse::read_ansi_string_len(d, p - 5, 4).unwrap_or_default();
+        }
+    }
+    if !check_version_str(&version) {
+        version.clear();
+    }
+    valid.then_some((version, info))
+}
+
+/// `NFD_PE::get_PECompact_vi` — `PointerToRelocations` magic +
+/// `PointerToLinenumbers` build table on the first section header.
+fn pecompact_vi(pe: &PeInfo) -> Option<(String, String)> {
+    let s0 = pe.extents.first()?;
+    if s0.ptr_reloc != 0x3243_4550 {
+        return None;
+    }
+    let v = match s0.ptr_linenum {
+        20206 => "2.70".to_string(),
+        20240 => "2.78a".into(),
+        20243 => "2.79b1".into(),
+        20245 => "2.79bB".into(),
+        20247 => "2.79bD".into(),
+        20252 => "2.80b1".into(),
+        20256 => "2.80b5".into(),
+        20261 => "2.82".into(),
+        20285 => "2.92.0".into(),
+        20288 => "2.93b3".into(),
+        20294 => "2.96.2".into(),
+        20295 => "2.97b1".into(),
+        20296 => "2.98".into(),
+        20300 => "2.98.04".into(),
+        20301 => "2.98.05".into(),
+        20302 => "2.98.06".into(),
+        20303 => "2.99b".into(),
+        20308 => "3.00.2".into(),
+        20312 => "3.01.3".into(),
+        20317 => "3.02.1".into(),
+        20318 => "3.02.2".into(),
+        20323 => "3.03.5b".into(),
+        20327 => "3.03.9b".into(),
+        20329 => "3.03.10b".into(),
+        20334 => "3.03.12b".into(),
+        20342 => "3.03.18b".into(),
+        20343 => "3.03.19b".into(),
+        20344 => "3.03.20b".into(),
+        20345 => "3.03.21b".into(),
+        20348 => "3.03.23b".into(),
+        n if n > 20308 => format!("3.X(build {n})"),
+        0 => "2.20-2.68".into(),
+        n => format!("2.X(build {n})"),
+    };
+    Some((v, String::new()))
+}
+
+/// `get_PyInstaller_vi` — marker string presence only.
+fn pyinstaller_vi(d: &[u8], off: usize, size: usize) -> bool {
+    crate::parse::find_ansi(
+        d,
+        off,
+        size.min(d.len().saturating_sub(off)),
+        b"PyInstaller: FormatMessageW failed.",
+    )
+    .is_some()
+}
+
+/// `compareSignature` over the raw buffer at a file offset (literal
+/// byte patterns only — the ZProtect kernel32 probe).
+fn compare_at(d: &[u8], off: usize, pattern: &str) -> bool {
+    let Ok(elems) = diec_core::signature::parse_signature(pattern) else {
+        return false;
+    };
+    diec_core::signature::match_signature(d, off, &elems)
+}
+
+/// `compareEntryPoint` — signature match at the entry-point file
+/// offset with PE-aware relative jumps.
+fn compare_ep(d: &[u8], pe: &PeInfo, pattern: &str) -> bool {
+    if pe.entry_point_offset < 0 {
+        return false;
+    }
+    let Ok(elems) = diec_core::signature::parse_signature(pattern) else {
+        return false;
+    };
+    diec_core::signature::match_signature(d, pe.entry_point_offset as usize, &elems)
+}
+
+/// `NFD_PE::handle_Protection` (lines 1463-3113 of nfd_pe.cpp).
+/// Promotes header/EP/overlay/section-name/import detects into
+/// packer/protector/installer results; version refinement via banner
+/// scans and header fields.
+#[allow(clippy::too_many_arguments)]
+pub fn protection(
+    d: &[u8],
+    pe: &PeInfo,
+    deep: bool,
+    ftpe: u16,
+    header: &DetectMap,
+    overlay: &DetectMap,
+    entrypoint: &DetectMap,
+    ep_section: &DetectMap,
+    section_names: &DetectMap,
+    imports: &DetectMap,
+    misc: &mut DetectMap,
+) {
+    let ep_sig = if pe.entry_point_offset >= 0 {
+        crate::signature::get_signature(d, pe.entry_point_offset as usize, 150)
+    } else {
+        String::new()
+    };
+    let ep_idx = pe.entrypoint_section_index();
+    let ep_sect_name: String = if ep_idx >= 0 {
+        pe.extents[ep_idx as usize].name.clone()
+    } else {
+        String::new()
+    };
+    let os_import = pe
+        .extents
+        .get(pe.import_section.max(0) as usize)
+        .filter(|_| pe.import_section >= 0)
+        .map(|e| (e.off, e.size));
+    let os_code = pe.code_section_extent(d);
+    let os_ep = pe.entrypoint_section_extent(d);
+    let os_res = pe
+        .extents
+        .get(pe.resources_section.max(0) as usize)
+        .filter(|_| pe.resources_section >= 0)
+        .map(|e| (e.off, e.size));
+
+    // MPRESS — header detect + "v<ver>" string at 0x1f0.
+    if let Some(r) = header.get(&n::RECORD_NAME_MPRESS) {
+        let mut r = r.clone();
+        if let Some(pos) = crate::parse::find_ansi(d, 0x1f0, 16, b"v") {
+            r.version =
+                crate::parse::read_ansi_string_len(d, pos + 1, 0x1ffusize.saturating_sub(pos))
+                    .unwrap_or_default();
+        }
+        misc.insert(r.name, r);
+    }
+    if has_lib_exact(pe, "KeRnEl32.dLl") {
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_PROTECTOR,
+            n::RECORD_NAME_HYPERTECHCRACKPROOF,
+            "",
+            "",
+        );
+    }
+    if deep
+        && let Some((off, size)) = os_code
+        && crate::parse::find_ansi(
+            d,
+            off,
+            size.min(d.len() - off.min(d.len())),
+            b"Software\\Caphyon\\Advanced Installer",
+        )
+        .is_some()
+    {
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_ADVANCEDINSTALLER,
+            "",
+            "",
+        );
+    }
+    if deep
+        && let Some((off, size)) = os_res
+        && crate::parse::find_ansi(
+            d,
+            off,
+            size.min(d.len() - off.min(d.len())),
+            b"Actual Installer",
+        )
+        .is_some()
+    {
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_ACTUALINSTALLER,
+            "",
+            "",
+        );
+    }
+    if pe.res_version.value("Comments").contains("InstallForge") {
+        let v = section(pe.res_version.value("Comments"), "InstallForge", 1);
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_INSTALLER,
+            n::RECORD_NAME_INSTALLFORGE,
+            v,
+            "",
+        );
+    }
+    // Spoon Studio / Xenocode packager chain.
+    let packager = pe.res_version.value("Packager");
+    let packager_ver = pe
+        .res_version
+        .value("PackagerVersion")
+        .trim()
+        .replace(", ", ".");
+    let spoon = if packager.contains("Spoon Studio 2011") {
+        Some(n::RECORD_NAME_SPOONSTUDIO2011)
+    } else if packager.contains("Spoon Studio") {
+        Some(n::RECORD_NAME_SPOONSTUDIO)
+    } else if packager.contains("Xenocode Virtual Application Studio 2009") {
+        Some(n::RECORD_NAME_XENOCODEVIRTUALAPPLICATIONSTUDIO2009)
+    } else if packager.contains("Xenocode Virtual Application Studio 2010 ISV Edition") {
+        Some(n::RECORD_NAME_XENOCODEVIRTUALAPPLICATIONSTUDIO2010ISVEDITION)
+    } else if packager.contains("Xenocode Virtual Application Studio 2010") {
+        Some(n::RECORD_NAME_XENOCODEVIRTUALAPPLICATIONSTUDIO2010)
+    } else if packager.contains("Xenocode Virtual Application Studio 2012 ISV Edition") {
+        Some(n::RECORD_NAME_XENOCODEVIRTUALAPPLICATIONSTUDIO2012ISVEDITION)
+    } else if packager.contains("Xenocode Virtual Application Studio 2013 ISV Edition") {
+        Some(n::RECORD_NAME_XENOCODEVIRTUALAPPLICATIONSTUDIO2013ISVEDITION)
+    } else if packager.contains("Turbo Studio") {
+        Some(n::RECORD_NAME_TURBOSTUDIO)
+    } else {
+        None
+    };
+    if let Some(nm) = spoon {
+        put(misc, ftpe, rt::RECORD_TYPE_PROTECTOR, nm, &packager_ver, "");
+    } else if overlay.contains_key(&n::RECORD_NAME_SPOONSTUDIO) {
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_PROTECTOR,
+            n::RECORD_NAME_SPOONSTUDIO,
+            "",
+            "",
+        );
+    } else if overlay.contains_key(&n::RECORD_NAME_XENOCODE) {
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_PROTECTOR,
+            n::RECORD_NAME_XENOCODE,
+            "",
+            "",
+        );
+    }
+    if pe.res_version.value("CompanyName").contains("SerGreen") {
+        let v = pe.res_version.value("FileVersion").trim().to_string();
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_PACKER,
+            n::RECORD_NAME_SERGREENAPPACKER,
+            &v,
+            "",
+        );
+    }
+    if entrypoint.contains_key(&n::RECORD_NAME_MOLEBOXULTRA)
+        && overlay.contains_key(&n::RECORD_NAME_MOLEBOXULTRA)
+    {
+        take_put(entrypoint, n::RECORD_NAME_MOLEBOXULTRA, misc);
+    }
+    // NativeCryptor by DosX — first section empty + overlay marker.
+    if pe.extents.len() >= 3
+        && pe.extents[0].size == 0
+        && overlay.contains_key(&n::RECORD_NAME_NATIVECRYPTORBYDOSX)
+    {
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_PROTECTOR,
+            n::RECORD_NAME_NATIVECRYPTORBYDOSX,
+            "",
+            "",
+        );
+    }
+    // Overlay-detect -> protector forwards (version/info preserved).
+    for (nm, _) in [
+        (n::RECORD_NAME_ACTIVEMARK, ()),
+        (n::RECORD_NAME_SECUROM, ()),
+    ] {
+        if let Some(r) = overlay.get(&nm) {
+            let r = r.clone();
+            put(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_PROTECTOR,
+                nm,
+                &r.version,
+                &r.info,
+            );
+        }
+    }
+    for (nm, dst) in [
+        (n::RECORD_NAME_ENIGMAVIRTUALBOX, rt::RECORD_TYPE_PROTECTOR),
+        (n::RECORD_NAME_BOXEDAPPPACKER, rt::RECORD_TYPE_PROTECTOR),
+        (n::RECORD_NAME_TARMAINSTALLER, rt::RECORD_TYPE_INSTALLER),
+    ] {
+        take_put(section_names, nm, misc);
+        let _ = dst;
+    }
+    // Zlib overlay + PyInstaller marker in const-data section.
+    if overlay.contains_key(&n::RECORD_NAME_ZLIB)
+        && deep
+        && let Some((off, size)) = os_code
+        && pyinstaller_vi(d, off, size)
+    {
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_PACKER,
+            n::RECORD_NAME_PYINSTALLER,
+            "",
+            "",
+        );
+    }
+    if !pe.is_dotnet {
+        // ---- UPX family ----
+        if imports.contains_key(&n::RECORD_NAME_UPX) && entrypoint.contains_key(&n::RECORD_NAME_UPX)
+        {
+            match upx_vi(d, 0, d.len().min(0x2000), ftpe) {
+                Some((v, inf)) => put(
+                    misc,
+                    ftpe,
+                    rt::RECORD_TYPE_PACKER,
+                    n::RECORD_NAME_UPX,
+                    &v,
+                    &inf,
+                ),
+                None => take_edit(entrypoint, n::RECORD_NAME_UPX, misc, |r| {
+                    append_comma(&mut r.info, "Modified");
+                }),
+            }
+        }
+        if (imports.contains_key(&n::RECORD_NAME_EXPRESSOR)
+            || (imports.contains_key(&n::RECORD_NAME_EXPRESSOR_KERNEL32)
+                && imports.contains_key(&n::RECORD_NAME_EXPRESSOR_USER32)))
+            && entrypoint.contains_key(&n::RECORD_NAME_EXPRESSOR)
+        {
+            take_put(entrypoint, n::RECORD_NAME_EXPRESSOR, misc);
+        }
+        if imports.contains_key(&n::RECORD_NAME_ASPROTECT)
+            && entrypoint.contains_key(&n::RECORD_NAME_ASPROTECT)
+        {
+            take_put(entrypoint, n::RECORD_NAME_ASPROTECT, misc);
+        }
+        take_put(entrypoint, n::RECORD_NAME_PEQUAKE, misc);
+        take_put(entrypoint, n::RECORD_NAME_MORPHNAH, misc);
+        if let Some(mut r) = imports.get(&n::RECORD_NAME_PECOMPACT).cloned() {
+            if entrypoint.contains_key(&n::RECORD_NAME_PECOMPACT) {
+                if r.variant == 1 {
+                    r.version = "1.10b4-1.10b5".into();
+                }
+                misc.insert(r.name, r);
+            } else if let Some((v, inf)) = pecompact_vi(pe) {
+                r.version = v;
+                r.info = inf;
+                misc.insert(r.name, r);
+            }
+        }
+        if imports.contains_key(&n::RECORD_NAME_NSPACK) {
+            if header.contains_key(&n::RECORD_NAME_NSPACK) {
+                take_put(header, n::RECORD_NAME_NSPACK, misc);
+            } else {
+                take_put(entrypoint, n::RECORD_NAME_NSPACK, misc);
+            }
+        }
+        if imports.contains_key(&n::RECORD_NAME_ENIGMA)
+            && deep
+            && let Some((off, size)) = os_import
+        {
+            let mut rec = ScanRecord {
+                name: n::RECORD_NAME_ENIGMA,
+                rtype: rt::RECORD_TYPE_PROTECTOR,
+                ft: ftpe,
+                variant: 0,
+                version: String::new(),
+                info: String::new(),
+                heuristic: false,
+                unknown: false,
+            };
+            if let Some((v, _)) = enigma_vi(d, off, size) {
+                rec.version = v;
+            }
+            if let Some(e) = entrypoint.get(&n::RECORD_NAME_ENIGMA) {
+                rec.version.clone_from(&e.version);
+            }
+            misc.insert(rec.name, rec);
+        }
+        take_put(section_names, n::RECORD_NAME_ALIENYZE, misc);
+        // PESpin — EP signature byte 27 -> version table.
+        if let Some(mut r) = imports.get(&n::RECORD_NAME_PESPIN).cloned() {
+            if entrypoint.contains_key(&n::RECORD_NAME_PESPIN) {
+                let b = u8::from_str_radix(ep_sig.get(54..56).unwrap_or(""), 16).unwrap_or(0);
+                r.version = match b {
+                    0x5C => "0.1",
+                    0xB7 => "0.3",
+                    0x73 => "0.4",
+                    0x83 => "0.7",
+                    0xC8 => "1.0",
+                    0x7D => "1.1",
+                    0x71 => "1.3beta",
+                    0xAC => "1.3",
+                    0x88 => "1.3x",
+                    0x17 => "1.32",
+                    0x77 => "1.33",
+                    _ => "",
+                }
+                .to_string();
+            }
+            misc.insert(r.name, r);
+        }
+        if imports.contains_key(&n::RECORD_NAME_NPACK)
+            && entrypoint.contains_key(&n::RECORD_NAME_NPACK)
+        {
+            take_edit(entrypoint, n::RECORD_NAME_NPACK, misc, |r| {
+                if deep
+                    && let Some((off, size)) = os_ep
+                    && let Some(p) = crate::parse::find_ansi(
+                        d,
+                        off,
+                        size.min(d.len() - off.min(d.len())),
+                        b"nPack v",
+                    )
+                {
+                    let s = crate::parse::read_ansi_string(d, p + 7).unwrap_or_default();
+                    r.version = section(&s, ":", 0).to_string();
+                } else {
+                    r.version = "1.1.200.2006".into();
+                }
+            });
+        }
+        if let Some(mut r) = entrypoint.get(&n::RECORD_NAME_ELECKEY).cloned() {
+            if section_names.contains_key(&n::RECORD_NAME_ELECKEY) {
+                append_comma(&mut r.info, "Section");
+            }
+            if imports.contains_key(&n::RECORD_NAME_ELECKEY) {
+                append_comma(&mut r.info, "Import");
+            }
+            misc.insert(r.name, r);
+        }
+        take_put(section_names, n::RECORD_NAME_OREANSCODEVIRTUALIZER, misc);
+        // ASM Guard — overlay 'asmg-protected' marker or section name.
+        if pe.overlay_size != 0 {
+            let ov_off = pe.overlay_offset.max(0) as usize;
+            let ov_size = if deep {
+                pe.overlay_size
+            } else {
+                pe.overlay_size.min(0x100)
+            };
+            if compare_at(d, ov_off, "'asmg-protected'00")
+                || section_names.contains_key(&n::RECORD_NAME_ASMGUARD)
+            {
+                put(
+                    misc,
+                    ftpe,
+                    rt::RECORD_TYPE_PROTECTOR,
+                    n::RECORD_NAME_ASMGUARD,
+                    "2.XX",
+                    "",
+                );
+            }
+            let _ = ov_size;
+        }
+        if !pe.is64 {
+            // ---- 32-bit-only chains ----
+            if section_names.contains_key(&n::RECORD_NAME_MASKPE)
+                && ep_section.contains_key(&n::RECORD_NAME_MASKPE)
+            {
+                take_put(ep_section, n::RECORD_NAME_MASKPE, misc);
+            }
+            // Mechanical `mapImportDetects.contains(X) &&
+            // mapEntryPointDetects.contains(X)` forwards; `true` means
+            // the emitted record is cloned from the import map.
+            let import_ep_pairs: &[(u16, bool)] = &[
+                (n::RECORD_NAME_PEARMOR, false),
+                (n::RECORD_NAME_PCSHRINK, false),
+                (n::RECORD_NAME_DRAGONARMOR, false),
+                (n::RECORD_NAME_NOODLECRYPT, false),
+                (n::RECORD_NAME_PENGUINCRYPT, false),
+                (n::RECORD_NAME_EXECRYPT, false),
+                (n::RECORD_NAME_EXEPASSWORDPROTECTOR, false),
+                (n::RECORD_NAME_EXESTEALTH, false),
+                (n::RECORD_NAME_PCGUARD, false),
+                (n::RECORD_NAME_SOFTDEFENDER, false),
+                (n::RECORD_NAME_PECRYPT32, false),
+                (n::RECORD_NAME_YODASPROTECTOR, false),
+                (n::RECORD_NAME_ALEXPROTECTOR, false),
+                (n::RECORD_NAME_PEBUNDLE, false),
+                (n::RECORD_NAME_PESHIELD, false),
+                (n::RECORD_NAME_PUNISHER, false),
+                (n::RECORD_NAME_SECURESHADE, false),
+                (n::RECORD_NAME_SOFTWARECOMPRESS, false),
+                (n::RECORD_NAME_SDPROTECTORPRO, false),
+                (n::RECORD_NAME_SIMPLEPACK, true),
+                (n::RECORD_NAME_ALLOY, false),
+                (n::RECORD_NAME_PEX, false),
+                (n::RECORD_NAME_REVPROT, false),
+                (n::RECORD_NAME_JDPACK, false),
+                (n::RECORD_NAME_YODASCRYPTER, false),
+                (n::RECORD_NAME_QRYPT0R, false),
+                (n::RECORD_NAME_DBPE, false),
+                (n::RECORD_NAME_FISHPESHIELD, false),
+                (n::RECORD_NAME_BAMBAM, false),
+                (n::RECORD_NAME_DOTFIXNICEPROTECT, false),
+                (n::RECORD_NAME_KCRYPTOR, false),
+                (n::RECORD_NAME_MPACK, false),
+                (n::RECORD_NAME_PACKMAN, false),
+                (n::RECORD_NAME_FISHPEPACKER, false),
+                (n::RECORD_NAME_HIDEANDPROTECT, false),
+                (n::RECORD_NAME_32LITE, false),
+                (n::RECORD_NAME_VPACKER, false),
+                (n::RECORD_NAME_RLP, false),
+                (n::RECORD_NAME_CRINKLER, false),
+                (n::RECORD_NAME_KBYS, false),
+                (n::RECORD_NAME_XCOMP, false),
+                (n::RECORD_NAME_XPACK, false),
+                (n::RECORD_NAME_KRYPTON, false),
+                (n::RECORD_NAME_SVKPROTECTOR, false),
+                (n::RECORD_NAME_TPPPACK, false),
+                (n::RECORD_NAME_AHPACKER, true),
+            ];
+            for &(nm, from_import) in import_ep_pairs {
+                if imports.contains_key(&nm) && entrypoint.contains_key(&nm) {
+                    if from_import {
+                        take_put(imports, nm, misc);
+                    } else {
+                        take_put(entrypoint, nm, misc);
+                    }
+                }
+            }
+            // ANDpakk2 — import OR header gate, EP source.
+            if (imports.contains_key(&n::RECORD_NAME_ANDPAKK2)
+                || header.contains_key(&n::RECORD_NAME_ANDPAKK2))
+                && entrypoint.contains_key(&n::RECORD_NAME_ANDPAKK2)
+            {
+                take_put(entrypoint, n::RECORD_NAME_ANDPAKK2, misc);
+            }
+            // YZPack — import + header, header source.
+            if imports.contains_key(&n::RECORD_NAME_YZPACK)
+                && header.contains_key(&n::RECORD_NAME_YZPACK)
+            {
+                take_put(header, n::RECORD_NAME_YZPACK, misc);
+            }
+            // Backdoor PE Compress Protector — import + section names,
+            // import source (upstream TODO marker).
+            if imports.contains_key(&n::RECORD_NAME_BACKDOORPECOMPRESSPROTECTOR)
+                && section_names.contains_key(&n::RECORD_NAME_BACKDOORPECOMPRESSPROTECTOR)
+            {
+                take_put(imports, n::RECORD_NAME_BACKDOORPECOMPRESSPROTECTOR, misc);
+            }
+            // CryptoCrack PE Protector — import gate; EP record wins.
+            if imports.contains_key(&n::RECORD_NAME_CRYPTOCRACKPEPROTECTOR) {
+                if entrypoint.contains_key(&n::RECORD_NAME_CRYPTOCRACKPEPROTECTOR) {
+                    take_put(entrypoint, n::RECORD_NAME_CRYPTOCRACKPEPROTECTOR, misc);
+                } else {
+                    take_put(imports, n::RECORD_NAME_CRYPTOCRACKPEPROTECTOR, misc);
+                }
+            }
+            // ASPack — upstream re-runs the EP follow loop gated on the
+            // import detect; our pipeline already performed that scan.
+            if imports.contains_key(&n::RECORD_NAME_ASPACK) {
+                take_put(entrypoint, n::RECORD_NAME_ASPACK, misc);
+            }
+            // WWPack32 — EP detect + EP bytes 51..55 -> version.
+            if entrypoint.contains_key(&n::RECORD_NAME_WWPACK32) {
+                let mut r = ScanRecord {
+                    name: n::RECORD_NAME_WWPACK32,
+                    rtype: rt::RECORD_TYPE_PACKER,
+                    ft: ftpe,
+                    variant: 0,
+                    version: String::new(),
+                    info: String::new(),
+                    heuristic: false,
+                    unknown: false,
+                };
+                if let Some(hex) = ep_sig.get(102..110) {
+                    let bytes: Vec<u8> = (0..4)
+                        .filter_map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok())
+                        .collect();
+                    r.version = String::from_utf8_lossy(&bytes).into_owned();
+                }
+                misc.insert(r.name, r);
+            }
+            // eZip — EP detect + overlay present.
+            if entrypoint.contains_key(&n::RECORD_NAME_EZIP) && pe.overlay_size != 0 {
+                take_put(entrypoint, n::RECORD_NAME_EZIP, misc);
+            }
+            // EP-only protector forwards.
+            for nm in [
+                n::RECORD_NAME_DALKRYPT,
+                n::RECORD_NAME_NCODE,
+                n::RECORD_NAME_LAMECRYPT,
+                n::RECORD_NAME_SCOBFUSCATOR,
+                n::RECORD_NAME_PEDIMINISHER,
+                n::RECORD_NAME_GIXPROTECTOR,
+                n::RECORD_NAME_EXECRYPTOR,
+                n::RECORD_NAME_AZPROTECT,
+                n::RECORD_NAME_WINKRIPT,
+                n::RECORD_NAME_RCRYPTOR,
+                n::RECORD_NAME_THEBESTCRYPTORBYFSK,
+                n::RECORD_NAME_CRYPTER,
+            ] {
+                take_put(entrypoint, nm, misc);
+            }
+            if entrypoint.contains_key(&n::RECORD_NAME_AVERCRYPTOR)
+                && section_names.contains_key(&n::RECORD_NAME_AVERCRYPTOR)
+            {
+                take_put(entrypoint, n::RECORD_NAME_AVERCRYPTOR, misc);
+            }
+            take_put(imports, n::RECORD_NAME_AFFILLIATEEXE, misc);
+            take_put(imports, n::RECORD_NAME_CEXE, misc);
+            take_put(imports, n::RECORD_NAME_EXEFOG, misc); // refined below
+            if let Some(r) = imports.get(&n::RECORD_NAME_EXEFOG).cloned()
+                && !(pe.time_stamp == 0
+                    && pe.major_linker == 0
+                    && pe.minor_linker == 0
+                    && pe.base_of_data == 0x1000
+                    && pe.extents.first().is_some_and(|s| s.flags == 0xe000_0020))
+            {
+                misc.remove(&r.name);
+            }
+            take_put(section_names, n::RECORD_NAME_12311134, misc);
+            if imports.contains_key(&n::RECORD_NAME_DYAMAR)
+                && section_names.contains_key(&n::RECORD_NAME_DYAMAR)
+            {
+                take_put(imports, n::RECORD_NAME_DYAMAR, misc);
+            }
+            // ADVANCED UPX SCRAMMBLER — UPX import + EP detect.
+            if imports.contains_key(&n::RECORD_NAME_UPX) {
+                take_put(entrypoint, n::RECORD_NAME_ADVANCEDUPXSCRAMMBLER, misc);
+            }
+            // BeroExePacker — import+header gate; EP record wins.
+            if imports.contains_key(&n::RECORD_NAME_BEROEXEPACKER) {
+                if header.contains_key(&n::RECORD_NAME_BEROEXEPACKER) {
+                    if entrypoint.contains_key(&n::RECORD_NAME_BEROEXEPACKER) {
+                        take_put(entrypoint, n::RECORD_NAME_BEROEXEPACKER, misc);
+                    } else {
+                        take_put(imports, n::RECORD_NAME_BEROEXEPACKER, misc);
+                    }
+                } else if header.contains_key(&n::RECORD_NAME_GENERIC) {
+                    take_put(entrypoint, n::RECORD_NAME_BEROEXEPACKER, misc);
+                }
+            }
+            // WinUpack — header/EP detect, build from linker/image version.
+            if header.contains_key(&n::RECORD_NAME_WINUPACK) {
+                let mut r = entrypoint
+                    .get(&n::RECORD_NAME_WINUPACK)
+                    .or_else(|| header.get(&n::RECORD_NAME_WINUPACK))
+                    .cloned()
+                    .unwrap();
+                let build = if r.variant == 1 || r.variant == 2 {
+                    pe.minor_linker as u32
+                } else if r.variant == 3 || r.variant == 4 {
+                    u32::from(pe.minor_image)
+                } else {
+                    0
+                };
+                r.version = match build {
+                    0x21..=0x35 => format!("0.{build:x}"),
+                    0x36 => "0.36 beta".into(),
+                    0x37 => "0.37 beta".into(),
+                    0x38 => "0.38 beta".into(),
+                    0x39 => "0.39 final".into(),
+                    0x3A => "0.399".into(),
+                    _ => r.version.clone(),
+                };
+                misc.insert(r.name, r);
+            }
+            // QuickPack NT / MKFpack / Enigma handled by import+header/EP gates.
+            if imports.contains_key(&n::RECORD_NAME_QUICKPACKNT) {
+                take_put(header, n::RECORD_NAME_QUICKPACKNT, misc);
+            }
+            if imports.contains_key(&n::RECORD_NAME_MKFPACK)
+                && pe.e_lfanew > 5
+                && crate::parse::read_ansi_string_len(d, pe.e_lfanew as usize - 5, 5).as_deref()
+                    == Some("llydd")
+            {
+                take_put(imports, n::RECORD_NAME_MKFPACK, misc);
+            }
+            // !eprot section-name + trailer magic.
+            if section_names.contains_key(&n::RECORD_NAME_EPROT)
+                && ep_idx > 0
+                && ep_sect_name.eq_ignore_ascii_case("!eprot")
+                && let Some((off, size)) = os_ep
+                && size >= 4
+                && crate::parse::rd_u32(d, off + size - 4) == Some(0x7878_7878)
+            {
+                take_put(section_names, n::RECORD_NAME_EPROT, misc);
+            }
+            // RLpack: EP or fakesignature fallback.
+            if imports.contains_key(&n::RECORD_NAME_RLPACK) {
+                if entrypoint.contains_key(&n::RECORD_NAME_RLPACK) {
+                    take_edit(imports, n::RECORD_NAME_RLPACK, misc, |r| {
+                        if let Some(e) = entrypoint.get(&n::RECORD_NAME_RLPACK) {
+                            r.info.clone_from(&e.info);
+                        }
+                    });
+                } else if let Some(fs) = entrypoint.get(&n::RECORD_NAME_FAKESIGNATURE)
+                    && pe.extents.len() >= 2
+                    && pe.extents[0].size <= 0x200
+                {
+                    take_edit(imports, n::RECORD_NAME_RLPACK, misc, |r| {
+                        r.info.clone_from(&fs.info);
+                    });
+                }
+            }
+            if imports.contains_key(&n::RECORD_NAME_INQUARTOSOBFUSCATOR)
+                && section_names.contains_key(&n::RECORD_NAME_INQUARTOSOBFUSCATOR)
+                && header.contains_key(&n::RECORD_NAME_GENERIC)
+            {
+                take_put(imports, n::RECORD_NAME_INQUARTOSOBFUSCATOR, misc);
+            }
+            // KKRUNCHY — header KKR or GENERIC + EP detect.
+            if imports.contains_key(&n::RECORD_NAME_KKRUNCHY)
+                && (header.contains_key(&n::RECORD_NAME_KKRUNCHY)
+                    || header.contains_key(&n::RECORD_NAME_GENERIC))
+                && entrypoint.contains_key(&n::RECORD_NAME_KKRUNCHY)
+            {
+                take_edit(entrypoint, n::RECORD_NAME_KKRUNCHY, misc, |r| {
+                    if !header.contains_key(&n::RECORD_NAME_KKRUNCHY) {
+                        r.info = "Patched".into();
+                    }
+                });
+            }
+            if imports.contains_key(&n::RECORD_NAME_ASDPACK) {
+                let mut det = false;
+                let mut r = imports.get(&n::RECORD_NAME_ASDPACK).cloned().unwrap();
+                if pe.extents.len() == 2 && pe.tls_present {
+                    det = true; // 1.00
+                }
+                if let Some(e) = entrypoint.get(&n::RECORD_NAME_ASDPACK) {
+                    r = e.clone();
+                    det = true;
+                }
+                if det {
+                    misc.insert(r.name, r);
+                }
+            }
+            // EncryptPE version banner in header.
+            if imports.contains_key(&n::RECORD_NAME_ENCRYPTPE)
+                && entrypoint.contains_key(&n::RECORD_NAME_ENCRYPTPE)
+            {
+                take_edit(imports, n::RECORD_NAME_ENCRYPTPE, misc, |r| {
+                    if let Some(p) =
+                        crate::parse::find_ansi(d, 0, d.len().min(0x2000), b"EncryptPE V")
+                    {
+                        let s = crate::parse::read_ansi_string(d, p + 11).unwrap_or_default();
+                        r.version = section(&s, ",", 0).to_string();
+                    }
+                });
+            }
+            // XtremeProtector — import + section name.
+            if imports.contains_key(&n::RECORD_NAME_XTREMEPROTECTOR)
+                && section_names.contains_key(&n::RECORD_NAME_XTREMEPROTECTOR)
+            {
+                take_put(imports, n::RECORD_NAME_XTREMEPROTECTOR, misc);
+            }
+            // ACProtect — import + "MineImport_Endss" in import section.
+            if imports.contains_key(&n::RECORD_NAME_ACPROTECT)
+                && deep
+                && let Some((off, size)) = os_import
+                && crate::parse::find_ansi(
+                    d,
+                    off,
+                    size.min(d.len() - off.min(d.len())),
+                    b"MineImport_Endss",
+                )
+                .is_some()
+            {
+                put(
+                    misc,
+                    ftpe,
+                    rt::RECORD_TYPE_PROTECTOR,
+                    n::RECORD_NAME_ACPROTECT,
+                    "1.XX-2.XX",
+                    "",
+                );
+            }
+            take_put(entrypoint, n::RECORD_NAME_ACPROTECT, misc);
+            // FSG — header variant selects version probe at 0x154.
+            if imports.contains_key(&n::RECORD_NAME_FSG)
+                && let Some(r) = header.get(&n::RECORD_NAME_FSG).cloned()
+            {
+                let mut r = r;
+                if r.variant == 0 {
+                    misc.insert(r.name, r);
+                } else if r.variant == 1 {
+                    r.version = if crate::parse::read_ansi_string(d, 0x154).as_deref()
+                        == Some("KERNEL32.dll")
+                    {
+                        "1.33"
+                    } else {
+                        "2.00"
+                    }
+                    .into();
+                    misc.insert(r.name, r);
+                }
+            }
+            if imports.contains_key(&n::RECORD_NAME_MEW10) {
+                take_put(entrypoint, n::RECORD_NAME_MEW10, misc);
+            }
+            if imports.contains_key(&n::RECORD_NAME_MEW11SE) {
+                take_put(header, n::RECORD_NAME_MEW11SE, misc);
+            }
+            // Shrinker — EP + KERNEL32 ordinal 8 import.
+            if entrypoint.contains_key(&n::RECORD_NAME_SHRINKER)
+                && has_func_i(pe, "KERNEL32.DLL", "8")
+            {
+                take_put(entrypoint, n::RECORD_NAME_SHRINKER, misc);
+            }
+            // PolyCrypt PE — import+EP, "Modified" info when banner absent.
+            if imports.contains_key(&n::RECORD_NAME_POLYCRYPTPE)
+                && entrypoint.contains_key(&n::RECORD_NAME_POLYCRYPTPE)
+            {
+                take_edit(entrypoint, n::RECORD_NAME_POLYCRYPTPE, misc, |r| {
+                    if pe.import_section == ep_idx
+                        && deep
+                        && let Some((off, size)) = os_ep
+                        && crate::parse::find_ansi(
+                            d,
+                            off,
+                            size.min(d.len() - off.min(d.len())),
+                            b"PolyCrypt PE (c) 2004-2005, JLabSoftware.",
+                        )
+                        .is_none()
+                    {
+                        r.info = "Modified".into();
+                    }
+                });
+            }
+            // Hmimys — import+header / import+section combos.
+            if imports.contains_key(&n::RECORD_NAME_HMIMYSPROTECTOR) {
+                take_put(header, n::RECORD_NAME_HMIMYSPROTECTOR, misc);
+            }
+            if imports.contains_key(&n::RECORD_NAME_PEPACKSPROTECT) {
+                if header.contains_key(&n::RECORD_NAME_PEPACKSPROTECT) {
+                    take_put(header, n::RECORD_NAME_PEPACKSPROTECT, misc);
+                } else {
+                    take_put(section_names, n::RECORD_NAME_PEPACKSPROTECT, misc);
+                }
+            }
+            if imports.contains_key(&n::RECORD_NAME_HMIMYSPACKER) && pe.has_section_name(".hmimys")
+            {
+                put(
+                    misc,
+                    ftpe,
+                    rt::RECORD_TYPE_PACKER,
+                    n::RECORD_NAME_HMIMYSPACKER,
+                    "",
+                    "",
+                );
+            }
+            // ORIEN — EP sig byte 8/9 → version.
+            if imports.contains_key(&n::RECORD_NAME_ORIEN)
+                && entrypoint.contains_key(&n::RECORD_NAME_ORIEN)
+            {
+                take_edit(entrypoint, n::RECORD_NAME_ORIEN, misc, |r| {
+                    r.version = match ep_sig.get(16..18) {
+                        Some("CE") => "2.11".into(),
+                        Some("CD") => "2.12".into(),
+                        _ => r.version.clone(),
+                    };
+                });
+            }
+            // NakedPacker / KaOs mutual exclusion.
+            if imports.contains_key(&n::RECORD_NAME_NAKEDPACKER)
+                && entrypoint.contains_key(&n::RECORD_NAME_NAKEDPACKER)
+                && !section_names.contains_key(&n::RECORD_NAME_KAOSPEDLLEXECUTABLEUNDETECTER)
+            {
+                take_put(entrypoint, n::RECORD_NAME_NAKEDPACKER, misc);
+            }
+            if imports.contains_key(&n::RECORD_NAME_KAOSPEDLLEXECUTABLEUNDETECTER)
+                && entrypoint.contains_key(&n::RECORD_NAME_KAOSPEDLLEXECUTABLEUNDETECTER)
+                && section_names.contains_key(&n::RECORD_NAME_KAOSPEDLLEXECUTABLEUNDETECTER)
+            {
+                take_put(
+                    entrypoint,
+                    n::RECORD_NAME_KAOSPEDLLEXECUTABLEUNDETECTER,
+                    misc,
+                );
+            }
+            // EPEXEpack — EP or section-name record.
+            if imports.contains_key(&n::RECORD_NAME_EPEXEPACK) {
+                if entrypoint.contains_key(&n::RECORD_NAME_EPEXEPACK) {
+                    take_put(entrypoint, n::RECORD_NAME_EPEXEPACK, misc);
+                } else {
+                    take_put(section_names, n::RECORD_NAME_EPEXEPACK, misc);
+                }
+            }
+            take_put(section_names, n::RECORD_NAME_EPROT, misc);
+            // PEPack — version banner in import section.
+            if imports.contains_key(&n::RECORD_NAME_PEPACK)
+                && entrypoint.contains_key(&n::RECORD_NAME_PEPACK)
+            {
+                take_edit(entrypoint, n::RECORD_NAME_PEPACK, misc, |r| {
+                    if deep
+                        && let Some((off, size)) = os_import
+                        && let Some(p) = crate::parse::find_ansi(
+                            d,
+                            off,
+                            size.min(d.len() - off.min(d.len())),
+                            b"PE-PACK v",
+                        )
+                    {
+                        let s =
+                            crate::parse::read_ansi_string_len(d, p + 9, 50).unwrap_or_default();
+                        r.version = section(&s, " ", 0).to_string();
+                    }
+                });
+            }
+            take_put(entrypoint, n::RECORD_NAME_PKLITE32, misc);
+            // MoleBox — EP detect + version from Comments.
+            if let Some(r) = entrypoint.get(&n::RECORD_NAME_MOLEBOX) {
+                let mut r = r.clone();
+                let c = pe.res_version.value("Comments");
+                if let Some(pos) = c.find("MoleBox ") {
+                    r.version = c[pos + 8..].to_string();
+                }
+                misc.insert(r.name, r);
+            }
+            // VCasmProtector — vcasm_protect_ banner → version map.
+            if imports.contains_key(&n::RECORD_NAME_VCASMPROTECTOR) {
+                let mut rec = entrypoint.get(&n::RECORD_NAME_VCASMPROTECTOR).cloned();
+                if deep && let Some((off, size)) = os_ep {
+                    let mut r = imports
+                        .get(&n::RECORD_NAME_VCASMPROTECTOR)
+                        .cloned()
+                        .unwrap();
+                    if let Some(p) = crate::parse::find_ansi(
+                        d,
+                        off,
+                        size.min(d.len() - off.min(d.len())),
+                        b"vcasm_protect_",
+                    ) {
+                        let s = crate::parse::read_ansi_string(d, p).unwrap_or_default();
+                        let tail = s.splitn(3, '_').nth(2).unwrap_or("");
+                        match tail {
+                            "2004_11_30" => r.version = "1.0".into(),
+                            "2005_3_18" => r.version = "1.1-1.2".into(),
+                            _ => {}
+                        }
+                    }
+                    rec = Some(r);
+                }
+                if let Some(r) = rec {
+                    misc.insert(r.name, r);
+                }
+            }
+            // Thinstall / ThinApp — EP or version-resource keys.
+            if entrypoint.contains_key(&n::RECORD_NAME_THINSTALL) {
+                take_put(entrypoint, n::RECORD_NAME_THINSTALL, misc);
+            } else {
+                let v = pe.res_version.value("ThinAppVersion");
+                let v = if v.is_empty() {
+                    pe.res_version.value("ThinstallVersion")
+                } else {
+                    v
+                };
+                if !v.is_empty() {
+                    put(
+                        misc,
+                        ftpe,
+                        rt::RECORD_TYPE_PROTECTOR,
+                        n::RECORD_NAME_THINSTALL,
+                        v.trim(),
+                        "",
+                    );
+                }
+            }
+            // ABCCryptor — EP one byte into its section.
+            if entrypoint.contains_key(&n::RECORD_NAME_ABCCRYPTOR)
+                && ep_idx >= 0
+                && u64::from(pe.entry_rva) - u64::from(pe.extents[ep_idx as usize].vaddr) == 1
+            {
+                take_put(entrypoint, n::RECORD_NAME_ABCCRYPTOR, misc);
+            }
+            // EXE32Pack — "Packed by exe32pack" banner.
+            if imports.contains_key(&n::RECORD_NAME_EXE32PACK)
+                && entrypoint.contains_key(&n::RECORD_NAME_EXE32PACK)
+            {
+                take_edit(entrypoint, n::RECORD_NAME_EXE32PACK, misc, |r| {
+                    if let Some(p) =
+                        crate::parse::find_ansi(d, 0, d.len().min(0x2000), b"Packed by exe32pack")
+                    {
+                        let s =
+                            crate::parse::read_ansi_string_len(d, p + 20, 50).unwrap_or_default();
+                        r.version = section(&s, " ", 0).to_string();
+                    }
+                });
+            }
+            // SCPack — import + section names + EP at section 1 start.
+            if imports.contains_key(&n::RECORD_NAME_SCPACK)
+                && section_names.contains_key(&n::RECORD_NAME_SCPACK)
+                && pe.extents.len() >= 3
+                && ep_idx == 1
+                && pe.extents[1].vaddr == pe.entry_rva
+            {
+                take_put(imports, n::RECORD_NAME_SCPACK, misc);
+            }
+            // DEPACK — section name + EB xx xx 60 EP compare.
+            if section_names.contains_key(&n::RECORD_NAME_DEPACK) && compare_ep(d, pe, "EB$$60") {
+                take_put(section_names, n::RECORD_NAME_DEPACK, misc);
+            }
+        } else {
+            // ---- 64-bit ----
+            if imports.contains_key(&n::RECORD_NAME_LARP64)
+                && section_names.contains_key(&n::RECORD_NAME_LARP64)
+            {
+                take_put(imports, n::RECORD_NAME_LARP64, misc);
+            }
+        }
+        // ---- ZProtect (shared for 32/64 per upstream layout: inside the
+        // !cliInfo block but outside !bIs64? upstream has it inside !bIs64).
+        // Actually upstream places ZProtect inside the !bIs64 block; keep it
+        // under that gate — moved above would diverge. (Left intentionally
+        // inside the 32-bit section below.)
+        if !pe.is64 {
+            if imports.contains_key(&n::RECORD_NAME_ZPROTECT) {
+                if header.contains_key(&n::RECORD_NAME_NOSTUBLINKER)
+                    && pe.extents.len() >= 2
+                    && compare_at(
+                        d,
+                        pe.extents[1].off,
+                        "'kernel32.dll'00000000'VirtualAlloc'00000000",
+                    )
+                {
+                    put(
+                        misc,
+                        ftpe,
+                        rt::RECORD_TYPE_PROTECTOR,
+                        n::RECORD_NAME_ZPROTECT,
+                        "1.3-1.4.4",
+                        "",
+                    );
+                } else {
+                    take_put(entrypoint, n::RECORD_NAME_ZPROTECT, misc);
+                }
+            } else {
+                take_put(entrypoint, n::RECORD_NAME_ZPROTECT, misc);
+            }
+            if !misc.contains_key(&n::RECORD_NAME_ZPROTECT)
+                && header.contains_key(&n::RECORD_NAME_NOSTUBLINKER)
+                && pe.extents.len() >= 3
+                && pe.extents[0].off == 0
+                && pe.extents[0].size == 0
+                && pe.extents[0].flags == 0xe000_00a0
+            {
+                let d1 = ep_idx == 1;
+                let d2 = crate::parse::binary_entropy(
+                    d,
+                    pe.extents[2].off as i64,
+                    pe.extents[2].size as i64,
+                ) > 7.6;
+                if d1 || d2 {
+                    put(
+                        misc,
+                        ftpe,
+                        rt::RECORD_TYPE_PROTECTOR,
+                        n::RECORD_NAME_ZPROTECT,
+                        "1.XX",
+                        "",
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// `handle_SafeengineShielden` — EP detect + `.sedata` EP section name +
+/// version banner in section 1.
+pub fn safeengine(d: &[u8], pe: &PeInfo, ftpe: u16, entrypoint: &DetectMap, misc: &mut DetectMap) {
+    if pe.is_dotnet || !entrypoint.contains_key(&n::RECORD_NAME_SAFEENGINESHIELDEN) {
+        return;
+    }
+    let idx = pe.entrypoint_section_index();
+    if idx <= 0
+        || !pe.extents[idx as usize]
+            .name
+            .eq_ignore_ascii_case(".sedata")
+    {
+        return;
+    }
+    let mut ver = "2.XX".to_string();
+    if let Some(s1) = pe.extents.get(1)
+        && let Some(p) = crate::parse::find_ansi(
+            d,
+            s1.off,
+            s1.size.min(d.len() - s1.off.min(d.len())),
+            b"Safengine Shielden v",
+        )
+        && let Some(s) = crate::parse::read_ansi_string(d, p)
+    {
+        ver = section(&s, " v", 1).to_string();
+    }
+    put(
+        misc,
+        ftpe,
+        rt::RECORD_TYPE_PROTECTOR,
+        n::RECORD_NAME_SAFEENGINESHIELDEN,
+        &ver,
+        "",
+    );
+}
+
+/// `handle_VProtect` — `VProtect` EP section name + banner.
+pub fn vprotect(d: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut DetectMap) {
+    if pe.is_dotnet {
+        return;
+    }
+    let idx = pe.entrypoint_section_index();
+    if idx <= 0
+        || !pe.extents[idx as usize]
+            .name
+            .eq_ignore_ascii_case("VProtect")
+    {
+        return;
+    }
+    let Some((off, size)) = pe.entrypoint_section_extent(d) else {
+        return;
+    };
+    if !deep {
+        return;
+    }
+    let sz = size.min(d.len() - off.min(d.len()));
+    if crate::parse::find_ansi(d, off, sz, b"VProtect").is_none() {
+        return;
+    }
+    let mut ver = String::new();
+    if let Some(p) = crate::parse::find_ansi(d, off, sz, b"VProtect Ultimate v")
+        && let Some(s) = crate::parse::read_ansi_string(d, p)
+    {
+        ver = section(&s, " v", 1).to_string();
+    }
+    put(
+        misc,
+        ftpe,
+        rt::RECORD_TYPE_PROTECTOR,
+        n::RECORD_NAME_VIRTUALIZEPROTECT,
+        &ver,
+        "",
+    );
+}
+
+/// `handle_TTProtect` — first import-position hash + `.TTP` EP section.
+pub fn ttprotect(pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
+    if pe.is_dotnet {
+        return;
+    }
+    let first_hash = pe.import_headers.first().map(|h| {
+        let s: String = h.positions.concat();
+        crate::signature::string_custom_crc32(&s)
+    });
+    if first_hash != Some(0xf3f5_2749) {
+        return;
+    }
+    let idx = pe.entrypoint_section_index();
+    if idx <= 0 || !pe.extents[idx as usize].name.eq_ignore_ascii_case(".TTP") {
+        return;
+    }
+    put(
+        misc,
+        ftpe,
+        rt::RECORD_TYPE_PROTECTOR,
+        n::RECORD_NAME_TTPROTECT,
+        "",
+        "",
+    );
+}
+
+/// `handle_VMProtect` — EP detect forward.
+pub fn vmprotect(pe: &PeInfo, entrypoint: &DetectMap, misc: &mut DetectMap) {
+    if pe.is_dotnet {
+        return;
+    }
+    take_put(entrypoint, n::RECORD_NAME_VMPROTECT, misc);
+}
+
+/// `handle_tElock` — 2 imports (kernel32!GetModuleHandleA +
+/// user32!MessageBoxA) + EP detect.
+pub fn telock(pe: &PeInfo, entrypoint: &DetectMap, misc: &mut DetectMap) {
+    if pe.is_dotnet || pe.import_headers.len() != 2 {
+        return;
+    }
+    let k = pe.import_headers[0].name == "kernel32.dll"
+        && pe.import_headers[0].positions.as_slice() == ["GetModuleHandleA"];
+    let u = pe.import_headers[1].name == "user32.dll"
+        && pe.import_headers[1].positions.as_slice() == ["MessageBoxA"];
+    if k && u {
+        take_put(entrypoint, n::RECORD_NAME_TELOCK, misc);
+    }
+}
+
+/// `handle_Armadillo` — linker 83.82 or KERNEL32/USER32/GDI32 import
+/// order + Armadillo import-hash detect.
+pub fn armadillo(pe: &PeInfo, ftpe: u16, imports: &DetectMap, misc: &mut DetectMap) {
+    if pe.is_dotnet {
+        return;
+    }
+    let header_detect = pe.major_linker == 0x53 && pe.minor_linker == 0x52;
+    let import_detect = pe.import_headers.len() >= 3 && {
+        let up = |i: usize| pe.import_headers[i].name.to_ascii_uppercase();
+        (up(0) == "KERNEL32.DLL" && up(1) == "USER32.DLL" && up(2) == "GDI32.DLL")
+            || (up(0) == "KERNEL32.DLL" && up(1) == "GDI32.DLL" && up(2) == "USER32.DLL")
+    };
+    if !(import_detect || header_detect) {
+        return;
+    }
+    if imports.contains_key(&n::RECORD_NAME_ARMADILLO) {
+        take_put(imports, n::RECORD_NAME_ARMADILLO, misc);
+    } else if header_detect {
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_PROTECTOR,
+            n::RECORD_NAME_ARMADILLO,
+            "",
+            "",
+        );
+    }
+}
+
+/// `handle_Obsidium` — 2-3 imports with kernel32!ExitProcess +
+/// user32!MessageBoxA + EP patterns.
+pub fn obsidium(d: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
+    if pe.is_dotnet || !(2..=3).contains(&pe.import_headers.len()) {
+        return;
+    }
+    let k = pe.import_headers[0].name == "KERNEL32.DLL"
+        && pe.import_headers[0].positions.as_slice() == ["ExitProcess"];
+    let u = pe.import_headers[1].name == "USER32.DLL"
+        && pe.import_headers[1].positions.as_slice() == ["MessageBoxA"];
+    if k && u && (compare_ep(d, pe, "EB$$50EB$$E8") || compare_ep(d, pe, "EB$$E8........EB$$EB")) {
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_PROTECTOR,
+            n::RECORD_NAME_OBSIDIUM,
+            "",
+            "",
+        );
+    }
+}
+
+/// `handle_Themida` — Winlicense/T themida shape probes.
+pub fn themida(pe: &PeInfo, ftpe: u16, entrypoint: &DetectMap, misc: &mut DetectMap) {
+    if pe.is_dotnet {
+        return;
+    }
+    let ih = &pe.import_headers;
+    if ih.len() == 1 {
+        if ih[0].name == "kernel32.dll" && ih[0].positions.len() == 1 {
+            take_put(entrypoint, n::RECORD_NAME_THEMIDAWINLICENSE, misc);
+        }
+    } else if ih.len() == 2 {
+        let k = if ih[0].name == "KERNEL32.dll" && ih[0].positions.len() == 2 {
+            ih[0].positions[0] == "CreateFileA" || ih[0].positions[1] == "lstrcpy"
+        } else {
+            ih[0].name == "kernel32.dll" && ih[0].positions.as_slice() == ["lstrcpy"]
+        };
+        let c = (ih[1].name == "COMCTL32.dll" || ih[1].name == "comctl32.dll")
+            && ih[1].positions.as_slice() == ["InitCommonControls"];
+        if k && c {
+            put(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_PROTECTOR,
+                n::RECORD_NAME_THEMIDAWINLICENSE,
+                "1.XX-2.XX",
+                "",
+            );
+        }
+    }
+    if !misc.contains_key(&n::RECORD_NAME_THEMIDAWINLICENSE)
+        && !ih.is_empty()
+        && ih.iter().all(|h| h.positions.len() == 1)
+        && pe.section_names.len() > 1
+        && pe.section_names[0] == "        "
+    {
+        let info = if pe.has_section_name(".themida") {
+            "Themida"
+        } else if pe.has_section_name(".winlice") {
+            "Winlicense"
+        } else {
+            ""
+        };
+        if !info.is_empty() {
+            put(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_PROTECTOR,
+                n::RECORD_NAME_THEMIDAWINLICENSE,
+                "3.XX",
+                info,
+            );
+        }
+    }
+}
+
+/// `handle_StarForce` — `.sforce3`/`.ps4` section names; single-position
+/// import library name becomes info.
+pub fn starforce(pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
+    let v = if pe.has_section_name(".sforce3") {
+        "3.X"
+    } else if pe.has_section_name(".ps4") {
+        "4.X-5.X"
+    } else {
+        return;
+    };
+    let mut info = String::new();
+    for h in &pe.import_headers {
+        if h.positions.len() == 1 && (h.positions[0].is_empty() || h.positions[0] == "1") {
+            info.clone_from(&h.name);
+        }
+    }
+    put(
+        misc,
+        ftpe,
+        rt::RECORD_TYPE_PROTECTOR,
+        n::RECORD_NAME_STARFORCE,
+        v,
+        &info,
+    );
+}
+
+/// `handle_Petite` — import-position shape → version; EP or
+/// section-name gate.
+pub fn petite(
+    pe: &PeInfo,
+    entrypoint: &DetectMap,
+    section_names: &DetectMap,
+    misc: &mut DetectMap,
+) {
+    if pe.is_dotnet || pe.is64 {
+        return;
+    }
+    let mut k32 = false;
+    let mut u32_ok = false;
+    let mut ver = String::new();
+    for h in &pe.import_headers {
+        let p: Vec<&str> = h.positions.iter().map(String::as_str).collect();
+        if h.name.eq_ignore_ascii_case("USER32.DLL") {
+            if p == ["MessageBoxA", "wsprintfA"] || p == ["MessageBoxA"] {
+                u32_ok = true;
+            }
+        } else if h.name.eq_ignore_ascii_case("KERNEL32.DLL") {
+            if p.len() == 7
+                && (p
+                    == [
+                        "ExitProcess",
+                        "GetModuleHandleA",
+                        "GetProcAddress",
+                        "VirtualProtect",
+                        "VirtualAlloc",
+                        "VirtualFree",
+                        "LoadLibraryA",
+                    ]
+                    || p == [
+                        "ExitProcess",
+                        "LoadLibraryA",
+                        "GetProcAddress",
+                        "VirtualProtect",
+                        "GlobalAlloc",
+                        "GlobalFree",
+                        "GetModuleHandleA",
+                    ])
+            {
+                ver = if p[1] == "GetModuleHandleA" {
+                    "2.4"
+                } else {
+                    "2.3"
+                }
+                .into();
+                k32 = true;
+            } else if p.len() == 6
+                && p == [
+                    "ExitProcess",
+                    "GetModuleHandleA",
+                    "GetProcAddress",
+                    "VirtualProtect",
+                    "GlobalAlloc",
+                    "GlobalFree",
+                ]
+            {
+                ver = "2.3".into();
+                k32 = true;
+            } else if p.len() == 5
+                && p == [
+                    "ExitProcess",
+                    "LoadLibraryA",
+                    "GetProcAddress",
+                    "VirtualProtect",
+                    "GlobalAlloc",
+                ]
+            {
+                ver = "2.2".into();
+                k32 = true;
+            } else if p.len() == 4
+                && p == [
+                    "ExitProcess",
+                    "GetProcAddress",
+                    "LoadLibraryA",
+                    "GlobalAlloc",
+                ]
+            {
+                ver = "1.4".into();
+                k32 = true;
+            }
+        }
+    }
+    if k32 && u32_ok {
+        take_edit(entrypoint, n::RECORD_NAME_PETITE, misc, |r| {
+            r.version.clone_from(&ver);
+        });
+    } else if section_names.contains_key(&n::RECORD_NAME_PETITE)
+        && entrypoint.contains_key(&n::RECORD_NAME_PETITE)
+    {
+        take_put(entrypoint, n::RECORD_NAME_PETITE, misc);
+    }
+}
+
+/// `handle_PrivateEXEProtector` — import shape + zero low
+/// characteristics + PEP-linker/TurboLinker header detects.
+pub fn private_exe(pe: &PeInfo, ftpe: u16, header: &DetectMap, misc: &mut DetectMap) {
+    if pe.is_dotnet {
+        return;
+    }
+    let mut k32 = false;
+    let mut k32_exit = false;
+    let mut u32_ok = false;
+    if let Some(h) = pe.import_headers.first()
+        && h.name == "KERNEL32.DLL"
+        && h.positions.len() == 1
+    {
+        k32 = true;
+        k32_exit = h.positions[0] == "ExitProcess";
+    }
+    if pe.import_headers.len() == 2 {
+        let h = &pe.import_headers[1];
+        u32_ok = h.name == "USER32.DLL" && h.positions.len() == 1;
+    }
+    let char_ok = pe.extents.iter().any(|s| s.flags & 0xFFFF == 0);
+    let pep = header.contains_key(&n::RECORD_NAME_PRIVATEEXEPROTECTOR);
+    let turbo = header.contains_key(&n::RECORD_NAME_TURBOLINKER);
+    if k32_exit && char_ok && pep {
+        take_put(header, n::RECORD_NAME_PRIVATEEXEPROTECTOR, misc);
+    }
+    if k32 && char_ok && turbo {
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_PROTECTOR,
+            n::RECORD_NAME_PRIVATEEXEPROTECTOR,
+            "2.25",
+            "",
+        );
+    }
+    if k32 && u32_ok && char_ok && turbo {
+        put(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_PROTECTOR,
+            n::RECORD_NAME_PRIVATEEXEPROTECTOR,
+            "2.30-2.70",
+            "",
+        );
+    }
+}
+
+/// `handle_VisualBasicCryptors` — import-map forwards to protector
+/// results; 1337 Exe Crypter additionally requires MSVBVM60 import and
+/// an overlay detect (version/info carried over).
+pub fn vb_cryptors(pe: &PeInfo, overlay: &DetectMap, imports: &DetectMap, misc: &mut DetectMap) {
+    if overlay.contains_key(&n::RECORD_NAME_1337EXECRYPTER)
+        && has_lib(pe, "MSVBVM60.DLL")
+        && let Some(r) = overlay.get(&n::RECORD_NAME_1337EXECRYPTER).cloned()
+    {
+        put(
+            misc,
+            r.ft,
+            rt::RECORD_TYPE_PROTECTOR,
+            n::RECORD_NAME_1337EXECRYPTER,
+            &r.version,
+            &r.info,
+        );
+    }
+    if imports.contains_key(&n::RECORD_NAME_AGAINNATIVITYCRYPTER)
+        && overlay.contains_key(&n::RECORD_NAME_AGAINNATIVITYCRYPTER)
+    {
+        take_put(imports, n::RECORD_NAME_AGAINNATIVITYCRYPTER, misc);
+    }
+    for nm in [
+        n::RECORD_NAME_ARCRYPT,
+        n::RECORD_NAME_WINGSCRYPT,
+        n::RECORD_NAME_CRYPTRROADS,
+        n::RECORD_NAME_WHITELLCRYPT,
+        n::RECORD_NAME_ZELDACRYPT,
+        n::RECORD_NAME_BIOHAZARDCRYPTER,
+        n::RECORD_NAME_CRYPTABLESEDUCATION,
+        n::RECORD_NAME_CRYPTIC,
+        n::RECORD_NAME_CRYPTOZ,
+        n::RECORD_NAME_DIRTYCRYPTOR,
+        n::RECORD_NAME_FAKUSCRYPTOR,
+        n::RECORD_NAME_FASTFILECRYPT,
+        n::RECORD_NAME_FILESHIELD,
+        n::RECORD_NAME_GHAZZACRYPTER,
+        n::RECORD_NAME_H4CKY0UORGCRYPTER,
+        n::RECORD_NAME_HACCREWCRYPTER,
+        n::RECORD_NAME_HALVCRYPTER,
+        n::RECORD_NAME_KGBCRYPTER,
+        n::RECORD_NAME_KIAMSCRYPTOR,
+        n::RECORD_NAME_KRATOSCRYPTER,
+        n::RECORD_NAME_KUR0KX2TO,
+        n::RECORD_NAME_LIGHTNINGCRYPTERPRIVATE,
+        n::RECORD_NAME_LIGHTNINGCRYPTERSCANTIME,
+        n::RECORD_NAME_LUCYPHER,
+        n::RECORD_NAME_MONEYCRYPTER,
+        n::RECORD_NAME_MORTALTEAMCRYPTER2,
+        n::RECORD_NAME_NOXCRYPT,
+        n::RECORD_NAME_PUSSYCRYPTER,
+        n::RECORD_NAME_RDGTEJONCRYPTER,
+        n::RECORD_NAME_SMOKESCREENCRYPTER,
+        n::RECORD_NAME_SNOOPCRYPT,
+        n::RECORD_NAME_STASFODIDOCRYPTOR,
+        n::RECORD_NAME_TSTCRYPTER,
+        n::RECORD_NAME_TURKISHCYBERSIGNATURE,
+        n::RECORD_NAME_TURKOJANCRYPTER,
+        n::RECORD_NAME_UNDOCRYPTER,
+        n::RECORD_NAME_WLCRYPT,
+        n::RECORD_NAME_WOUTHRSEXECRYPTER,
+        n::RECORD_NAME_ROGUEPACK,
+    ] {
+        take_put(imports, nm, misc);
+    }
+}
+
+/// `handle_DelphiCryptors` — import-map forwards to protector results;
+/// CigiCigi additionally requires an RCDATA resource named `AYARLAR`.
+pub fn delphi_cryptors(pe: &PeInfo, imports: &DetectMap, misc: &mut DetectMap) {
+    for nm in [
+        n::RECORD_NAME_ASSCRYPTER,
+        n::RECORD_NAME_AASE,
+        n::RECORD_NAME_ANSKYAPOLYMORPHICPACKER,
+        n::RECORD_NAME_ANSLYMPACKER,
+        n::RECORD_NAME_FEARZCRYPTER,
+        n::RECORD_NAME_FEARZPACKER,
+        n::RECORD_NAME_GKRIPTO,
+        n::RECORD_NAME_HOUNDHACKCRYPTER,
+        n::RECORD_NAME_ICRYPT,
+        n::RECORD_NAME_INFCRYPTOR,
+        n::RECORD_NAME_MALPACKER,
+        n::RECORD_NAME_MINKE,
+        n::RECORD_NAME_MORTALTEAMCRYPTER,
+        n::RECORD_NAME_MORUKCREWCRYPTERPRIVATE,
+        n::RECORD_NAME_MRUNDECTETABLE,
+        n::RECORD_NAME_NIDHOGG,
+        n::RECORD_NAME_NME,
+        n::RECORD_NAME_OPENSOURCECODECRYPTER,
+        n::RECORD_NAME_OSCCRYPTER,
+        n::RECORD_NAME_P0KESCRAMBLER,
+        n::RECORD_NAME_PANDORA,
+        n::RECORD_NAME_PFECX,
+        n::RECORD_NAME_PICRYPTOR,
+        n::RECORD_NAME_POKECRYPTER,
+        n::RECORD_NAME_PUBCRYPTER,
+        n::RECORD_NAME_SIMCRYPTER,
+        n::RECORD_NAME_SEXECRYPTER,
+        n::RECORD_NAME_SIMPLECRYPTER,
+        n::RECORD_NAME_TGRCRYPTER,
+        n::RECORD_NAME_THEZONECRYPTER,
+        n::RECORD_NAME_UNDERGROUNDCRYPTER,
+        n::RECORD_NAME_UNKOWNCRYPTER,
+        n::RECORD_NAME_WINDOFCRYPT,
+        n::RECORD_NAME_WLGROUPCRYPTER,
+    ] {
+        take_put(imports, nm, misc);
+    }
+    if imports.contains_key(&n::RECORD_NAME_CIGICIGICRYPTER)
+        && crate::pe::resource_present(&pe.resources, 10, Some("AYARLAR"), None)
+    {
+        take_put(imports, n::RECORD_NAME_CIGICIGICRYPTER, misc);
+    }
+}
+
+/// `handle_UnknownProtection` — last-chance heuristics: UPX-like first
+/// empty section, EP detects promoted as heuristic, UPX vi fallback,
+/// `.aspack`+`.adata`, PECompact header vi, KKRunchy section+header
+/// variant-0, and the generic section/entropy protector report.
+#[allow(clippy::too_many_arguments)]
+pub fn unknown_protection(
+    d: &[u8],
+    pe: &PeInfo,
+    ftpe: u16,
+    header: &DetectMap,
+    section_names: &DetectMap,
+    imports: &DetectMap,
+    entrypoint: &DetectMap,
+    misc: &mut DetectMap,
+) {
+    let present = protection_present(misc);
+    if !present
+        && pe.extents.first().is_some_and(|s| s.size == 0)
+        && imports
+            .get(&n::RECORD_NAME_UPX)
+            .is_some_and(|r| r.variant == 0)
+    {
+        let r = ScanRecord {
+            name: n::RECORD_NAME_UNK_UPXLIKE,
+            rtype: rt::RECORD_TYPE_PACKER,
+            ft: ftpe,
+            variant: 0,
+            version: String::new(),
+            info: String::new(),
+            heuristic: true,
+            unknown: false,
+        };
+        misc.insert(r.name, r);
+    }
+    if !protection_present(misc) {
+        let mut keys: Vec<u16> = entrypoint.keys().copied().collect();
+        keys.sort_unstable();
+        for k in keys {
+            if k == n::RECORD_NAME_GENERIC {
+                continue;
+            }
+            let mut r = entrypoint[&k].clone();
+            if r.rtype != rt::RECORD_TYPE_PACKER && r.rtype != rt::RECORD_TYPE_PROTECTOR {
+                continue;
+            }
+            r.heuristic = true;
+            misc.insert(r.name, r);
+        }
+    }
+    if !misc.contains_key(&n::RECORD_NAME_UPX)
+        && !misc.contains_key(&n::RECORD_NAME_UNK_UPXLIKE)
+        && let Some((v, inf)) = upx_vi(d, 0, d.len().min(0x2000), ftpe)
+    {
+        let r = ScanRecord {
+            name: n::RECORD_NAME_UPX,
+            rtype: rt::RECORD_TYPE_PACKER,
+            ft: ftpe,
+            variant: 0,
+            version: v,
+            info: inf,
+            heuristic: true,
+            unknown: false,
+        };
+        misc.insert(r.name, r);
+    }
+    if !misc.contains_key(&n::RECORD_NAME_ASPACK)
+        && pe.has_section_name(".aspack")
+        && pe.has_section_name(".adata")
+    {
+        let r = ScanRecord {
+            name: n::RECORD_NAME_ASPACK,
+            rtype: rt::RECORD_TYPE_PACKER,
+            ft: ftpe,
+            variant: 0,
+            version: "2.12-2.XX".into(),
+            info: String::new(),
+            heuristic: true,
+            unknown: false,
+        };
+        misc.insert(r.name, r);
+    }
+    if !misc.contains_key(&n::RECORD_NAME_PECOMPACT)
+        && let Some((v, inf)) = pecompact_vi(pe)
+    {
+        let r = ScanRecord {
+            name: n::RECORD_NAME_PECOMPACT,
+            rtype: rt::RECORD_TYPE_PACKER,
+            ft: ftpe,
+            variant: 0,
+            version: v,
+            info: inf,
+            heuristic: true,
+            unknown: false,
+        };
+        misc.insert(r.name, r);
+    }
+    if !misc.contains_key(&n::RECORD_NAME_KKRUNCHY)
+        && section_names.contains_key(&n::RECORD_NAME_KKRUNCHY)
+        && header
+            .get(&n::RECORD_NAME_KKRUNCHY)
+            .is_some_and(|r| r.variant == 0)
+    {
+        let r = ScanRecord {
+            name: n::RECORD_NAME_KKRUNCHY,
+            rtype: rt::RECORD_TYPE_PACKER,
+            ft: ftpe,
+            variant: 0,
+            version: String::new(),
+            info: String::new(),
+            heuristic: true,
+            unknown: false,
+        };
+        misc.insert(r.name, r);
+    }
+    if protection_present(misc) {
+        return;
+    }
+    let nsec = pe.extents.len();
+    let last_ep = nsec >= 2 && pe.entrypoint_section_index() == nsec as i32 - 1;
+    let empty_first = nsec > 0 && pe.extents[0].size == 0;
+    let whole_entropy = crate::parse::binary_entropy(d, 0, -1);
+    let high_entropy = crate::parse::is_packed(whole_entropy);
+    let high_first = !high_entropy
+        && nsec > 0
+        && crate::parse::is_packed(crate::parse::binary_entropy(
+            d,
+            pe.extents[0].off as i64,
+            pe.extents[0].size as i64,
+        ));
+    if !(last_ep || empty_first || high_first || high_entropy) {
+        return;
+    }
+    let mut info = String::new();
+    if last_ep {
+        append_comma(&mut info, "Last section entry point");
+    }
+    if empty_first {
+        append_comma(&mut info, "Empty first section");
+    }
+    if high_entropy {
+        append_comma(&mut info, "High entropy");
+    } else if high_first {
+        append_comma(&mut info, "High entropy first section");
+    }
+    let r = ScanRecord {
+        name: n::RECORD_NAME_GENERIC,
+        rtype: rt::RECORD_TYPE_PROTECTOR,
+        ft: ftpe,
+        variant: 0,
+        version: String::new(),
+        info,
+        heuristic: true,
+        unknown: false,
+    };
+    misc.insert(r.name, r);
+}
