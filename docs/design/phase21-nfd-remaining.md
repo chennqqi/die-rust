@@ -4,6 +4,14 @@
 > 8 格式 dispatch、PE handle_* 第一批~第三批）。本文档把剩余
 > deferred 项按依赖关系归化为可独立立项的批次。
 
+## 终态目标（确认）
+
+**所有 `COMPATIBILITY.md` 中 ⚠ partial 的 NFD 行最终都要补齐全量
+移植并对齐上游可观察行为**，不是"有条件才做"。Phase 21 装不下就
+顺延到 Phase 22（非 PE 格式启发残余）与 Phase 23（差分验证与
+收尾）。矩阵升级规则不变：handler 移植完成先标 ⚠（源码对照级），
+上游差分收敛后才升 ✅。
+
 ## 剩余工作量盘点（按上游行数）
 
 | handler（nfd_pe.cpp） | 行数 | 状态 |
@@ -82,48 +90,57 @@
   否则修正逻辑无可修正对象。
 - `handle_NETProtection` 精化 + `handle_Microsoft` Rich 链收尾。
 
-### 21.O — 非 PE 格式启发残余
+### Phase 22 — 非 PE 格式启发残余（原 21.O，独立成 phase）
 
-- ELF：`handle_Protection`、剩余 `.comment`/`note` 提取器（目前已
-  移植 44 个提取器链主体，剩 protection 启发）。
-- Mach-O：protection 段启发（VMProtect 等已做，剩杂项）。
-- NE/LE/LX：heuristic handler（当前仅表驱动 linker-header/EP）。
-- JavaClass/PDF/JPEG/CFBF/Amiga/JAR：`getInfo` 主体（上游纯
-  heuristic，无表）——PDF/JPEG 版本提取已部分做，其余按上游
-  `nfd_*.cpp` 逐个立项。
-- 文本：`handle_Texts` 源语言 regex 启发（当前仅 Plain text）。
+对应 COMPATIBILITY 的 6 行 ⚠：ELF、Mach-O 32/64、Mach-O FAT、
+NE、LE/LX、文本。
 
-### 21.P — 上游差分验证（Gate 项）
+- **22.A ELF**：`handle_Protection`、剩余 `.comment`/`note`
+  提取器（目前已移植 44 个提取器链主体，剩 protection 启发）。
+- **22.B Mach-O**：protection 段启发（VMProtect 等已做，剩杂项）；
+  FAT 维持 generic 兜底（上游上限），COMPATIBILITY 行保留 ⚠ 并
+  注明"已达上游上限"。
+- **22.C NE/LE/LX**：heuristic handler（当前仅表驱动
+  linker-header/EP）。
+- **22.D 小众格式**：JavaClass/PDF/JPEG/CFBF/Amiga/JAR `getInfo`
+  主体（上游纯 heuristic）——PDF/JPEG 版本提取已部分做。
+- **22.E 文本**：`handle_Texts` 源语言 regex 启发（~20 种语言）。
+
+### Phase 23 — 上游差分验证（原 21.P，Gate 已开）
 
 上游 `diec` CLI **不跑** SpecAbstract（仅 GUI `nfd_widget` 用），
-无现成 CLI oracle。路径：
+无现成 CLI oracle。**已确认：允许用 Qt 构建上游 harness 做对比，
+但 Qt 只属于 oracle 侧工具，`diec-rust` 任何 crate 不得引入 Qt。**
 
-1. 编译上游 SpecAbstract 独立 harness（`dep/SpecAbstract` 含
-   CMake/qmake 工程，依赖 Qt5/6 Core + Formats/XArchive deps）。
-   工作量：中等，需 Qt 构建环境 — **Gate：批准在本机/容器装 Qt
-   构建依赖**。
-2. 输出 dump（`XScanEngine::SCAN_STRUCT` 全记录 + version/info），
-   与 `diec --nfd --format json` 逐样本 diff。
-3. 语料：自造样本（Inno/NSIS 用工具打包 hello；Delphi/FPC/Qt 用
-   对应编译器真实产物）+ 现有 corpus。
+路径：
 
-**Gate 理由**：缺 oracle 时保护组 handler 的对错只能靠合成 fixture
-自证——21.M/21.N 在立项前最好先有差分基线，否则只能做到
-"有界近似"而非行为对齐。
+1. 在 `upstream/`（或独立目录）编一个 Qt console harness，链接
+   `dep/SpecAbstract` + `dep/Formats`/`XArchive`，
+   `SpecAbstract::scan()` → dump 全部 `SCAN_STRUCT`
+   （type/name/version/info）→ 文本快照。构建产物不提交，快照可
+   提交为哈希清单。
+2. `diec --nfd --format json` 输出与快照逐样本 diff（正向漏检 /
+   负向误报 / 版本值差异三路对比）。
+3. 语料：自造样本（Inno/NSIS 打包 hello；MinGW/FPC/Qt 等真实
+   编译器产物）+ 现有 corpus。
+
+**Gate 已开**（Qt 仅 oracle 侧）：21.M/21.N 移植完成后依赖此
+harness 收敛；收敛前 COMPATIBILITY 对应行保持 ⚠（覆盖完成但
+未经差分验证）。
 
 ## 建议顺序
 
 ```
 21.J（原语）→ 21.K（安装器/SFX）→ 21.L（.NET）→
-21.P（差分 harness，可与 K/L 并行准备环境）→
-21.M（保护组大切片）→ 21.N（FixDetects 收尾）→ 21.O（杂格式）
+Phase 23 harness（可与 K/L 并行准备 Qt 环境）→
+21.M（保护组大切片）→ 21.N（FixDetects 收尾）→
+Phase 22（非 PE 杂格式）→ Phase 23 差分收敛 → 全量 ✅
 ```
 
 - 21.J 是硬依赖（K/L/M 的多条分支都用 version-resource 与 #US）。
 - 21.N 必须排在 21.M 之后（FixDetects 修正的是 Protection 结果）。
-- 21.P 若 Gate 不通过（无 Qt 环境），21.M/N 退化为"合成 fixture
-  + 上游代码逐行对照"的弱验证模式，且 COMPATIBILITY 中相应行
-  保持 ⚠ partial 标注。
+- Phase 22/23 互不阻塞，可与 21.M 并行推进。
+- handler 移植完成后一律先 ⚠，Phase 23 diff 收敛后逐行升 ✅。
 
 ## 风险与已记录 quirk
 

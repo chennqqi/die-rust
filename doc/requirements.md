@@ -1321,3 +1321,5 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 - [2026-10-02] continue：Phase 21 第三批 PE handle_*——Borland（Delphi/C++Builder/VCL/PACKAGEINFO）+ Tools（Rust/Go/Qt/FPC/Python 等 20+ 子分支）。
 
 - [2026-10-02] 将 Phase 21 剩余 deferred 项归化为正式规划。
+
+- [2026-10-02] 要求：所有 ⚠ partial 缺口都要补齐对齐，phase 不够可加；Qt 可用于 oracle harness，Rust 项目不得引入 Qt。
