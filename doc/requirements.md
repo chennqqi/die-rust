@@ -1319,3 +1319,5 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 - [2026-10-02] continue：Phase 21 续——第二批 PE handle_*（GCC/Watcom/Signtools/Dongle/NeoLite/PETools/Joiners）。
 
 - [2026-10-02] continue：Phase 21 第三批 PE handle_*——Borland（Delphi/C++Builder/VCL/PACKAGEINFO）+ Tools（Rust/Go/Qt/FPC/Python 等 20+ 子分支）。
+
+- [2026-10-02] 将 Phase 21 剩余 deferred 项归化为正式规划。

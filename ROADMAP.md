@@ -1979,7 +1979,8 @@ nrv 单测），前端 `npm run build` 通过。
   installers/SFX/VB-cryptors/Delphi-cryptors/PrivateEXEProtector/
   UnknownProtection 与完整 handle_Protection/handle_FixDetects；
   JavaClass/PDF/JPEG/CFBF/Amiga/JAR 与 Mach-O FAT 专属 handler，
-  走 generic binary 兜底。
+  走 generic binary 兜底。**剩余项归化与排期见
+  `docs/design/phase21-nfd-remaining.md`（21.J–21.P）。**
 
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。
