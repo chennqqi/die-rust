@@ -1,0 +1,174 @@
+[submodule "upstream/DIE-engine/dep/Detect-It-Easy"]
+	path = upstream/DIE-engine/dep/Detect-It-Easy
+	url = https://github.com/horsicq/Detect-It-Easy.git
+[submodule "upstream/DIE-engine/dep/Formats"]
+	path = upstream/DIE-engine/dep/Formats
+	url = https://github.com/horsicq/Formats.git
+[submodule "upstream/DIE-engine/dep/SpecAbstract"]
+	path = upstream/DIE-engine/dep/SpecAbstract
+	url = https://github.com/horsicq/SpecAbstract.git
+[submodule "upstream/DIE-engine/dep/StaticScan"]
+	path = upstream/DIE-engine/dep/StaticScan
+	url = https://github.com/horsicq/StaticScan.git
+[submodule "upstream/DIE-engine/dep/XArchive"]
+	path = upstream/DIE-engine/dep/XArchive
+	url = https://github.com/horsicq/XArchive.git
+[submodule "upstream/DIE-engine/dep/XQwt"]
+	path = upstream/DIE-engine/dep/XQwt
+	url = https://github.com/horsicq/XQwt.git
+[submodule "upstream/DIE-engine/dep/XOptions"]
+	path = upstream/DIE-engine/dep/XOptions
+	url = https://github.com/horsicq/XOptions.git
+[submodule "upstream/DIE-engine/dep/XStyles"]
+	path = upstream/DIE-engine/dep/XStyles
+	url = https://github.com/horsicq/XStyles.git
+[submodule "upstream/DIE-engine/dep/XTranslation"]
+	path = upstream/DIE-engine/dep/XTranslation
+	url = https://github.com/horsicq/XTranslation.git
+[submodule "upstream/DIE-engine/dep/XDEX"]
+	path = upstream/DIE-engine/dep/XDEX
+	url = https://github.com/horsicq/XDEX.git
+[submodule "upstream/DIE-engine/dep/FormatDialogs"]
+	path = upstream/DIE-engine/dep/FormatDialogs
+	url = https://github.com/horsicq/FormatDialogs.git
+[submodule "upstream/DIE-engine/dep/FormatWidgets"]
+	path = upstream/DIE-engine/dep/FormatWidgets
+	url = https://github.com/horsicq/FormatWidgets.git
+[submodule "upstream/DIE-engine/dep/Controls"]
+	path = upstream/DIE-engine/dep/Controls
+	url = https://github.com/horsicq/Controls.git
+[submodule "upstream/DIE-engine/dep/XMemoryMapWidget"]
+	path = upstream/DIE-engine/dep/XMemoryMapWidget
+	url = https://github.com/horsicq/XMemoryMapWidget.git
+[submodule "upstream/DIE-engine/dep/XEntropyWidget"]
+	path = upstream/DIE-engine/dep/XEntropyWidget
+	url = https://github.com/horsicq/XEntropyWidget.git
+[submodule "upstream/DIE-engine/dep/XCapstone"]
+	path = upstream/DIE-engine/dep/XCapstone
+	url = https://github.com/horsicq/XCapstone.git
+[submodule "upstream/DIE-engine/dep/XHashWidget"]
+	path = upstream/DIE-engine/dep/XHashWidget
+	url = https://github.com/horsicq/XHashWidget.git
+[submodule "upstream/DIE-engine/dep/die_script"]
+	path = upstream/DIE-engine/dep/die_script
+	url = https://github.com/horsicq/die_script.git
+[submodule "upstream/DIE-engine/dep/die_widget"]
+	path = upstream/DIE-engine/dep/die_widget
+	url = https://github.com/horsicq/die_widget.git
+[submodule "upstream/DIE-engine/dep/nfd_widget"]
+	path = upstream/DIE-engine/dep/nfd_widget
+	url = https://github.com/horsicq/nfd_widget.git
+[submodule "upstream/DIE-engine/dep/archive_widget"]
+	path = upstream/DIE-engine/dep/archive_widget
+	url = https://github.com/horsicq/archive_widget.git
+[submodule "upstream/DIE-engine/dep/XMIME"]
+	path = upstream/DIE-engine/dep/XMIME
+	url = https://github.com/horsicq/XMIME.git
+[submodule "upstream/DIE-engine/dep/XSingleApplication"]
+	path = upstream/DIE-engine/dep/XSingleApplication
+	url = https://github.com/horsicq/XSingleApplication.git
+[submodule "upstream/DIE-engine/dep/XMIMEWidget"]
+	path = upstream/DIE-engine/dep/XMIMEWidget
+	url = https://github.com/horsicq/XMIMEWidget.git
+[submodule "upstream/DIE-engine/dep/XHexView"]
+	path = upstream/DIE-engine/dep/XHexView
+	url = https://github.com/horsicq/XHexView.git
+[submodule "upstream/DIE-engine/dep/XDisasmView"]
+	path = upstream/DIE-engine/dep/XDisasmView
+	url = https://github.com/horsicq/XDisasmView.git
+[submodule "upstream/DIE-engine/dep/XGithub"]
+	path = upstream/DIE-engine/dep/XGithub
+	url = https://github.com/horsicq/XGithub.git
+[submodule "upstream/DIE-engine/dep/XShortcuts"]
+	path = upstream/DIE-engine/dep/XShortcuts
+	url = https://github.com/horsicq/XShortcuts.git
+[submodule "upstream/DIE-engine/dep/XHexEdit"]
+	path = upstream/DIE-engine/dep/XHexEdit
+	url = https://github.com/horsicq/XHexEdit.git
+[submodule "upstream/DIE-engine/dep/signatures"]
+	path = upstream/DIE-engine/dep/signatures
+	url = https://github.com/horsicq/signatures.git
+[submodule "upstream/DIE-engine/dep/XDemangle"]
+	path = upstream/DIE-engine/dep/XDemangle
+	url = https://github.com/horsicq/XDemangle.git
+[submodule "upstream/DIE-engine/dep/XDemangleWidget"]
+	path = upstream/DIE-engine/dep/XDemangleWidget
+	url = https://github.com/horsicq/XDemangleWidget.git
+[submodule "upstream/DIE-engine/dep/XCppfilt"]
+	path = upstream/DIE-engine/dep/XCppfilt
+	url = https://github.com/horsicq/XCppfilt
+[submodule "upstream/DIE-engine/dep/XDynStructs"]
+	path = upstream/DIE-engine/dep/XDynStructs
+	url = https://github.com/horsicq/XDynStructs
+[submodule "upstream/DIE-engine/dep/XDynStructsEngine"]
+	path = upstream/DIE-engine/dep/XDynStructsEngine
+	url = https://github.com/horsicq/XDynStructsEngine
+[submodule "upstream/DIE-engine/dep/XDynStructsWidget"]
+	path = upstream/DIE-engine/dep/XDynStructsWidget
+	url = https://github.com/horsicq/XDynStructsWidget
+[submodule "upstream/DIE-engine/dep/XFileInfo"]
+	path = upstream/DIE-engine/dep/XFileInfo
+	url = https://github.com/horsicq/XFileInfo
+[submodule "upstream/DIE-engine/dep/XPDF"]
+	path = upstream/DIE-engine/dep/XPDF
+	url = https://github.com/horsicq/XPDF
+[submodule "upstream/DIE-engine/dep/XInfoDB"]
+	path = upstream/DIE-engine/dep/XInfoDB
+	url = https://github.com/horsicq/XInfoDB
+[submodule "upstream/DIE-engine/dep/XSymbolsWidget"]
+	path = upstream/DIE-engine/dep/XSymbolsWidget
+	url = https://github.com/horsicq/XSymbolsWidget
+[submodule "upstream/DIE-engine/dep/XOnlineTools"]
+	path = upstream/DIE-engine/dep/XOnlineTools
+	url = https://github.com/horsicq/XOnlineTools
+[submodule "upstream/DIE-engine/dep/XAboutWidget"]
+	path = upstream/DIE-engine/dep/XAboutWidget
+	url = https://github.com/horsicq/XAboutWidget
+[submodule "upstream/DIE-engine/dep/hex_templates"]
+	path = upstream/DIE-engine/dep/hex_templates
+	url = https://github.com/horsicq/hex_templates
+[submodule "upstream/DIE-engine/dep/XExtractorWidget"]
+	path = upstream/DIE-engine/dep/XExtractorWidget
+	url = https://github.com/horsicq/XExtractorWidget
+[submodule "upstream/DIE-engine/dep/XExtractor"]
+	path = upstream/DIE-engine/dep/XExtractor
+	url = https://github.com/horsicq/XExtractor
+[submodule "upstream/DIE-engine/dep/XUpdate"]
+	path = upstream/DIE-engine/dep/XUpdate
+	url = https://github.com/horsicq/XUpdate
+[submodule "upstream/DIE-engine/dep/XVisualizationWidget"]
+	path = upstream/DIE-engine/dep/XVisualizationWidget
+	url = https://github.com/horsicq/XVisualizationWidget
+[submodule "upstream/DIE-engine/dep/XDecompiler"]
+	path = upstream/DIE-engine/dep/XDecompiler
+	url = https://github.com/horsicq/XDecompiler
+[submodule "upstream/DIE-engine/dep/XYara"]
+	path = upstream/DIE-engine/dep/XYara
+	url = https://github.com/horsicq/XYara
+[submodule "upstream/DIE-engine/dep/yara_widget"]
+	path = upstream/DIE-engine/dep/yara_widget
+	url = https://github.com/horsicq/yara_widget
+[submodule "upstream/DIE-engine/dep/XDataConvertorWidget"]
+	path = upstream/DIE-engine/dep/XDataConvertorWidget
+	url = https://github.com/horsicq/XDataConvertorWidget
+[submodule "upstream/DIE-engine/dep/XScanEngine"]
+	path = upstream/DIE-engine/dep/XScanEngine
+	url = https://github.com/horsicq/XScanEngine
+[submodule "upstream/DIE-engine/dep/XDisasmCore"]
+	path = upstream/DIE-engine/dep/XDisasmCore
+	url = https://github.com/horsicq/XDisasmCore.git
+[submodule "upstream/DIE-engine/dep/XRegionsWidget"]
+	path = upstream/DIE-engine/dep/XRegionsWidget
+	url = https://github.com/horsicq/XRegionsWidget.git
+[submodule "upstream/DIE-engine/dep/XStaticUnpacker"]
+	path = upstream/DIE-engine/dep/XStaticUnpacker
+	url = https://github.com/horsicq/XStaticUnpacker
+[submodule "upstream/DIE-engine/dep/XPEID"]
+	path = upstream/DIE-engine/dep/XPEID
+	url = https://github.com/horsicq/XPEID
+[submodule "upstream/DIE-engine/dep/build_tools"]
+	path = upstream/DIE-engine/dep/build_tools
+	url = https://github.com/horsicq/build_tools.git
+[submodule "upstream/DIE-engine/dep/peid_widget"]
+	path = upstream/DIE-engine/dep/peid_widget
+	url = https://github.com/horsicq/peid_widget

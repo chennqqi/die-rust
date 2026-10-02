@@ -1241,3 +1241,14 @@ capa,filemagic,thezoo,multiarch}。上游 oracle 用 podman `--network=host`
 区分 byte_level/structural 失败；`HostApi::note_scan_error` 非致命诊断通道，
 scanner 按规则归属 drain 进 `diagnostics`；JS `_peCompareSigWithJumps`/`fSig`
 的 throw 改为 `return false`/`-1`。
+
+## 2026-10-02 CI 修复
+
+用户反馈推送后 GitHub Actions 全部 job 失败。排查发现 checkout 阶段
+`actions/checkout@v5`（persist-credentials:false）执行
+`git submodule foreach --recursive` 时报
+"No url found for submodule path 'upstream/DIE-engine/dep/Controls' in
+.gitmodules"——vendored 上游 subtree 保留了 58 个 dep/* gitlink，
+但仓库根无 .gitmodules。修复：从 upstream/DIE-engine/.gitmodules
+生成根 .gitmodules（路径加前缀、URL 指向 horsicq 源仓库），
+git submodule foreach/status 本地验证通过。
