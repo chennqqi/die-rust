@@ -276,6 +276,92 @@ pub fn is_plain_text(d: &[u8]) -> bool {
     (print + ext) as f64 / n >= 0.85 && ctl as f64 / n <= 0.05 && ext as f64 / n <= 0.50
 }
 
+/// Find an ANSI byte string inside `[offset, offset+size)`
+/// (`XBinary::find_ansiString`). Returns the offset or `None`.
+pub fn find_ansi(d: &[u8], offset: usize, size: usize, needle: &[u8]) -> Option<usize> {
+    let end = offset.saturating_add(size).min(d.len());
+    if offset >= end || needle.is_empty() || end - offset < needle.len() {
+        return None;
+    }
+    d[offset..end]
+        .windows(needle.len())
+        .position(|w| w == needle)
+        .map(|p| offset + p)
+}
+
+/// Read a NUL-terminated ANSI string at `off` (max 64 KiB,
+/// `XBinary::read_ansiString`).
+pub fn read_ansi_string(d: &[u8], off: usize) -> Option<String> {
+    d.get(off)?; // ensure in-bounds
+    let mut end = off;
+    while end < d.len() && end - off < 65536 && d[end] != 0 {
+        end += 1;
+    }
+    Some(String::from_utf8_lossy(&d[off..end]).into_owned())
+}
+
+/// Parse the APK Signing Block immediately preceding the ZIP central
+/// directory and return the contained block ids.
+///
+/// Layout: `[u64 size][entries][u64 size]["APK Sig Block 42"]`, where
+/// each entry is `[u64 len][u32 id][value]`. Used by
+/// `NFD_APK::getInfo` for v2/v3 signing-scheme, Walle and Google Play
+/// stamps (`XAPK::getAPKSignaturesBlockRecordsList`).
+pub fn apk_sig_block_ids(d: &[u8]) -> Vec<u32> {
+    const MAGIC: &[u8; 16] = b"APK Sig Block 42";
+    // Central directory start (EOCD +16).
+    let lo = d.len().saturating_sub(65557);
+    let mut eocd = None;
+    for i in (lo..d.len().saturating_sub(3)).rev() {
+        if d[i..i + 4] == [0x50, 0x4B, 0x05, 0x06] {
+            eocd = Some(i);
+            break;
+        }
+    }
+    let Some(eocd) = eocd else {
+        return Vec::new();
+    };
+    let Some(cd) = rd_u32(d, eocd + 16).map(|v| v as usize) else {
+        return Vec::new();
+    };
+    // Footer sits right before the central directory.
+    if cd < 24 || d.get(cd - 16..cd) != Some(MAGIC.as_slice()) {
+        return Vec::new();
+    }
+    let Some(footer_size) = rd_u64(d, cd - 24).map(|v| v as usize) else {
+        return Vec::new();
+    };
+    // `size` counts everything after the first u64 field, i.e.
+    // entries + trailing size(8) + magic(16); entries therefore span
+    // `[cd - size, cd - 24)`.
+    let Some(entries_start) = cd.checked_sub(footer_size) else {
+        return Vec::new();
+    };
+    let block_start = entries_start;
+    let entries_end = cd - 24;
+    if block_start >= entries_end {
+        return Vec::new();
+    }
+    let mut ids = Vec::new();
+    let mut p = block_start;
+    while p + 12 <= entries_end && ids.len() < 4096 {
+        let Some(len) = rd_u64(d, p).map(|v| v as usize) else {
+            break;
+        };
+        if len < 4 || p + len > entries_end + 8 {
+            break;
+        }
+        if let Some(id) = rd_u32(d, p + 8) {
+            ids.push(id);
+        }
+        let Some(next) = p.checked_add(len + 8) else {
+            break;
+        };
+        p = next;
+    }
+    ids
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

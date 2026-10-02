@@ -237,6 +237,7 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
     let mut strings_m: DetectMap = DetectMap::new();
     let mut types_m: DetectMap = DetectMap::new();
     let mut archive_m: DetectMap = DetectMap::new();
+    let mut misc: DetectMap = DetectMap::new();
 
     // Header scans run for every file (binary + archive tables filter on
     // FT_BINARY/FT_ARCHIVE which are always the secondary ft).
@@ -300,7 +301,14 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
             );
         }
         x if x == ft::FT_MSDOS => {
-            msdos_scan(data, &header_sig, &mut header, &mut entrypoint);
+            msdos_scan(
+                data,
+                opts,
+                &header_sig,
+                &mut header,
+                &mut entrypoint,
+                &mut misc,
+            );
         }
         x if x == ft::FT_COM => {
             // NFD_COM::getInfo — header signatures at 0 plus the
@@ -403,6 +411,80 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
                 file_type,
                 ft::FT_APK,
             );
+
+            // `NFD_APK::getInfo` — APK Signature Scheme block ids.
+            // `0x7109871a`=v2, `0xf05368c0`=v3 (mutually exclusive),
+            // `0x71777777`=Walle, `0x2146444e`=Google Play
+            // (`XAPK::getAPKSignaturesBlockRecordsList`).
+            let ids = parse::apk_sig_block_ids(data);
+            let emit = |misc: &mut DetectMap, rtype_id: u8, name_id: u16, ver: &'static str| {
+                misc.entry(name_id).or_insert_with(|| {
+                    ScanRecord::from_basic(&crate::records::BasicRecord {
+                        variant: 0,
+                        ft: ft::FT_APK,
+                        rtype: rtype_id,
+                        name: name_id,
+                        version: ver,
+                        info: "",
+                    })
+                });
+            };
+            // Upstream emits a single signtool record: v2 if present,
+            // else v3.
+            if ids.contains(&0x7109_871A) {
+                emit(
+                    &mut misc,
+                    rtype::RECORD_TYPE_SIGNTOOL,
+                    name::RECORD_NAME_APKSIGNATURESCHEME,
+                    "v2",
+                );
+            } else if ids.contains(&0xF053_68C0) {
+                emit(
+                    &mut misc,
+                    rtype::RECORD_TYPE_SIGNTOOL,
+                    name::RECORD_NAME_APKSIGNATURESCHEME,
+                    "v3",
+                );
+            }
+            if ids.contains(&0x7177_7777) {
+                emit(
+                    &mut misc,
+                    rtype::RECORD_TYPE_TOOL,
+                    name::RECORD_NAME_WALLE,
+                    "",
+                );
+            }
+            if ids.contains(&0x2146_444E) {
+                emit(
+                    &mut misc,
+                    rtype::RECORD_TYPE_TOOL,
+                    name::RECORD_NAME_GOOGLEPLAY,
+                    "",
+                );
+            }
+            // Language: Kotlin iff `META-INF/androidx.core_core-ktx.version`
+            // or `kotlin/kotlin.kotlin_builtins` is present, else Java.
+            let kotlin = names.iter().any(|n| {
+                n == "META-INF/androidx.core_core-ktx.version"
+                    || n == "kotlin/kotlin.kotlin_builtins"
+            });
+            emit(
+                &mut misc,
+                rtype::RECORD_TYPE_LANGUAGE,
+                if kotlin {
+                    name::RECORD_NAME_KOTLIN
+                } else {
+                    name::RECORD_NAME_JAVA
+                },
+                "",
+            );
+            // `XAPK::getFileFormatInfo` — every APK is an Android image.
+            emit(
+                &mut misc,
+                rtype::RECORD_TYPE_OPERATIONSYSTEM,
+                name::RECORD_NAME_ANDROID,
+                "",
+            );
         }
         _ => {}
     }
@@ -427,6 +509,7 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
     drain(&archive_m, &mut out);
     drain(&strings_m, &mut out);
     drain(&types_m, &mut out);
+    drain(&misc, &mut out);
     out
 }
 
@@ -653,7 +736,14 @@ fn pe_scan(
 
 /// MSDOS scan pipeline: linker-header + header records, entry-point
 /// signature and expression scans.
-fn msdos_scan(data: &[u8], header_sig: &str, header: &mut DetectMap, entrypoint: &mut DetectMap) {
+fn msdos_scan(
+    data: &[u8],
+    opts: ScanOptions,
+    header_sig: &str,
+    header: &mut DetectMap,
+    entrypoint: &mut DetectMap,
+    misc: &mut DetectMap,
+) {
     signature_scan(
         header,
         header_sig,
@@ -696,6 +786,166 @@ fn msdos_scan(data: &[u8], header_sig: &str, header: &mut DetectMap, entrypoint:
         ft::FT_MSDOS,
         ft::FT_MSDOS,
     );
+
+    msdos_extender_scan(data, opts, misc);
+    msdos_vintage_scan(data, opts, misc);
+}
+
+/// `NFD_MSDOS::handle_DosExtenders` — DOS extender banners:
+/// WDOSX at 0x34 (always), CWSDPMI/DOS4G/DOS16M on deep scan only.
+fn msdos_extender_scan(data: &[u8], opts: ScanOptions, misc: &mut DetectMap) {
+    // WDOSX: ANSI banner at fixed offset 0x34 ("WDOSX <ver>").
+    let wdosx =
+        parse::read_ansi_string(data, 0x34).filter(|b| b.split(' ').next() == Some("WDOSX"));
+    if let Some(banner) = wdosx {
+        let ver = banner.split(' ').nth(1).unwrap_or("").to_string();
+        misc.entry(name::RECORD_NAME_WDOSX).or_insert_with(|| {
+            let mut r = ScanRecord::from_basic(&crate::records::BasicRecord {
+                variant: 0,
+                ft: ft::FT_MSDOS,
+                rtype: rtype::RECORD_TYPE_DOSEXTENDER,
+                name: name::RECORD_NAME_WDOSX,
+                version: "",
+                info: "",
+            });
+            r.version = ver;
+            r
+        });
+    }
+    if !opts.deep_scan {
+        return;
+    }
+    // CWSDPMI: banner inside the first 0x100 bytes.
+    let cwsdpmi = parse::find_ansi(data, 0, 0x100, b"CWSDPMI")
+        .and_then(|off| parse::read_ansi_string(data, off))
+        .filter(|b| b.split(' ').next() == Some("CWSDPMI"));
+    if let Some(banner) = cwsdpmi {
+        let ver = banner.split(' ').nth(1).unwrap_or("").to_string();
+        misc.entry(name::RECORD_NAME_CWSDPMI).or_insert_with(|| {
+            let mut r = ScanRecord::from_basic(&crate::records::BasicRecord {
+                variant: 0,
+                ft: ft::FT_MSDOS,
+                rtype: rtype::RECORD_TYPE_DOSEXTENDER,
+                name: name::RECORD_NAME_CWSDPMI,
+                version: "",
+                info: "",
+            });
+            r.version = ver;
+            r
+        });
+    }
+    // DOS/4G and DOS/16M markers in the first 4 KiB.
+    let limit = data.len().min(0x1000);
+    if parse::find_ansi(data, 0, limit, b"DOS/4G").is_some() {
+        misc.entry(name::RECORD_NAME_DOS4G).or_insert_with(|| {
+            ScanRecord::from_basic(&crate::records::BasicRecord {
+                variant: 0,
+                ft: ft::FT_MSDOS,
+                rtype: rtype::RECORD_TYPE_DOSEXTENDER,
+                name: name::RECORD_NAME_DOS4G,
+                version: "",
+                info: "",
+            })
+        });
+    }
+    if parse::find_ansi(
+        data,
+        0,
+        limit,
+        b"DOS/16M Copyright (C) Tenberry Software Inc",
+    )
+    .is_some()
+    {
+        misc.entry(name::RECORD_NAME_DOS16M).or_insert_with(|| {
+            ScanRecord::from_basic(&crate::records::BasicRecord {
+                variant: 0,
+                ft: ft::FT_MSDOS,
+                rtype: rtype::RECORD_TYPE_DOSEXTENDER,
+                name: name::RECORD_NAME_DOS16M,
+                version: "",
+                info: "",
+            })
+        });
+    }
+}
+
+/// `NFD_MSDOS::handle_VintageCompilers` — vendor banner strings of
+/// vintage runtime libraries (deep scan only). Order matters: more
+/// specific strings first.
+fn msdos_vintage_scan(data: &[u8], opts: ScanOptions, misc: &mut DetectMap) {
+    if !opts.deep_scan {
+        return;
+    }
+    const VINTAGE: &[(&str, u16, &str)] = &[
+        ("pasuxm.pas", name::RECORD_NAME_MICROSOFTPASCAL, "1.00"),
+        ("conuxm.pas", name::RECORD_NAME_MICROSOFTPASCAL, "2.00"),
+        ("pasuxu.pas", name::RECORD_NAME_MICROSOFTFORTRAN, "3.3X"),
+        ("PASFILEA", name::RECORD_NAME_MICROSOFTPASCAL, "4.00"),
+        (
+            "foruxm.pas",
+            name::RECORD_NAME_MICROSOFTFORTRAN,
+            "3.1X-3.2X",
+        ),
+        ("foruxu.pas", name::RECORD_NAME_MICROSOFTFORTRAN, "3.3X"),
+        (
+            "Must link with BCOM10.LIB",
+            name::RECORD_NAME_MICROSOFTQUICKBASIC,
+            "1.00",
+        ),
+        (
+            "**COBOL: Attempt to use non-updated runtime module (COBRUN.EXE).",
+            name::RECORD_NAME_MICROSOFTCOBOL,
+            "1.12",
+        ),
+        (
+            "Insufficient environment space to run COBOL",
+            name::RECORD_NAME_MICROSOFTCOBOL,
+            "3.00A",
+        ),
+        (
+            "V1.1 CLEAR library.  Copyright 1983 by Digital Research.",
+            name::RECORD_NAME_DIGITALRESEARCHC,
+            "1.1",
+        ),
+        (
+            "Proc: \"        \" not found ovl:",
+            name::RECORD_NAME_DIGITALRESEARCHMTPASCAL,
+            "3.1X",
+        ),
+        (
+            "FREE Request Out-of-Range$",
+            name::RECORD_NAME_DIGITALRESEARCHPLI86,
+            "",
+        ),
+        ("$typeguard check failed", name::RECORD_NAME_OBERONM, "1.2"),
+        (
+            "Artek Ada Runtime Module (C) ",
+            name::RECORD_NAME_ARTEKADA,
+            "1.25",
+        ),
+        (
+            "$stack overflow$heap overflow$function return error$",
+            name::RECORD_NAME_LOGITECHMODULA2,
+            "3.X",
+        ),
+    ];
+    for &(s, name_id, ver) in VINTAGE {
+        if misc.contains_key(&name_id) {
+            continue;
+        }
+        if parse::find_ansi(data, 0, data.len(), s.as_bytes()).is_some() {
+            let mut r = ScanRecord::from_basic(&crate::records::BasicRecord {
+                variant: 0,
+                ft: ft::FT_MSDOS,
+                rtype: rtype::RECORD_TYPE_COMPILER,
+                name: name_id,
+                version: "",
+                info: "",
+            });
+            r.version = ver.to_string();
+            misc.insert(name_id, r);
+        }
+    }
 }
 
 /// True when the file has an NFD detection path beyond the generic

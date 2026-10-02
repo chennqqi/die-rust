@@ -260,3 +260,166 @@ fn pdf_version_fixup_extracts_header_version() {
         "expected PDF 1.7 version: {out:?}"
     );
 }
+
+/// Build a minimal ZIP container with an APK Signature Block placed
+/// immediately before the central directory.
+fn apk_with_sig_block(ids: &[u32], members: &[&str]) -> Vec<u8> {
+    let mut d = Vec::new();
+    let mut cd = Vec::new();
+    // Local headers + central directory entries for each member.
+    for name in members {
+        let local_off = d.len() as u32;
+        d.extend_from_slice(&[0x50, 0x4B, 0x03, 0x04]); // local header
+        d.extend_from_slice(&[20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        d.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        d.extend_from_slice(&[0, 0]);
+        d.extend_from_slice(name.as_bytes());
+        // Central directory entry.
+        cd.extend_from_slice(&[0x50, 0x4B, 0x01, 0x02]);
+        // ver_made..usize = 24 bytes.
+        cd.extend_from_slice(&[20, 0, 20, 0]);
+        cd.extend_from_slice(&[0; 20]);
+        cd.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        // extralen, commentlen, disk, intattr, extattr = 12 bytes.
+        cd.extend_from_slice(&[0; 12]);
+        cd.extend_from_slice(&local_off.to_le_bytes());
+        cd.extend_from_slice(name.as_bytes());
+    }
+    // APK Signature Block: [u64 size][entries][u64 size][magic].
+    let mut block_entries = Vec::new();
+    for id in ids {
+        block_entries.extend_from_slice(&12u64.to_le_bytes()); // len = 4 id + 8 value
+        block_entries.extend_from_slice(&id.to_le_bytes());
+        block_entries.extend_from_slice(&[0u8; 8]);
+    }
+    let size = (block_entries.len() + 24) as u64;
+    d.extend_from_slice(&size.to_le_bytes());
+    d.extend_from_slice(&block_entries);
+    d.extend_from_slice(&size.to_le_bytes());
+    d.extend_from_slice(b"APK Sig Block 42");
+    let cd_off = d.len() as u32;
+    d.extend_from_slice(&cd);
+    d.extend_from_slice(&[0x50, 0x4B, 0x05, 0x06]); // EOCD
+    d.extend_from_slice(&[0, 0, 0, 0]);
+    d.extend_from_slice(&(members.len() as u16).to_le_bytes());
+    d.extend_from_slice(&(members.len() as u16).to_le_bytes());
+    d.extend_from_slice(&(cd.len() as u32).to_le_bytes());
+    d.extend_from_slice(&cd_off.to_le_bytes());
+    d.extend_from_slice(&[0, 0]);
+    d
+}
+
+#[test]
+fn apk_sig_scheme_v2_detection() {
+    let d = apk_with_sig_block(&[0x7109_871A], &["classes.dex"]);
+    let out = diec_nfd::scan(
+        &d,
+        diec_nfd::gen_names::ft::FT_APK,
+        diec_nfd::ScanOptions::default(),
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "APK Signature Scheme" && r.version == "v2"),
+        "expected APK Signature Scheme v2: {out:?}"
+    );
+    // Valid APK always carries an OS (Android) and a language record.
+    assert!(out.iter().any(|r| r.record_name == "Android"), "{out:?}");
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Java" && r.record_type == "Language"),
+        "expected Java language record: {out:?}"
+    );
+}
+
+#[test]
+fn apk_sig_scheme_v3_exclusive_and_walle() {
+    let d = apk_with_sig_block(&[0xF053_68C0, 0x7177_7777], &[]);
+    let out = diec_nfd::scan(
+        &d,
+        diec_nfd::gen_names::ft::FT_APK,
+        diec_nfd::ScanOptions::default(),
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "APK Signature Scheme" && r.version == "v3"),
+        "expected v3: {out:?}"
+    );
+    assert!(
+        !out.iter()
+            .any(|r| r.record_name == "APK Signature Scheme" && r.version == "v2"),
+        "v3 must not emit v2: {out:?}"
+    );
+    assert!(out.iter().any(|r| r.record_name == "Walle"), "{out:?}");
+}
+
+#[test]
+fn apk_kotlin_language_via_member() {
+    let d = apk_with_sig_block(&[], &["kotlin/kotlin.kotlin_builtins"]);
+    let out = diec_nfd::scan(
+        &d,
+        diec_nfd::gen_names::ft::FT_APK,
+        diec_nfd::ScanOptions::default(),
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Kotlin" && r.record_type == "Language"),
+        "expected Kotlin language record: {out:?}"
+    );
+}
+
+/// Minimal MZ DOS image with an embedded banner.
+fn mz_with_banner(banner: &[u8], at: usize) -> Vec<u8> {
+    let mut d = vec![0u8; 0x400];
+    d[0] = b'M';
+    d[1] = b'Z';
+    d[0x08] = 4; // header size = 4 paragraphs
+    d[at..at + banner.len()].copy_from_slice(banner);
+    d
+}
+
+#[test]
+fn msdos_dos4g_deep_scan_only() {
+    let d = mz_with_banner(b"DOS/4G", 0x80);
+    let ft = diec_nfd::gen_names::ft::FT_MSDOS;
+    let shallow = diec_nfd::scan(&d, ft, diec_nfd::ScanOptions { deep_scan: false });
+    assert!(
+        !shallow.iter().any(|r| r.record_name == "DOS/4G"),
+        "DOS/4G must be deep-scan gated: {shallow:?}"
+    );
+    let deep = diec_nfd::scan(&d, ft, diec_nfd::ScanOptions { deep_scan: true });
+    assert!(
+        deep.iter()
+            .any(|r| r.record_name == "DOS/4G" && r.record_type == "DOS extender"),
+        "expected DOS/4G extender record: {deep:?}"
+    );
+}
+
+#[test]
+fn msdos_wdosx_always_scanned() {
+    let d = mz_with_banner(b"WDOSX 0.97\x00", 0x34);
+    let out = diec_nfd::scan(
+        &d,
+        diec_nfd::gen_names::ft::FT_MSDOS,
+        diec_nfd::ScanOptions::default(),
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "WDOSX" && r.version == "0.97"),
+        "expected WDOSX 0.97: {out:?}"
+    );
+}
+
+#[test]
+fn msdos_vintage_pascal_banner() {
+    let d = mz_with_banner(b"PASFILEA", 0x100);
+    let out = diec_nfd::scan(
+        &d,
+        diec_nfd::gen_names::ft::FT_MSDOS,
+        diec_nfd::ScanOptions { deep_scan: true },
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Microsoft Pascal" && r.version == "4.00"),
+        "expected Microsoft Pascal 4.00: {out:?}"
+    );
+}
