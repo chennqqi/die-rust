@@ -10,6 +10,7 @@ import {
   Copy,
   Check,
   GitBranch,
+  Package,
 } from "lucide-react";
 import { FileHeaderTree, type HeaderField } from "./FileHeaderTree";
 import PeViewPanel from "./PeViewPanel";
@@ -169,6 +170,8 @@ export function FileInfoPanel({ path }: { path: string }) {
               />
               <ExtraHashes path={info.path} copied={copied} copyHash={copyHash} />
             </div>
+
+            <UpxUnpackSection path={info.path} />
           </div>
         )}
 
@@ -527,6 +530,77 @@ function EntropyView({ path, overall }: { path: string; overall: number }) {
           &gt; 6.0 (high)
         </span>
       </div>
+    </div>
+  );
+}
+
+interface UpxInfoDto {
+  version: number;
+  format: number;
+  methodName: string;
+  level: number;
+  filter: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  originalFileSize: number;
+}
+
+/** UPX detection banner + one-click static unpack (Phase 20). */
+function UpxUnpackSection({ path }: { path: string }) {
+  const { t } = useTranslation();
+  const [upx, setUpx] = useState<UpxInfoDto | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setUpx(null);
+    setResult(null);
+    setErr(null);
+    invoke<UpxInfoDto | null>("detect_upx", { path })
+      .then(setUpx)
+      .catch(() => setUpx(null));
+  }, [path]);
+
+  if (!upx) return null;
+
+  const doUnpack = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const out = await invoke<string>("unpack_file", { path, outputPath: null });
+      setResult(out);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="pt-2 border-t border-border-c">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-1.5 text-fg-secondary">
+          <Package size={13} />
+          <span className="font-medium">{t("upx.title", "UPX packed")}</span>
+        </div>
+        <button
+          onClick={doUnpack}
+          disabled={busy}
+          className="px-2 py-0.5 text-xs rounded bg-accent-blue text-white hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? t("upx.unpacking", "Unpacking…") : t("upx.unpack", "Unpack")}
+        </button>
+      </div>
+      <div className="text-fg-muted mono">
+        {t("upx.method", "Method")}: {upx.methodName} · {t("upx.level", "Level")}: {upx.level}
+        {upx.filter !== 0 && <> · {t("upx.filter", "Filter")}: 0x{upx.filter.toString(16)}</>}
+      </div>
+      <div className="text-fg-muted mono">
+        {upx.compressedSize.toLocaleString()} → {upx.uncompressedSize.toLocaleString()} bytes
+      </div>
+      {result && <div className="text-accent-green mt-1 selectable">{t("upx.saved", "Saved")}: {result}</div>}
+      {err && <div className="text-accent-red mt-1">{err}</div>}
     </div>
   );
 }

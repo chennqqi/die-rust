@@ -8,6 +8,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![forbid(unsafe_code)]
 
+mod annotations;
 mod commands;
 mod demangle;
 mod disassembler;
@@ -100,6 +101,9 @@ fn main() {
             commands::pe_add_overlay,
             commands::edit_string_at_offset,
             commands::edit_bytes_at_offset,
+            commands::list_annotations,
+            commands::upsert_annotation,
+            commands::delete_annotation,
             commands::extract_heuristic,
             commands::analyze_item,
             commands::write_binary_file,
@@ -113,6 +117,8 @@ fn main() {
             commands::run_signature,
             commands::list_archive,
             commands::extract_archive_member,
+            commands::detect_upx,
+            commands::unpack_file,
             commands::list_hash_algorithms,
             commands::compute_hash,
             commands::get_data_paths,

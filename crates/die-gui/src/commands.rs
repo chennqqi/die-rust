@@ -1215,6 +1215,50 @@ pub async fn edit_bytes_at_offset(
     result.map_err(|e| GuiError::new("BYTE_EDIT_ERROR", e))
 }
 
+// --- Annotations (XInfoDB parity, Phase 19; see annotations.rs) ---
+
+/// List bookmarks/comments/labels for a file (sidecar `<file>.diec.json`).
+#[tauri::command]
+pub async fn list_annotations(
+    path: String,
+) -> Result<crate::annotations::AnnotationsDto, GuiError> {
+    let result = tokio::task::spawn_blocking(move || crate::annotations::list(&path))
+        .await
+        .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("ANNOTATION_ERROR", e))
+}
+
+/// Insert or replace a bookmark/comment/label at `(kind, offset)`.
+#[tauri::command]
+pub async fn upsert_annotation(
+    path: String,
+    kind: String,
+    offset: u64,
+    text: String,
+    color: String,
+) -> Result<crate::annotations::AnnotationsDto, GuiError> {
+    let result = tokio::task::spawn_blocking(move || {
+        crate::annotations::upsert(&path, &kind, offset, text, color)
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("ANNOTATION_ERROR", e))
+}
+
+/// Delete the entry at `(kind, offset)`; missing entries are a no-op.
+#[tauri::command]
+pub async fn delete_annotation(
+    path: String,
+    kind: String,
+    offset: u64,
+) -> Result<crate::annotations::AnnotationsDto, GuiError> {
+    let result =
+        tokio::task::spawn_blocking(move || crate::annotations::delete(&path, &kind, offset))
+            .await
+            .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("ANNOTATION_ERROR", e))
+}
+
 /// Extract an item from a file to an output directory.
 #[tauri::command]
 pub async fn extract_item(
@@ -1576,6 +1620,64 @@ pub async fn extract_archive_member(
     .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
 
     result.map_err(|e| GuiError::new("ARCHIVE_READ_ERROR", e))
+}
+
+/// Detected UPX pack-header information for the GUI.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpxInfoDto {
+    /// UPX version byte.
+    pub version: u8,
+    /// UPX format id.
+    pub format: u8,
+    /// Compression method name (e.g. "NRV2B_LE32").
+    pub method_name: String,
+    /// Compression level.
+    pub level: u8,
+    /// Filter id applied by the packer.
+    pub filter: u8,
+    /// Compressed stream size.
+    pub compressed_size: u32,
+    /// Uncompressed payload size.
+    pub uncompressed_size: u32,
+    /// Original file size recorded by the packer.
+    pub original_file_size: u32,
+}
+
+/// Returns UPX pack-header information when the file is UPX packed.
+#[tauri::command]
+pub async fn detect_upx(path: String) -> Result<Option<UpxInfoDto>, GuiError> {
+    tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| GuiError::new("READ_ERROR", e.to_string()))?;
+        Ok(diec_engine::detect_upx(&data).map(|info| UpxInfoDto {
+            version: info.version,
+            format: info.format,
+            method_name: info.method_name(),
+            level: info.level,
+            filter: info.filter,
+            compressed_size: info.c_len,
+            uncompressed_size: info.u_len,
+            original_file_size: info.u_file_size,
+        }))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
+}
+
+/// Statically unpacks a UPX-packed file, writing `<file>.unpacked` unless an
+/// explicit `output_path` is given. Returns the output path.
+#[tauri::command]
+pub async fn unpack_file(path: String, output_path: Option<String>) -> Result<String, GuiError> {
+    tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| GuiError::new("READ_ERROR", e.to_string()))?;
+        let out = diec_engine::unpack_static(&data)
+            .map_err(|e| GuiError::new("UNPACK_ERROR", e.to_string()))?;
+        let out_path = output_path.unwrap_or_else(|| format!("{path}.unpacked"));
+        std::fs::write(&out_path, &out).map_err(|e| GuiError::new("WRITE_ERROR", e.to_string()))?;
+        Ok(out_path)
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
 }
 
 /// Convert Unix seconds since epoch to a human-readable date string.

@@ -163,6 +163,13 @@ i18n.use(initReactI18next).init({
           inspector: "Data Inspector",
           elementMode: "Element display mode",
         },
+        ann: {
+          stale: "File changed since these annotations were saved",
+          jump: "Jump to offset",
+          delete: "Delete",
+          addBookmark: "Add bookmark",
+          addComment: "Add comment",
+        },
         disasm: {
           title: "Disassembler",
           offset: "Offset (hex)",
@@ -222,6 +229,15 @@ i18n.use(initReactI18next).init({
           signaturesLoaded: "signatures loaded",
           name: "Name",
           pattern: "Pattern",
+        },
+        upx: {
+          title: "UPX packed",
+          method: "Method",
+          level: "Level",
+          filter: "Filter",
+          unpack: "Unpack",
+          unpacking: "Unpacking…",
+          saved: "Saved",
         },
         fileInfo: {
           title: "File Info",
@@ -440,6 +456,13 @@ i18n.use(initReactI18next).init({
           inspector: "数据检查器",
           elementMode: "元素显示模式",
         },
+        ann: {
+          stale: "文件在注释保存后已变更",
+          jump: "跳转到偏移",
+          delete: "删除",
+          addBookmark: "添加书签",
+          addComment: "添加注释",
+        },
         disasm: {
           title: "反汇编器",
           offset: "偏移（Hex）",
@@ -499,6 +522,15 @@ i18n.use(initReactI18next).init({
           signaturesLoaded: "个签名已加载",
           name: "名称",
           pattern: "特征",
+        },
+        upx: {
+          title: "UPX 加壳",
+          method: "压缩方法",
+          level: "级别",
+          filter: "过滤器",
+          unpack: "脱壳",
+          unpacking: "脱壳中…",
+          saved: "已保存",
         },
         fileInfo: {
           title: "文件信息",

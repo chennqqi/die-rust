@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { Search, ArrowRight, Copy, Check, Code } from "lucide-react";
+import { Search, ArrowRight, Copy, Check, Code, Bookmark, MessageSquare } from "lucide-react";
+import {
+  AnnotationsPanel,
+  loadAnnotations,
+  upsertAnnotation,
+  type AnnotationsDto,
+} from "./AnnotationsPanel";
 
 interface HexLine {
   offset: string;
@@ -54,6 +60,47 @@ export function HexViewer({
   const [selectedByteOffset, setSelectedByteOffset] = useState<number | null>(null);
   const [inspectorBytes, setInspectorBytes] = useState<Uint8Array>(new Uint8Array(0));
   const [editMsg, setEditMsg] = useState<string | null>(null);
+  const [annotations, setAnnotations] = useState<AnnotationsDto | null>(null);
+
+  // Annotated offsets for row markers (bookmarks + comments).
+  const annotatedOffsets = useMemo(() => {
+    const s = new Set<number>();
+    annotations?.bookmarks.forEach((e) => s.add(e.offset));
+    annotations?.comments.forEach((e) => s.add(e.offset));
+    return s;
+  }, [annotations]);
+
+  /** Scroll the view to `offset` (annotation jump target). */
+  const scrollToOffset = useCallback(
+    (offset: number) => {
+      if (offset < 0 || offset >= fileSize) return;
+      const lineIndex = Math.floor(offset / LINE_BYTES);
+      setScrollTop(lineIndex * LINE_HEIGHT);
+      setSelectedLine(lineIndex);
+      setSelectedByteOffset(offset);
+    },
+    [fileSize],
+  );
+
+  /** Add a bookmark/comment at the selected byte via a prompt. */
+  const addAnnotation = useCallback(
+    async (kind: "bookmark" | "comment") => {
+      if (selectedByteOffset == null) return;
+      const input = window.prompt(
+        kind === "bookmark"
+          ? `Bookmark name at 0x${selectedByteOffset.toString(16)}`
+          : `Comment at 0x${selectedByteOffset.toString(16)}`,
+      );
+      if (input == null || input.trim() === "") return;
+      try {
+        setAnnotations(await upsertAnnotation(path, kind, selectedByteOffset, input.trim()));
+        setEditMsg(null);
+      } catch (e) {
+        setEditMsg(String(e));
+      }
+    },
+    [path, selectedByteOffset],
+  );
 
   // Byte edit entry: prompt for hex bytes, write via backend (creates .bak),
   // then drop cached chunks so the view reloads fresh bytes.
@@ -107,6 +154,8 @@ export function HexViewer({
         setError(String(e));
         setLoading(false);
       });
+    setAnnotations(null);
+    loadAnnotations(path).then(setAnnotations).catch(() => setAnnotations(null));
   }, [path]);
 
   // Scroll to initialOffset when it changes (e.g. from Disassembler "Follow in Hex").
@@ -288,6 +337,9 @@ export function HexViewer({
       const hasHit = searchResults?.some(
         (h) => h.offset >= lineStartOffset && h.offset < lineEndOffset,
       );
+      const hasAnnotation = [...annotatedOffsets].some(
+        (o) => o >= lineStartOffset && o < lineEndOffset,
+      );
       renderedLines.push(
         <div
           key={i}
@@ -295,7 +347,10 @@ export function HexViewer({
           className={`flex gap-2 cursor-pointer hover:bg-accent-blue/10 ${selectedLine === i ? "bg-accent-blue/20" : ""} ${hasHit ? "bg-yellow-500/20" : ""}`}
           onClick={() => handleLineClick(i, line)}
         >
-          <span className="text-fg-muted w-24">{line.offset}</span>
+          <span className="text-fg-muted w-24">
+            {hasAnnotation && <span className="text-accent-blue">● </span>}
+            {line.offset}
+          </span>
           <span className="text-fg-primary w-[360px]">{formatHexByMode(line.hex, elementMode)}</span>
           <span className="text-fg-muted">{line.ascii}</span>
         </div>,
@@ -426,12 +481,28 @@ export function HexViewer({
         <span>{t("hex.clickToCopy")}</span>
         {editMsg && <span className="text-accent-yellow">{editMsg}</span>}
         {selectedByteOffset != null && (
-          <button
-            onClick={editAtSelection}
-            className="ml-auto flex items-center gap-1 px-2 py-0.5 text-xs border border-border rounded hover:bg-hover"
-          >
-            Edit
-          </button>
+          <>
+            <button
+              onClick={() => addAnnotation("bookmark")}
+              className="ml-auto flex items-center gap-1 px-2 py-0.5 text-xs border border-border rounded hover:bg-hover"
+              title={t("ann.addBookmark")}
+            >
+              <Bookmark size={11} />
+            </button>
+            <button
+              onClick={() => addAnnotation("comment")}
+              className="flex items-center gap-1 px-2 py-0.5 text-xs border border-border rounded hover:bg-hover"
+              title={t("ann.addComment")}
+            >
+              <MessageSquare size={11} />
+            </button>
+            <button
+              onClick={editAtSelection}
+              className="flex items-center gap-1 px-2 py-0.5 text-xs border border-border rounded hover:bg-hover"
+            >
+              Edit
+            </button>
+          </>
         )}
         {selectedByteOffset != null && onFollowInDisasm && (
           <button
@@ -443,6 +514,14 @@ export function HexViewer({
           </button>
         )}
       </div>
+
+      {/* Annotations (XInfoDB parity) */}
+      <AnnotationsPanel
+        path={path}
+        annotations={annotations}
+        onChanged={setAnnotations}
+        onJump={scrollToOffset}
+      />
 
       {/* Data inspector — shows multiple interpretations of selected bytes */}
       {selectedByteOffset != null && inspectorBytes.length > 0 && (

@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  AnnotationsPanel,
+  loadAnnotations,
+  type AnnotationsDto,
+} from "./AnnotationsPanel";
 
 interface Instruction {
   address: string;
@@ -37,6 +42,13 @@ export function Disassembler({
   const [syntax, setSyntax] = useState<Syntax>("intel");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [annotations, setAnnotations] = useState<AnnotationsDto | null>(null);
+
+  // Load the file's annotation store (shared with the hex view).
+  useEffect(() => {
+    setAnnotations(null);
+    loadAnnotations(path).then(setAnnotations).catch(() => setAnnotations(null));
+  }, [path]);
 
   // When initialOffset changes (e.g. from HexViewer "Follow in Disasm"),
   // update offset and auto-disassemble.
@@ -258,6 +270,17 @@ export function Disassembler({
         )}
         </>
       )}
+
+      {/* File annotations (shared with the hex view) */}
+      <AnnotationsPanel
+        path={path}
+        annotations={annotations}
+        onChanged={setAnnotations}
+        onJump={(o) => {
+          setOffset(o);
+          void doDisasm(o, maxBytes);
+        }}
+      />
     </div>
   );
 }
