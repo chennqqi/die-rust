@@ -224,3 +224,15 @@ byte_level/structural 区分是否记诊断。诊断经 `note_scan_error` 通道
 对于影响检测结果的 bug（Bug 1），diec-rust 选择修复而非复制。
 对于不影响结果的 bug（Bug 2/3/5），diec-rust 保持兼容行为。
 对于行为规范（Bug 4），diec-rust 选择更严格的标准。
+
+## NFD_PE::handle_Microsoft — linker→compiler `mapVersions` key never matches (23fec32)
+
+`handle_Microsoft` keys `mapVersions` (keys "1","2","4".."14") with
+`sLinkerVersion.section(".", 0, 1)` — "major.minor" such as "14.29" —
+which can never hit a bare-major key. The linker-version → Visual C/C++
+fallback is therefore dead code upstream; the compiler version only gets
+set via the MFC path (`section(".", 0, 0)`). Replicated verbatim in
+`diec-nfd::pe_handlers::microsoft` for output parity; do not "fix".
+
+Upstream source: `dep/SpecAbstract/modules/nfd_pe.cpp`
+`handle_Microsoft`, the `sLinkerMajorVersion` block.

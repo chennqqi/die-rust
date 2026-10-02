@@ -1937,9 +1937,18 @@ nrv 单测），前端 `npm run build` 通过。
   Swift/ld 版本链、codesign、Qt/Carbon/Cocoa/VMProtect、`__cstring`
   Zig 标记、Objective-C info。CAFEBABE 消歧：FAT arch 记录逐项校验
   → MACHOFAT，否则 `u32be@4>10` → JAVACLASS（对齐上游判定序）。
-- 仍未移植（显式 deferred）：heuristic `handle_*` 版本补全与各格式
-  的 regex/结构启发式；JavaClass/PDF/JPEG/CFBF/Amiga/JAR
-  与 Mach-O FAT 专属 handler，走 generic binary 兜底。
+- PE 语义 handler 首批（`pe_handlers.rs`）：`handle_OperationSystem`
+  （subsystem→OS 家族 + Windows 版本表 + 64 位 ≥5.02 下限 + arch/
+  mode/type info）、`handle_import`（ZProtect/PESpin/Alloy 导入序列
+  模式）、`handle_DebugData`（.stab/.stabstr/.debug_info→DWARF）、
+  `handle_Microsoft` 非 Rich 子集（MFC ^MFC 导入+版本/Unicode 标记
+  +CMFCComObject 静态深扫、VB40032/MSVBVM50/60+P-Code、linker
+  major.minor 兜底、mapVersions 链、VS build 版本表 158 条+
+  linker 版本表 46 条、.NET BSJB 元数据版本）。上游 quirk
+  已记录至 doc/upstream-bugs.md（mapVersions (0,1) 死键）。
+- 仍未移植（显式 deferred）：Rich→工具描述链与其余 `handle_*`
+  protection/installer/SFX 启发式；JavaClass/PDF/JPEG/CFBF/Amiga/
+  JAR 与 Mach-O FAT 专属 handler，走 generic binary 兜底。
 
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。

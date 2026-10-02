@@ -1,3 +1,5 @@
 # requirements analysis (split)
 
 - 2026-10-07 Mach-O slice: analyzed nfd_mach.cpp getInfo flow (OS defaults by cputype → LC_VERSION_MIN_*/LC_BUILD_VERSION override → Foundation current_version refinement); ported Foundation/iOS/Xcode/toolchain version tables (54/28/133/93 rows) to mach_tables.rs; CAFEBABE disambiguation ported from XBinary::getFileTypeId (per-record fat_arch validity vs u32be@4>10 JAVACLASS fallback). VMProtect/Zig/Qt/Carbon/Cocoa/codesign/toolchain-version emission + Objective-C info flag. Truncated/malformed inputs bounded; MACHOFAT has no upstream NFD handler (generic fallback).
+
+- PE handlers: ported handle_OperationSystem (subsystem map + OS-version table), handle_import (ordered import-sequence patterns), handle_DebugData, handle_Microsoft non-Rich subset; extracted MSVC build->VS (158) and linker->VS (46) tables; recorded upstream mapVersions dead-key quirk in upstream-bugs.md. New PeInfo fields: linker bytes, subsystem, machine, characteristics, os_version, image_base, dotnet_version (BSJB metadata), import_section, section flags.

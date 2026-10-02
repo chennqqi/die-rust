@@ -431,7 +431,7 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 | 通用 pass | signature/string/const/resources/memory/exp scan | ✅ 对齐（ft 过滤、记录名去重） | |
 | BINARY dispatch | `NFD_Binary::getInfo` | ✅ header + archive 表 | |
 | MSDOS | `NFD_MSDOS::getInfo` | ✅ header + entrypoint + exp scan + extender/vintage 横幅 | WDOSX@0x34 常开，CWSDPMI/DOS4G/DOS16M/vintage 编译器仅 deep scan |
-| PE32/PE64 | `NFD_PE::getInfo` | ⚠ partial | header/EP 链(NOP/JZ/E9-follow)/import hash/resources/section names/Rich/deep section；heuristic `handle_*` 未移植 |
+| PE32/PE64 | `NFD_PE::getInfo` | ⚠ partial | header/EP 链/import hash/resources/section names/Rich/deep section + `handle_OperationSystem`（subsystem→OS+Windows 版本表+64 位下限）+ `handle_import`（ZProtect/PESpin/Alloy 有序导入模式）+ `handle_DebugData`（stab/DWARF）+ `handle_Microsoft` 非 Rich 子集（MFC 导入/静态、VB4-6+P-Code、linker 版本兜底、VS build/linker 版本表 158+46 条、.NET 元数据版本）；Rich→工具描述链与其余 protection `handle_*` 未移植 |
 | COM | `NFD_COM::getInfo` | ✅ header + exp scan @0 | .com 后缀 + ≤64KiB 判定 |
 | NE | `NFD_NE::getInfo` | ⚠ partial | linker header + CS:IP 段表 EP scan；heuristics 未移植 |
 | LE/LX | `NFD_LE/LX::getInfo` | ⚠ partial | linker header 表；heuristics 未移植 |
