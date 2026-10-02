@@ -981,3 +981,97 @@ fn pe32_cert_and_dongle_handlers() {
         "no dongle record: {out:?}"
     );
 }
+
+/// PE32 with Pascal metadata in `.text` (`\x07TObject` + `\x06string`)
+/// — exercises `handle_Borland` Delphi path (Delphi 2 + Object Pascal
+/// 9.0 + inferred TurboLinker).
+fn pe32_delphi_fixture() -> Vec<u8> {
+    let mut d = vec![0u8; 0x800];
+    d[0..2].copy_from_slice(b"MZ");
+    d[0x3C..0x40].copy_from_slice(&0x40u32.to_le_bytes());
+    d[0x40..0x44].copy_from_slice(b"PE\0\0");
+    d[0x44..0x46].copy_from_slice(&0x014Cu16.to_le_bytes());
+    d[0x46..0x48].copy_from_slice(&1u16.to_le_bytes());
+    d[0x54..0x56].copy_from_slice(&0xE0u16.to_le_bytes());
+    d[0x56..0x58].copy_from_slice(&0x010Fu16.to_le_bytes());
+    let opt = 0x58;
+    d[opt..opt + 2].copy_from_slice(&0x010Bu16.to_le_bytes());
+    d[opt + 2] = 2;
+    d[opt + 3] = 1;
+    d[opt + 16..opt + 20].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[opt + 28..opt + 32].copy_from_slice(&0x0040_0000u32.to_le_bytes());
+    d[opt + 32..opt + 36].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[opt + 36..opt + 40].copy_from_slice(&0x200u32.to_le_bytes());
+    d[opt + 92..opt + 96].copy_from_slice(&16u32.to_le_bytes());
+    let sec = opt + 0xE0;
+    d[sec..sec + 5].copy_from_slice(b".text");
+    d[sec + 8..sec + 12].copy_from_slice(&0x200u32.to_le_bytes());
+    d[sec + 12..sec + 16].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[sec + 16..sec + 20].copy_from_slice(&0x200u32.to_le_bytes());
+    d[sec + 20..sec + 24].copy_from_slice(&0x200u32.to_le_bytes());
+    d[sec + 36..sec + 40].copy_from_slice(&0x6000_0020u32.to_le_bytes());
+    // Length-prefixed Pascal type names in the code section.
+    d[0x200..0x208].copy_from_slice(b"\x07TObject");
+    d[0x210..0x217].copy_from_slice(b"\x06string");
+    d
+}
+
+#[test]
+fn pe32_delphi_handler() {
+    let d = pe32_delphi_fixture();
+    let (ft, out) = show("pe32-delphi-synth", &d);
+    assert_eq!(ft_name(ft), "FT_PE32");
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Borland Delphi" && r.version == "2"),
+        "no Borland Delphi 2 tool: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name.contains("Object Pascal") && r.version == "9.0"),
+        "no Object Pascal 9.0 compiler: {out:?}"
+    );
+    assert!(
+        out.iter().any(|r| r.record_name == "Turbo linker"),
+        "no inferred TurboLinker: {out:?}"
+    );
+}
+
+/// PE32 with "Borland C++ - Copyright 1994" in a DATA section —
+/// C++Builder path of `handle_Borland`.
+fn pe32_bcb_fixture() -> Vec<u8> {
+    let mut d = pe32_delphi_fixture();
+    // Second section: DATA (rdata-like, writable) holding the banner.
+    let opt = 0x58;
+    let s0 = opt + 0xE0;
+    d[0x46..0x48].copy_from_slice(&2u16.to_le_bytes()); // 2 sections
+    let s1 = s0 + 40;
+    d[s1..s1 + 4].copy_from_slice(b"DATA");
+    d[s1 + 8..s1 + 12].copy_from_slice(&0x200u32.to_le_bytes());
+    d[s1 + 12..s1 + 16].copy_from_slice(&0x2000u32.to_le_bytes());
+    d[s1 + 16..s1 + 20].copy_from_slice(&0x200u32.to_le_bytes());
+    d[s1 + 20..s1 + 24].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s1 + 36..s1 + 40].copy_from_slice(&0xC000_0040u32.to_le_bytes());
+    // Remove the lowercase-string marker so the C++ copyright path wins
+    // (string_l would otherwise classify as Delphi).
+    d[0x210..0x217].copy_from_slice(&[0u8; 7]);
+    let banner = b"Borland C++ - Copyright 1994 Borland Intl.\0";
+    d[0x400..0x400 + banner.len()].copy_from_slice(banner);
+    d
+}
+
+#[test]
+fn pe32_bcb_handler() {
+    let d = pe32_bcb_fixture();
+    let (ft, out) = show("pe32-bcb-synth", &d);
+    assert_eq!(ft_name(ft), "FT_PE32");
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Borland C++" && r.version == "1994"),
+        "no Borland C++ 1994 compiler: {out:?}"
+    );
+    assert!(
+        out.iter().any(|r| r.record_name == "Borland C++ Builder"),
+        "no C++ Builder tool: {out:?}"
+    );
+}

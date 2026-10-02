@@ -1109,3 +1109,1087 @@ pub fn joiners(
         );
     }
 }
+
+/// `get_TurboLinker_vi`: byte@0x1E == 0xFB → version = byte@0x1F/16.0
+/// formatted "%.1f" (Turbo Linker version stored in the MZ header).
+fn turbo_linker_vi(data: &[u8]) -> Option<String> {
+    if !data.is_empty() && *data.get(0x1E)? == 0xFB {
+        let v = *data.get(0x1F)? as f64 / 16.0;
+        Some(format!("{v:.1}"))
+    } else {
+        None
+    }
+}
+
+/// `getVCLstruct`: scan `[off, off+size)` for `\x07\x08"TControl"`;
+/// the dword at +10 is a VA pointer — resolve via `va_to_off`, then walk
+/// back ≤20 `addr_size` slots for the first value ≤0xFFFF. Returns
+/// `(nOffset, nValue)` of each hit.
+fn vcl_structs(data: &[u8], pe: &PeInfo, off: usize, size: usize, is64: bool) -> Vec<(u32, u32)> {
+    let pat: &[u8] = b"\x07\x08TControl";
+    let addr_size: u32 = if is64 { 8 } else { 4 };
+    let mut out = Vec::new();
+    let mut cur = off;
+    let mut rem = size;
+    while rem > pat.len() && out.len() < 64 {
+        let Some(hit) = crate::parse::find_ansi(data, cur, rem, pat) else {
+            break;
+        };
+        // `find_array` is a raw byte scan; find_ansi suffices (pattern
+        // contains no NUL terminators semantics).
+        if let Some(dw) = crate::parse::rd_u32(data, hit + 10)
+            && let Some(co2) = pe.va_to_off(dw)
+        {
+            for i in 0..20u32 {
+                let back = addr_size * (i + 1);
+                let Some(v) = co2
+                    .checked_sub(back as usize)
+                    .and_then(|o| crate::parse::rd_u32(data, o))
+                else {
+                    break;
+                };
+                if v <= 0xFFFF {
+                    out.push((back, v));
+                    break;
+                }
+            }
+        }
+        let delta = (hit - cur) + 1;
+        cur += delta;
+        rem = rem.saturating_sub(delta);
+    }
+    out
+}
+
+/// `getVCLPackageInfo` subset: PACKAGEINFO resource (type 10) →
+/// `(flags, modules_count)`; used only for the producer-bit override
+/// (`(flags >> 26) & 3`: 2=C++, 3=Pascal) gated on `modules > 0`.
+fn vcl_package_info(data: &[u8], res: &[crate::scans::ResourceEntry]) -> (u32, usize) {
+    let Some(pkg) = res
+        .iter()
+        .find(|r| r.id1 == 10 && r.name2.as_deref() == Some("PACKAGEINFO") && r.data_size != 0)
+    else {
+        return (0, 0);
+    };
+    let mut off = pkg.data_off;
+    let Some(flags) = crate::parse::rd_u32(data, off) else {
+        return (0, 0);
+    };
+    if flags & 0xFF00 != 0 {
+        return (0, 0);
+    }
+    off += 4;
+    let Some(unknown) = crate::parse::rd_u32(data, off) else {
+        return (flags, 0);
+    };
+    let mut count = 0usize;
+    let mut requires = 0u32;
+    if unknown == 0 {
+        off += 4;
+        requires = crate::parse::rd_u32(data, off).unwrap_or(0);
+        off += 4;
+    } else {
+        off += 3;
+    }
+    let limit = if requires != 0 {
+        requires as usize
+    } else {
+        1000
+    };
+    for _ in 0..limit.min(4096) {
+        if off.saturating_sub(pkg.data_off) > pkg.data_size {
+            break;
+        }
+        let Some(flags8) = data.get(off) else { break };
+        let _ = flags8;
+        off += 2; // module flags + hashcode
+        let Some(name) = crate::parse::read_ansi_string(data, off) else {
+            break;
+        };
+        off += name.len() + 1;
+        count += 1;
+    }
+    (flags, count)
+}
+
+/// `_get_DelphiVersionFromCompiler`: first word → Delphi release name;
+/// any non-empty unknown value maps to "12.x Athens++" (upstream default).
+fn delphi_version_from_compiler(s: &str) -> Option<&'static str> {
+    let word = s.split(' ').next().unwrap_or("");
+    if word.is_empty() {
+        return None;
+    }
+    Some(match word {
+        "28.0" => "XE7",
+        "29.0" => "XE8",
+        "30.0" => "10 Seattle",
+        "31.0" => "10.1 Berlin",
+        "32.0" => "10.2 Tokyo",
+        "33.0" => "10.3 Rio",
+        "34.0" => "10.4 Sydney",
+        "35.0" => "11.0 Alexandria",
+        "36.0" => "12.0 Athens",
+        _ => "12.x Athens++",
+    })
+}
+
+/// `handle_Borland` — Turbo Linker header vi, Delphi/C++Builder
+/// detection via `.text` Pascal-metadata arrays (`TObject`/`Boolean`/
+/// `string`/`String`), VCL TControl back-pointer fingerprint,
+/// PACKAGEINFO producer override, C++ copyright strings in the data
+/// section, `__CPPdebugHook` exports, PACKAGEINFO/DVCLAL resources and
+/// EP BORLANDCPP records.
+#[allow(clippy::too_many_arguments)]
+pub fn borland(
+    data: &[u8],
+    pe: &PeInfo,
+    deep: bool,
+    ftpe: u16,
+    header: &DetectMap,
+    entrypoint: &DetectMap,
+    misc: &mut DetectMap,
+) {
+    #[derive(Clone, Copy, PartialEq)]
+    enum Company {
+        Borland,
+        Codegear,
+        Embarcadero,
+    }
+
+    let mut linker: Option<(u16, String)> = None;
+    let mut compiler: Option<(u16, String)> = None;
+    let mut tool: Option<(u16, String)> = None;
+    let mut vcl: Option<(u16, String)> = None;
+
+    if let Some(rec) = header.get(&n::RECORD_NAME_TURBOLINKER) {
+        let ver = turbo_linker_vi(data)
+            .unwrap_or_else(|| format!("{}.{:02}", pe.major_linker, pe.minor_linker));
+        linker = Some((rec.name, ver));
+    }
+
+    if !pe.is_dotnet {
+        let (mut t_object, mut string_l, mut string_u) = (false, false, false);
+        let (mut borland_cpp, mut codegear_cpp, mut emb_old, mut emb_new) =
+            (false, false, false, false);
+        let mut vcl_list: Vec<(u32, u32)> = Vec::new();
+
+        let cpp_export = pe
+            .export_names
+            .iter()
+            .any(|s| s == "__CPPdebugHook" || s == "___CPPdebugHook");
+
+        if deep && let Some((off, size)) = pe.code_section_extent(data) {
+            let sz = size.min(1 << 22);
+            t_object = crate::parse::find_ansi(data, off, sz, b"\x07TObject").is_some();
+            if t_object {
+                let boolean_s = crate::parse::find_ansi(data, off, sz, b"\x07Boolean").is_some();
+                string_l = crate::parse::find_ansi(data, off, sz, b"\x06string").is_some();
+                if boolean_s || string_l {
+                    if !string_l {
+                        string_u = crate::parse::find_ansi(data, off, sz, b"\x06String").is_some();
+                    }
+                    vcl_list = vcl_structs(data, pe, off, sz, pe.is64);
+                }
+            }
+        }
+        if deep && let Some(ds) = normal_data_section(pe) {
+            let (off, sz) = (ds.off, ds.size.min(1 << 22));
+            borland_cpp =
+                crate::parse::find_ansi(data, off, sz, b"Borland C++ - Copyright ").is_some();
+            if !borland_cpp {
+                codegear_cpp =
+                    crate::parse::find_ansi(data, off, sz, b"CodeGear C++ - Copyright ").is_some();
+                if !codegear_cpp {
+                    emb_old = crate::parse::find_ansi(
+                        data,
+                        off,
+                        sz,
+                        b"Embarcadero RAD Studio - Copyright ",
+                    )
+                    .is_some();
+                    if !emb_old {
+                        emb_new = crate::parse::find_ansi(
+                            data,
+                            off,
+                            sz,
+                            b"Embarcadero RAD Studio 27.0 - Copyright 2020 Embarcadero Technologies, Inc.",
+                        )
+                        .is_some();
+                    }
+                }
+            }
+        }
+
+        let res = crate::pe::collect_resources(data);
+        let pkg = res
+            .iter()
+            .any(|r| r.id1 == 10 && r.name2.as_deref() == Some("PACKAGEINFO"));
+        let dvcal = res
+            .iter()
+            .any(|r| r.id1 == 10 && r.name2.as_deref() == Some("DVCLAL"));
+        let ep_bcpp = entrypoint.contains_key(&n::RECORD_NAME_BORLANDCPP);
+
+        if pkg
+            || dvcal
+            || ep_bcpp
+            || t_object
+            || borland_cpp
+            || codegear_cpp
+            || emb_old
+            || emb_new
+            || cpp_export
+        {
+            let mut cpp = false;
+            let mut vcl_b = pkg;
+            let mut delphi_ver = String::new();
+
+            let mut objpas_ver = String::new();
+            let mut cpp_ver = String::new();
+            let mut new_version = false;
+            let mut company = Company::Borland;
+
+            if ep_bcpp || borland_cpp || codegear_cpp || emb_old || emb_new || cpp_export {
+                cpp = true;
+                company = if borland_cpp {
+                    Company::Borland
+                } else if codegear_cpp {
+                    Company::Codegear
+                } else {
+                    Company::Embarcadero
+                };
+            }
+            if t_object {
+                if string_l {
+                    if dvcal || pkg {
+                        delphi_ver = "2005+".to_string();
+                        new_version = true;
+                    } else {
+                        delphi_ver = "2".to_string();
+                        objpas_ver = "9.0".to_string();
+                    }
+                } else if string_u {
+                    company = Company::Borland;
+                    delphi_ver = "3-7".to_string();
+                }
+            }
+            if pkg {
+                let (flags, modules) = vcl_package_info(data, &res);
+                if modules > 0 {
+                    match (flags >> 26) & 0x3 {
+                        2 => cpp = true,
+                        3 => cpp = false,
+                        _ => {}
+                    }
+                }
+            }
+            // Copyright-string version reads (fixed tail offsets).
+            if borland_cpp {
+                if let Some(ds) = normal_data_section(pe)
+                    && let Some(h) = crate::parse::find_ansi(
+                        data,
+                        ds.off,
+                        ds.size.min(1 << 22),
+                        b"Borland C++ - Copyright ",
+                    )
+                {
+                    cpp_ver =
+                        crate::parse::read_ansi_string_len(data, h + 24, 4).unwrap_or_default();
+                }
+            } else if codegear_cpp {
+                if let Some(ds) = normal_data_section(pe)
+                    && let Some(h) = crate::parse::find_ansi(
+                        data,
+                        ds.off,
+                        ds.size.min(1 << 22),
+                        b"CodeGear C++ - Copyright ",
+                    )
+                {
+                    cpp_ver =
+                        crate::parse::read_ansi_string_len(data, h + 25, 4).unwrap_or_default();
+                }
+            } else if emb_old {
+                if let Some(ds) = normal_data_section(pe)
+                    && let Some(h) = crate::parse::find_ansi(
+                        data,
+                        ds.off,
+                        ds.size.min(1 << 22),
+                        b"Embarcadero RAD Studio - Copyright ",
+                    )
+                {
+                    cpp_ver =
+                        crate::parse::read_ansi_string_len(data, h + 35, 4).unwrap_or_default();
+                }
+            } else if emb_new
+                && let Some(ds) = normal_data_section(pe)
+                && let Some(h) = crate::parse::find_ansi(
+                    data,
+                    ds.off,
+                    ds.size.min(1 << 22),
+                    b"Embarcadero RAD Studio 27.0 - Copyright 2020 Embarcadero Technologies, Inc.",
+                )
+            {
+                cpp_ver = crate::parse::read_ansi_string_len(data, h + 40, 4).unwrap_or_default();
+            }
+            let builder_ver: String = match cpp_ver.as_str() {
+                "2009" => "2009",
+                "2015" => "2015",
+                "2020" => "10.4",
+                _ => "",
+            }
+            .to_string();
+
+            if let Some(&(n_off, n_val)) = vcl_list.first() {
+                vcl_b = true;
+                for (o, v, comp, dv, ov, nv) in [
+                    (24u32, 168u32, Company::Borland, "2", "9.0", false),
+                    (28, 180, Company::Borland, "3", "10.0", false),
+                    (40, 276, Company::Borland, "4", "12.0", false),
+                    (40, 288, Company::Borland, "5", "13.0", false),
+                    (40, 296, Company::Borland, "6 CLX", "14.0", false),
+                    (40, 300, Company::Borland, "7 CLX", "15.0", false),
+                    (40, 348, Company::Borland, "6-7", "14.0-15.0", false),
+                    (40, 356, Company::Borland, "2005", "17.0", false),
+                    (40, 400, Company::Borland, "2006", "18.0", false),
+                    (52, 420, Company::Embarcadero, "2009", "20.0", false),
+                    (52, 428, Company::Embarcadero, "2010-XE", "21.0-22.0", false),
+                    (52, 436, Company::Embarcadero, "XE2-XE4", "23.0-25.0", true),
+                    (52, 444, Company::Embarcadero, "XE2-XE8", "23.0-29.0", true),
+                    (104, 760, Company::Embarcadero, "XE2", "23.0", true),
+                    (
+                        128,
+                        776,
+                        Company::Embarcadero,
+                        "XE8-10 Seattle",
+                        "30.0",
+                        true,
+                    ),
+                ] {
+                    if n_off == o && n_val == v {
+                        company = comp;
+                        delphi_ver = dv.to_string();
+                        objpas_ver = ov.to_string();
+                        new_version = nv;
+                        break;
+                    }
+                }
+            }
+            if new_version
+                && deep
+                && let Some(cs) = const_data_section(pe)
+            {
+                let sz = cs.size.min(1 << 22);
+                let needle: &[u8] = if pe.is64 {
+                    b"Embarcadero Delphi for Win64 compiler version "
+                } else {
+                    b"Embarcadero Delphi for Win32 compiler version "
+                };
+                if let Some(h) = crate::parse::find_ansi(data, cs.off, sz, needle) {
+                    company = Company::Embarcadero;
+                    objpas_ver = crate::parse::read_ansi_string(data, h + 46).unwrap_or_default();
+                    delphi_ver = delphi_version_from_compiler(&objpas_ver)
+                        .unwrap_or("")
+                        .to_string();
+                }
+            }
+
+            // Record selection.
+            if !cpp {
+                let (cn, tn) = match company {
+                    Company::Borland => (
+                        n::RECORD_NAME_BORLANDOBJECTPASCALDELPHI,
+                        n::RECORD_NAME_BORLANDDELPHI,
+                    ),
+                    Company::Codegear => (
+                        n::RECORD_NAME_CODEGEAROBJECTPASCALDELPHI,
+                        n::RECORD_NAME_CODEGEARDELPHI,
+                    ),
+                    Company::Embarcadero => (
+                        n::RECORD_NAME_EMBARCADEROOBJECTPASCALDELPHI,
+                        n::RECORD_NAME_EMBARCADERODELPHI,
+                    ),
+                };
+                compiler = Some((cn, objpas_ver));
+                tool = Some((tn, delphi_ver));
+            } else {
+                let (cn, tn) = match company {
+                    Company::Borland => {
+                        (n::RECORD_NAME_BORLANDCPP, n::RECORD_NAME_BORLANDCPPBUILDER)
+                    }
+                    Company::Codegear => (
+                        n::RECORD_NAME_CODEGEARCPP,
+                        n::RECORD_NAME_CODEGEARCPPBUILDER,
+                    ),
+                    Company::Embarcadero => (
+                        n::RECORD_NAME_EMBARCADEROCPP,
+                        n::RECORD_NAME_EMBARCADEROCPPBUILDER,
+                    ),
+                };
+                compiler = Some((cn, cpp_ver));
+                tool = Some((tn, builder_ver));
+            }
+            if vcl_b {
+                // Upstream quirk: sVCLVersion assignments are all
+                // commented out — VCL records carry an empty version.
+                vcl = Some((n::RECORD_NAME_VCL, String::new()));
+            }
+            if linker.is_none() {
+                linker = Some((n::RECORD_NAME_TURBOLINKER, String::new()));
+            }
+        }
+    }
+
+    if let Some((nm, ver)) = linker {
+        emit(misc, ftpe, rt::RECORD_TYPE_LINKER, nm, &ver, "");
+    }
+    if let Some((nm, ver)) = compiler {
+        emit(misc, ftpe, rt::RECORD_TYPE_COMPILER, nm, &ver, "");
+    }
+    if let Some((nm, ver)) = vcl {
+        emit(misc, ftpe, rt::RECORD_TYPE_LIBRARY, nm, &ver, "");
+    }
+    if let Some((nm, ver)) = tool {
+        emit(misc, ftpe, rt::RECORD_TYPE_TOOL, nm, &ver, "");
+    }
+}
+
+/// UTF-16LE substring search (`find_unicodeString` with bIsBigEndian=0).
+fn find_utf16le(data: &[u8], off: usize, size: usize, needle: &str) -> Option<usize> {
+    let mut pat = Vec::with_capacity(needle.len() * 2);
+    for c in needle.encode_utf16() {
+        pat.extend(c.to_le_bytes());
+    }
+    crate::parse::find_ansi(data, off, size, &pat)
+}
+
+/// `XBinary::getVersionString`: trim a string to its version-shaped
+/// prefix (`[\d.]`-ish words, e.g. "1.20.5 windows/amd64" → "1.20.5").
+fn version_string(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        if c.is_ascii_digit() || c == '.' {
+            out.push(c);
+        } else if !out.is_empty() {
+            break;
+        }
+    }
+    while out.ends_with('.') {
+        out.pop();
+    }
+    out
+}
+
+/// `XBinary::getVersionIntValue` — pack a dotted version for ordering.
+fn version_value(s: &str) -> u64 {
+    let mut v = 0u64;
+    for (i, p) in s.split('.').take(4).enumerate() {
+        let n: u64 = p.parse().unwrap_or(0).min(0xFFFF);
+        v |= n << (48 - i * 16);
+    }
+    v
+}
+
+/// `get_Go_vi`: scan for "go1." strings, keep the max `go1.x[.y]`.
+fn go_vi(data: &[u8], off: usize, size: usize) -> Option<(String, String)> {
+    let mut cur = off;
+    let mut rem = size;
+    let mut best = (0u64, String::new());
+    while rem > 4 {
+        let Some(hit) = crate::parse::find_ansi(data, cur, rem, b"go1.") else {
+            break;
+        };
+        let s = crate::parse::read_ansi_string_len(data, hit + 2, 10).unwrap_or_default();
+        let ver = version_string(&s);
+        let val = version_value(&ver);
+        if val > best.0 {
+            best = (val, ver);
+        }
+        let delta = (hit - cur) + 1;
+        cur += delta;
+        rem = rem.saturating_sub(delta);
+    }
+    if best.0 == 0 {
+        None
+    } else {
+        Some((best.1, String::new()))
+    }
+}
+
+/// `handle_Tools` — tool/compiler/library heuristics that do not fit
+/// other buckets: Rust/Go/Zig/Nim compilers, AutoIt, TinyC section
+/// shape, Crashpad/ExcelsiorJET/Qt/FPC/Lazarus/Python/Perl/FlexLM and
+/// linker-detect→record chains (FASM, GoLink, UNILINK, DMD32, …).
+///
+/// Deferred upstream sub-branches: version-resource lookups
+/// (`getResourcesVersionValue`/`getFileVersionMS` for AutoIt 2.XX) and
+/// `mapDotAnsiStringsDetects`-gated paths.
+#[allow(clippy::too_many_arguments)]
+pub fn tools(
+    data: &[u8],
+    pe: &PeInfo,
+    deep: bool,
+    ftpe: u16,
+    header: &DetectMap,
+    overlay: &DetectMap,
+    entrypoint: &DetectMap,
+    section_names: &DetectMap,
+    code_section: &DetectMap,
+    misc: &mut DetectMap,
+) {
+    let _ = overlay;
+    let cd = if deep { const_data_section(pe) } else { None };
+    let cd_rng = cd.map(|s| (s.off, s.size.min(1 << 22)));
+
+    // Rust: TLS dir + EP RUST record + "Local\RustBacktraceMutex".
+    if pe.tls_present
+        && let Some(rec) = entrypoint.get(&n::RECORD_NAME_RUST)
+        && let Some((off, sz)) = cd_rng
+        && crate::parse::find_ansi(data, off, sz, b"Local\\RustBacktraceMutex").is_some()
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_COMPILER,
+            n::RECORD_NAME_RUST,
+            "",
+            &rec.info,
+        );
+    }
+
+    // AutoIt 3.x: RT_RCDATA "SCRIPT" resource.
+    let res = crate::pe::collect_resources(data);
+    let has_rcdata = |nm: &str| {
+        res.iter()
+            .any(|r| r.id1 == 10 && r.name2.as_deref() == Some(nm))
+    };
+    if has_rcdata("SCRIPT") {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_LIBRARY,
+            n::RECORD_NAME_AUTOIT,
+            "3.XX",
+            "",
+        );
+    }
+    // (AutoIt 2.XX FileDescription/version-resource branch deferred.)
+
+    // TinyC: msvcrt.dll import + linker 6.0 + exact section shapes.
+    if has_lib(pe, "msvcrt.dll") && pe.major_linker == 6 && pe.minor_linker == 0 {
+        let names: Vec<&str> = pe.extents.iter().map(|s| s.name.as_str()).collect();
+        let nsec = names.len();
+        let (mut detected, mut debug) = (false, false);
+        if pe.is64 {
+            if (nsec == 3 || nsec == 5)
+                && names.first() == Some(&".TEXT")
+                && names.get(1) == Some(&".DATA")
+                && names.get(2) == Some(&".PDATA")
+            {
+                if nsec == 3 {
+                    detected = true;
+                } else if names.get(3) == Some(&".STAB") && names.get(4) == Some(&".STABSTR") {
+                    debug = true;
+                    detected = true;
+                }
+            }
+        } else if (nsec == 2 || nsec == 4)
+            && names.first() == Some(&".TEXT")
+            && names.get(1) == Some(&".DATA")
+        {
+            if nsec == 2 {
+                detected = true;
+            } else if names.get(2) == Some(&".STAB") && names.get(3) == Some(&".STABSTR") {
+                debug = true;
+                detected = true;
+            }
+        }
+        if detected {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_COMPILER,
+                n::RECORD_NAME_TINYC,
+                "",
+                if debug { "debug" } else { "" },
+            );
+        }
+    }
+
+    // Chromium Crashpad: CPADinfo section, signature 0x43506164.
+    if section_names.contains_key(&n::RECORD_NAME_CHROMIUMCRASHPAD)
+        && let Some(sec) = pe
+            .extents
+            .iter()
+            .find(|s| s.name.eq_ignore_ascii_case("CPADinfo"))
+        && crate::parse::rd_u32(data, sec.off) == Some(0x4350_6164)
+    {
+        let v = crate::parse::rd_u32(data, sec.off + 8).unwrap_or(0);
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_LIBRARY,
+            n::RECORD_NAME_CHROMIUMCRASHPAD,
+            &format!("{v}.0"),
+            "",
+        );
+    }
+
+    // Excelsior JET: section-name detect → Java(Native) lib + compiler.
+    if section_names.contains_key(&n::RECORD_NAME_EXCELSIORJET) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_LIBRARY,
+            n::RECORD_NAME_JAVA,
+            "",
+            "Native",
+        );
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_COMPILER,
+            n::RECORD_NAME_EXCELSIORJET,
+            "",
+            "",
+        );
+    }
+
+    // Go compiler.
+    if section_names.contains_key(&n::RECORD_NAME_GO)
+        || code_section.contains_key(&n::RECORD_NAME_GO)
+    {
+        let mut ver = "1.X".to_string();
+        if let Some((off, sz)) = cd_rng
+            && let Some((v, _)) = go_vi(data, off, sz)
+        {
+            ver = v;
+        }
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_COMPILER,
+            n::RECORD_NAME_GO,
+            &ver,
+            "",
+        );
+    }
+
+    // Visual Objects: DOS stub carries a distinctive banner @0x312.
+    if data.len() > 0x312
+        && crate::parse::find_ansi(
+            data,
+            0x312,
+            data.len() - 0x312,
+            b"This Visual Objects application cannot be run in DOS mode",
+        ) == Some(0x312)
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_COMPILER,
+            n::RECORD_NAME_VISUALOBJECTS,
+            "2.XX",
+            "",
+        );
+    }
+
+    // FASM header detect → linker-version fill.
+    if header.contains_key(&n::RECORD_NAME_FASM) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_COMPILER,
+            n::RECORD_NAME_FASM,
+            &format!("{}.{}", pe.major_linker, pe.minor_linker),
+            "",
+        );
+    }
+
+    // IExpress SFX marker in const data.
+    if let Some((off, sz)) = cd_rng
+        && crate::parse::find_ansi(data, off, sz, b"POSTRUNPROGRAM").is_some()
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_SFX,
+            n::RECORD_NAME_IEXPRESS,
+            "",
+            "",
+        );
+    }
+
+    // LLD linker: ".buildid" section or "LLD PDB." in const data.
+    let b_lld = pe
+        .extents
+        .iter()
+        .any(|s| s.name.eq_ignore_ascii_case(".buildid"))
+        || cd_rng
+            .is_some_and(|(off, sz)| crate::parse::find_ansi(data, off, sz, b"LLD PDB.").is_some());
+    if b_lld {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_LINKER,
+            n::RECORD_NAME_LLD,
+            &format!("{}.{}", pe.major_linker, pe.minor_linker),
+            "",
+        );
+    }
+
+    // Zig: GENERICLINKER variant 1 + ZIG_* marker strings.
+    if let Some(rec) = header.get(&n::RECORD_NAME_GENERICLINKER)
+        && rec.variant == 1
+        && let Some((off, sz)) = cd_rng
+        && (crate::parse::find_ansi(data, off, sz, b"ZIG_DEBUG_COLOR").is_some()
+            || crate::parse::find_ansi(data, off, sz, b"ZIG_PROGRESS").is_some()
+            || find_utf16le(data, off, sz, "ZIG_DEBUG_COLOR").is_some()
+            || find_utf16le(data, off, sz, "ZIG_PROGRESS").is_some())
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_COMPILER,
+            n::RECORD_NAME_ZIG,
+            "",
+            "",
+        );
+    }
+
+    // Nim: io.nim/fatal.nim strings in const data.
+    if let Some((off, sz)) = cd_rng
+        && (crate::parse::find_ansi(data, off, sz, b"io.nim").is_some()
+            || crate::parse::find_ansi(data, off, sz, b"fatal.nim").is_some())
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_COMPILER,
+            n::RECORD_NAME_NIM,
+            "",
+            "",
+        );
+    }
+
+    // Header-detect → record chains.
+    if header.contains_key(&n::RECORD_NAME_VALVE) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_STUB,
+            n::RECORD_NAME_VALVE,
+            "",
+            "",
+        );
+    }
+    if header.contains_key(&n::RECORD_NAME_UNILINK) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_LINKER,
+            n::RECORD_NAME_UNILINK,
+            "",
+            "",
+        );
+    }
+    if header.contains_key(&n::RECORD_NAME_DMD32) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_COMPILER,
+            n::RECORD_NAME_DMD32,
+            "",
+            "",
+        );
+    }
+    if header.contains_key(&n::RECORD_NAME_GOLINK) {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_LINKER,
+            n::RECORD_NAME_GOLINK,
+            &format!("{}.{}", pe.major_linker, pe.minor_linker),
+            "",
+        );
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_COMPILER,
+            n::RECORD_NAME_GOASM,
+            "",
+            "",
+        );
+    }
+    if header.contains_key(&n::RECORD_NAME_LAYHEYFORTRAN90)
+        && crate::parse::read_ansi_string(data, 0x200).as_deref()
+            == Some(
+                "This program must be run under Windows 95, NT, or Win32s\r\nPress any key to exit.$",
+            )
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_COMPILER,
+            n::RECORD_NAME_LAYHEYFORTRAN90,
+            "",
+            "",
+        );
+    }
+
+    // FLEXlm/FlexNet licensing strings in the data section.
+    if deep && let Some(ds) = normal_data_section(pe) {
+        let (off, sz) = (ds.off, ds.size.min(1 << 22));
+        if let Some(h) = crate::parse::find_ansi(data, off, sz, b"@(#) FLEXlm ") {
+            let mut v = crate::parse::read_ansi_string_len(data, h + 12, 50).unwrap_or_default();
+            v = v.split(' ').next().unwrap_or("").to_string();
+            if let Some(stripped) = v.strip_prefix('v') {
+                v = stripped.to_string();
+            }
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_LIBRARY,
+                n::RECORD_NAME_FLEXLM,
+                &v,
+                "",
+            );
+        } else {
+            let h = crate::parse::find_ansi(data, off, sz, b"@(#) FLEXnet Licensing v")
+                .or_else(|| crate::parse::find_ansi(data, off, sz, b"@(#) FlexNet Licensing v"));
+            if let Some(h) = h {
+                let mut v =
+                    crate::parse::read_ansi_string_len(data, h + 24, 50).unwrap_or_default();
+                v = if v.contains("build") {
+                    v.split(' ').take(3).collect::<Vec<_>>().join(" ")
+                } else {
+                    v.split(' ').next().unwrap_or("").to_string()
+                };
+                emit(
+                    misc,
+                    ftpe,
+                    rt::RECORD_TYPE_LIBRARY,
+                    n::RECORD_NAME_FLEXNET,
+                    &v,
+                    "",
+                );
+            }
+        }
+    }
+
+    if !pe.is_dotnet {
+        // Qt runtime libraries.
+        for (lib, ver, dbg) in [
+            ("QtCore4.dll", "4.X", ""),
+            ("QtCored4.dll", "4.X", "Debug"),
+            ("Qt5Core.dll", "5.X", ""),
+            ("Qt5Cored.dll", "5.X", "Debug"),
+            ("Qt6Core.dll", "6.X", ""),
+            ("Qt6Cored.dll", "6.X", "Debug"),
+        ] {
+            if pe
+                .import_headers
+                .iter()
+                .any(|h| h.name.eq_ignore_ascii_case(lib))
+            {
+                emit(
+                    misc,
+                    ftpe,
+                    rt::RECORD_TYPE_LIBRARY,
+                    n::RECORD_NAME_QT,
+                    ver,
+                    dbg,
+                );
+                break;
+            }
+        }
+        if !misc.contains_key(&n::RECORD_NAME_QT)
+            && let Some(rec) = section_names.get(&n::RECORD_NAME_QT)
+        {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_LIBRARY,
+                n::RECORD_NAME_QT,
+                &rec.version,
+                &rec.info,
+            );
+        }
+
+        // Free Pascal + Lazarus.
+        if let Some(ds) = normal_data_section(pe).filter(|_| deep) {
+            let (off, sz) = (ds.off, ds.size.min(1 << 22));
+            if let Some(h) = crate::parse::find_ansi(data, off, sz, b"FPC ") {
+                let s = crate::parse::read_ansi_string(data, h).unwrap_or_default();
+                // section(" ",1,-1).section(" - ",0,0)
+                let ver = s
+                    .split(' ')
+                    .skip(1)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .split(" - ")
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                emit(
+                    misc,
+                    ftpe,
+                    rt::RECORD_TYPE_COMPILER,
+                    n::RECORD_NAME_FPC,
+                    &ver,
+                    "",
+                );
+                let laz = crate::parse::find_ansi(data, off, sz, b"Lazarus LCL: ").or_else(|| {
+                    cd_rng.and_then(|(co, cs)| {
+                        crate::parse::find_ansi(data, co, cs, b"Lazarus LCL: ")
+                    })
+                });
+                if let Some(lh) = laz {
+                    let lv = crate::parse::read_ansi_string(data, lh + 13)
+                        .unwrap_or_default()
+                        .split(' ')
+                        .next()
+                        .unwrap_or("")
+                        .to_string();
+                    emit(
+                        misc,
+                        ftpe,
+                        rt::RECORD_TYPE_TOOL,
+                        n::RECORD_NAME_LAZARUS,
+                        &lv,
+                        "",
+                    );
+                }
+            } else if crate::parse::find_ansi(data, off, sz, b"\x0eRuntime error ").is_some() {
+                emit(
+                    misc,
+                    ftpe,
+                    rt::RECORD_TYPE_COMPILER,
+                    n::RECORD_NAME_FPC,
+                    "",
+                    "",
+                );
+            }
+        }
+
+        // Python/Perl runtime DLLs → library versions.
+        for ih in &pe.import_headers {
+            let up = ih.name.to_ascii_uppercase();
+            if up.starts_with("PYTHON") {
+                let digits: String = up.chars().filter(|c| c.is_ascii_digit()).collect();
+                if let Ok(dv) = digits.parse::<f64>()
+                    && dv != 0.0
+                {
+                    emit(
+                        misc,
+                        ftpe,
+                        rt::RECORD_TYPE_LIBRARY,
+                        n::RECORD_NAME_PYTHON,
+                        &format!("{:.1}", dv / 10.0),
+                        "",
+                    );
+                }
+            } else if up.starts_with("LIBPYTHON") {
+                // (\d.\d) → direct version, e.g. LIBPYTHON3.9 → "3.9".
+                if let Some(v) = python_dot_version(&up) {
+                    emit(
+                        misc,
+                        ftpe,
+                        rt::RECORD_TYPE_LIBRARY,
+                        n::RECORD_NAME_PYTHON,
+                        &v,
+                        "",
+                    );
+                }
+            } else if up.starts_with("PERL") {
+                let digits: String = up.chars().filter(|c| c.is_ascii_digit()).collect();
+                if let Ok(dv) = digits.parse::<f64>()
+                    && dv != 0.0
+                {
+                    emit(
+                        misc,
+                        ftpe,
+                        rt::RECORD_TYPE_LIBRARY,
+                        n::RECORD_NAME_PERL,
+                        &format!("{:.2}", dv / 100.0),
+                        "",
+                    );
+                }
+            }
+        }
+
+        // Virtual Pascal / PowerBASIC strings, PureBasic/LCC-Win32 EP.
+        if let Some(ds) = normal_data_section(pe).filter(|_| deep)
+            && crate::parse::find_ansi(
+                data,
+                ds.off,
+                ds.size.min(1 << 22),
+                b"Virtual Pascal - Copyright (C) ",
+            )
+            .is_some()
+        {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_COMPILER,
+                n::RECORD_NAME_VIRTUALPASCAL,
+                &format!("{}.{}", pe.major_linker, pe.minor_linker),
+                "",
+            );
+        }
+        if deep
+            && let Some((off, sz)) = pe.code_section_extent(data)
+            && crate::parse::find_ansi(data, off, sz.min(1 << 22), b"PowerBASIC").is_some()
+        {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_COMPILER,
+                n::RECORD_NAME_POWERBASIC,
+                "",
+                "",
+            );
+        }
+        if let Some(rec) = entrypoint.get(&n::RECORD_NAME_PUREBASIC) {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_COMPILER,
+                n::RECORD_NAME_PUREBASIC,
+                &rec.version,
+                &rec.info,
+            );
+        }
+        if let Some(rec) = entrypoint.get(&n::RECORD_NAME_LCCWIN) {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_COMPILER,
+                n::RECORD_NAME_LCCWIN,
+                &rec.version,
+                &rec.info,
+            );
+            if header.contains_key(&n::RECORD_NAME_GENERICLINKER) {
+                emit(
+                    misc,
+                    ftpe,
+                    rt::RECORD_TYPE_LINKER,
+                    n::RECORD_NAME_LCCLNK,
+                    &format!("{}.{}", pe.major_linker, pe.minor_linker),
+                    "",
+                );
+            }
+        }
+    }
+}
+
+/// Extract a `d.d`-shaped version from a `LIBPYTHON…` library name.
+fn python_dot_version(up: &str) -> Option<String> {
+    let idx = up.find(|c: char| c.is_ascii_digit())?;
+    let tail = &up[idx..];
+    let mut it = tail.split(|c: char| !(c.is_ascii_digit() || c == '.'));
+    let v = it.next()?;
+    if v.chars().filter(|&c| c == '.').count() >= 1 && v.chars().next().unwrap().is_ascii_digit() {
+        Some(v.trim_end_matches('.').to_string())
+    } else {
+        None
+    }
+}

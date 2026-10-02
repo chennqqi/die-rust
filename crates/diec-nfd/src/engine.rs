@@ -785,6 +785,19 @@ fn pe_scan(
     crate::pe_handlers::neolite(data, &pe, opts.deep_scan, ftpe, misc);
     crate::pe_handlers::petools(section_names, ftpe, misc);
     crate::pe_handlers::joiners(data, &pe, ftpe, imports, entrypoint, misc);
+    crate::pe_handlers::borland(data, &pe, opts.deep_scan, ftpe, header, entrypoint, misc);
+    crate::pe_handlers::tools(
+        data,
+        &pe,
+        opts.deep_scan,
+        ftpe,
+        header,
+        overlay,
+        entrypoint,
+        section_names,
+        code_section,
+        misc,
+    );
 }
 
 /// MSDOS scan pipeline: linker-header + header records, entry-point

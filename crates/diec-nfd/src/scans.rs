@@ -175,6 +175,10 @@ pub struct ResourceEntry {
     pub name2: Option<String>,
     /// Level-2 numeric id when not string-identified.
     pub id2: u32,
+    /// Leaf data file offset (first language entry), 0 when unresolved.
+    pub data_off: usize,
+    /// Leaf data size (`Size` of the level-3 data entry).
+    pub data_size: usize,
 }
 
 /// Port of `NFD_Binary::PE_resourcesScan` (`XPE::isResourcePresent`

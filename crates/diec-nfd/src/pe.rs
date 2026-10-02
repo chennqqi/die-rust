@@ -69,6 +69,11 @@ pub struct PeInfo {
     /// Import-directory section index (`getImageDirectoryEntrySection`),
     /// -1 when not found.
     pub import_section: i32,
+    /// Exported function names (name-pointer table), capped — Borland
+    /// `__CPPdebugHook` detection etc.
+    pub export_names: Vec<String>,
+    /// TLS directory (dir 9) present — gates `handle_Tools` Rust path.
+    pub tls_present: bool,
     /// Security-directory (dir 4) file offset — `VirtualAddress` there is
     /// a file offset, not an RVA (`handle_Signtools` cert table).
     pub cert_offset: usize,
@@ -216,8 +221,40 @@ fn rva_to_off(l: &PeLayout, rva: u32) -> Option<usize> {
 }
 
 const DIR_IMPORT: usize = 1;
+const DIR_EXPORT: usize = 0;
 const DIR_RESOURCE: usize = 2;
 const DIR_CLR: usize = 14;
+
+/// Exported function names from the export directory (dir 0):
+/// `NumberOfNames`/`AddressOfNames` RVA array → ANSI strings, capped at
+/// 4096 entries and 256-byte names. Missing/malformed table → empty.
+fn collect_export_names(d: &[u8], l: &PeLayout) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(exp_off) = rva_to_off(l, l.dir_rva[DIR_EXPORT]) else {
+        return out;
+    };
+    let (Some(n_names), Some(names_rva)) = (
+        rd_u32(d, exp_off + 24).map(|v| v as usize),
+        rd_u32(d, exp_off + 32),
+    ) else {
+        return out;
+    };
+    let Some(names_off) = rva_to_off(l, names_rva) else {
+        return out;
+    };
+    for i in 0..n_names.min(4096) {
+        let Some(nr) = rd_u32(d, names_off + i * 4) else {
+            break;
+        };
+        let Some(no) = rva_to_off(l, nr) else {
+            continue;
+        };
+        if let Some(s) = crate::parse::read_ansi_string_len(d, no, 256) {
+            out.push(s);
+        }
+    }
+    out
+}
 
 /// Index of the section containing the import directory
 /// (`XPE::getImageDirectoryEntrySection`), -1 when unmapped.
@@ -313,6 +350,8 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
     info.characteristics = rd_u16(d, l.opt_off - 20 + 18).unwrap_or(0);
     info.image_base = l.image_base;
     info.import_section = import_section_index(&l);
+    info.export_names = collect_export_names(d, &l);
+    info.tls_present = l.dir_rva[9] != 0;
     info.cert_offset = l.dir_rva[4] as usize;
     info.cert_size = l.dir_size[4] as usize;
 
@@ -325,6 +364,8 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
             size: s.raw_size as usize,
             flags: s.flags,
             code: s.flags & 0x2000_0000 != 0,
+            vaddr: s.vaddr,
+            vsize: s.vsize,
         })
         .collect();
 
@@ -488,11 +529,31 @@ pub fn collect_resources(d: &[u8]) -> Vec<crate::scans::ResourceEntry> {
             } else {
                 (None, id2 & 0xFFFF)
             };
+            // Level-3 leaf: language entry → data entry (rva, size).
+            let (mut data_off, mut data_size) = (0usize, 0usize);
+            if let Some(sub2) = rd_u32(d, e2 + 4)
+                && sub2 & 0x8000_0000 != 0
+            {
+                let dir3 = root + (sub2 & 0x7FFF_FFFF) as usize;
+                if let Some(e3sub) = rd_u32(d, dir3 + 16 + 4)
+                    && e3sub & 0x8000_0000 == 0
+                {
+                    let dentry = root + e3sub as usize;
+                    if let (Some(rva), Some(sz)) = (rd_u32(d, dentry), rd_u32(d, dentry + 4))
+                        && let Some(foff) = rva_to_off(&l, rva)
+                    {
+                        data_off = foff;
+                        data_size = sz as usize;
+                    }
+                }
+            }
             out.push(ResourceEntry {
                 name1: name1.clone(),
                 id1: t1,
                 name2,
                 id2: nid2,
+                data_off,
+                data_size,
             });
         }
     }
@@ -518,6 +579,24 @@ impl PeInfo {
             .iter()
             .find(|e| e.code)
             .map(|e| (e.off, e.size))
+    }
+
+    /// `XPE::addressToOffset` subset: interpret `va` as a VA
+    /// (`va - image_base` → RVA) when above the image base, else as a
+    /// bare RVA; map through section extents (raw file offsets).
+    pub fn va_to_off(&self, va: u32) -> Option<usize> {
+        let rva = if u64::from(va) >= self.image_base {
+            u64::from(va).checked_sub(self.image_base)? as u32
+        } else {
+            va
+        };
+        for e in &self.extents {
+            let span = e.size.max(e.vsize as usize);
+            if rva >= e.vaddr && (rva - e.vaddr) < span as u32 && e.size != 0 {
+                return Some(e.off + (rva - e.vaddr) as usize);
+            }
+        }
+        None
     }
 
     /// Index of the section containing the entry point
@@ -561,6 +640,10 @@ pub struct SectionExtent {
     pub flags: u32,
     /// Executable flag (`IMAGE_SCN_MEM_EXECUTE`).
     pub code: bool,
+    /// `VirtualAddress` (RVA base of the section).
+    pub vaddr: u32,
+    /// `VirtualSize` (`Misc.VirtualSize`).
+    pub vsize: u32,
 }
 
 /// Parse and return the PE layout for signature-expression resolution.
