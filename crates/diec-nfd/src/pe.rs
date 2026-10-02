@@ -47,8 +47,28 @@ pub struct PeInfo {
     pub rich: Vec<(u16, u32, u32)>,
     /// Whether the image has a CLI/.NET data directory.
     pub is_dotnet: bool,
+    /// .NET metadata version string ("BSJB" root), empty when absent.
+    pub dotnet_version: String,
+    /// Optional-header linker version bytes (`MajorLinkerVersion`,
+    /// `MinorLinkerVersion`) — `nMajorLinkerVersion`/`nMinorLinkerVersion`.
+    pub major_linker: u8,
+    /// See [`Self::major_linker`].
+    pub minor_linker: u8,
+    /// Optional-header `Subsystem`.
+    pub subsystem: u16,
+    /// COFF `Machine`.
+    pub machine: u16,
+    /// COFF `Characteristics` (DLL flag check for `getType`).
+    pub characteristics: u16,
+    /// Packed OS version `Major<<16|Minor` (`getOperatingSystemVersion`).
+    pub os_version: u32,
+    /// Image base (`getImageBase`).
+    pub image_base: u64,
     /// Section extents for deep scans.
     pub extents: Vec<SectionExtent>,
+    /// Import-directory section index (`getImageDirectoryEntrySection`),
+    /// -1 when not found.
+    pub import_section: i32,
 }
 
 fn rd_u16(d: &[u8], off: usize) -> Option<u16> {
@@ -194,6 +214,51 @@ const DIR_IMPORT: usize = 1;
 const DIR_RESOURCE: usize = 2;
 const DIR_CLR: usize = 14;
 
+/// Index of the section containing the import directory
+/// (`XPE::getImageDirectoryEntrySection`), -1 when unmapped.
+fn import_section_index(l: &PeLayout) -> i32 {
+    let rva = l.dir_rva[DIR_IMPORT];
+    if rva == 0 {
+        return -1;
+    }
+    for (i, s) in l.sections.iter().enumerate() {
+        let span = s.raw_size.max(s.vsize);
+        if rva >= s.vaddr && rva < s.vaddr.saturating_add(span.max(1)) {
+            return i as i32;
+        }
+    }
+    -1
+}
+
+/// .NET metadata version: CLI header (dir 14) → metadata root →
+/// `BSJB` + version-length + ANSI string (`XPE::CliInfo` subset).
+fn dotnet_metadata_version(d: &[u8], l: &PeLayout) -> String {
+    let Some(cli_off) = rva_to_off(l, l.dir_rva[DIR_CLR]) else {
+        return String::new();
+    };
+    let Some(meta_rva) = rd_u32(d, cli_off + 8) else {
+        return String::new();
+    };
+    let Some(meta_off) = rva_to_off(l, meta_rva) else {
+        return String::new();
+    };
+    if d.get(meta_off..meta_off + 4) != Some(b"BSJB") {
+        return String::new();
+    }
+    let Some(ver_len) = rd_u32(d, meta_off + 12).map(|v| v as usize) else {
+        return String::new();
+    };
+    if ver_len == 0 || ver_len > 256 {
+        return String::new();
+    }
+    d.get(meta_off + 16..meta_off + 16 + ver_len)
+        .map(|b| {
+            let end = b.iter().position(|&x| x == 0).unwrap_or(b.len());
+            String::from_utf8_lossy(&b[..end]).into_owned()
+        })
+        .unwrap_or_default()
+}
+
 /// Collect PE facts needed by the NFD scans. Returns `None` when the
 /// buffer is not a plausible PE.
 pub fn collect(d: &[u8]) -> Option<PeInfo> {
@@ -228,13 +293,30 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
     };
 
     info.is_dotnet = l.dir_rva[DIR_CLR] != 0;
+    info.dotnet_version = dotnet_metadata_version(d, &l);
+
+    // Optional-header / COFF fields used by handle_OperationSystem and
+    // handle_Microsoft.
+    info.major_linker = d.get(l.opt_off + 2).copied().unwrap_or(0);
+    info.minor_linker = d.get(l.opt_off + 3).copied().unwrap_or(0);
+    let (osv_off, subsys_off) = if l.is64 { (44, 72) } else { (40, 68) };
+    let maj_os = rd_u16(d, l.opt_off + osv_off).unwrap_or(0);
+    let min_os = rd_u16(d, l.opt_off + osv_off + 2).unwrap_or(0);
+    info.os_version = (u32::from(maj_os) << 16) | u32::from(min_os);
+    info.subsystem = rd_u16(d, l.opt_off + subsys_off).unwrap_or(0);
+    info.machine = rd_u16(d, l.opt_off - 20).unwrap_or(0);
+    info.characteristics = rd_u16(d, l.opt_off - 20 + 18).unwrap_or(0);
+    info.image_base = l.image_base;
+    info.import_section = import_section_index(&l);
 
     info.extents = l
         .sections
         .iter()
         .map(|s| SectionExtent {
+            name: s.name.clone(),
             off: s.raw_ptr as usize,
             size: s.raw_size as usize,
+            flags: s.flags,
             code: s.flags & 0x2000_0000 != 0,
         })
         .collect();
@@ -448,11 +530,15 @@ impl PeInfo {
 /// Internal section extent record kept inside `PeInfo`.
 #[derive(Debug, Clone)]
 pub struct SectionExtent {
+    /// Section name (uppercased by upstream convention).
+    pub name: String,
     /// File offset.
     pub off: usize,
-    /// File size.
+    /// File size (`SizeOfRawData`).
     pub size: usize,
-    /// Executable flag.
+    /// Raw `Characteristics` (masked with 0xFF0000FF by callers).
+    pub flags: u32,
+    /// Executable flag (`IMAGE_SCN_MEM_EXECUTE`).
     pub code: bool,
 }
 

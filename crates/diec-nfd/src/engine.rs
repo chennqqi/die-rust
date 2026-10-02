@@ -312,6 +312,7 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
             pe_scan(
                 data,
                 opts,
+                &mut misc,
                 &header_sig,
                 &mut header,
                 &mut overlay,
@@ -549,6 +550,7 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
 fn pe_scan(
     data: &[u8],
     opts: ScanOptions,
+    misc: &mut DetectMap,
     header_sig: &str,
     header: &mut DetectMap,
     overlay: &mut DetectMap,
@@ -761,6 +763,12 @@ fn pe_scan(
             );
         }
     }
+
+    // Semantic handlers (bounded handle_* subset).
+    crate::pe_handlers::operation_system(&pe, ftpe, misc);
+    crate::pe_handlers::import_heuristics(&pe, ftpe, imports);
+    crate::pe_handlers::debug_data(data, &pe, ftpe, misc);
+    crate::pe_handlers::microsoft(data, &pe, opts.deep_scan, ftpe, header, entrypoint, misc);
 }
 
 /// MSDOS scan pipeline: linker-header + header records, entry-point

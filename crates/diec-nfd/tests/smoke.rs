@@ -731,3 +731,87 @@ fn macho_truncated_inputs_do_not_panic() {
         ScanOptions { deep_scan: true },
     );
 }
+
+/// Minimal PE32 with one `.text` section and a single `MFC42.DLL`
+/// import thunk — exercises `handle_Microsoft` (MFC lib → Visual C/C++
+/// version → linker-version fill → VS tool) and `handle_OperationSystem`.
+fn pe32_mfc_fixture() -> Vec<u8> {
+    let mut d = vec![0u8; 0x400];
+    // DOS + COFF headers.
+    d[0..2].copy_from_slice(b"MZ");
+    d[0x3C..0x40].copy_from_slice(&0x40u32.to_le_bytes());
+    d[0x40..0x44].copy_from_slice(b"PE\0\0");
+    d[0x44..0x46].copy_from_slice(&0x014Cu16.to_le_bytes()); // I386
+    d[0x46..0x48].copy_from_slice(&1u16.to_le_bytes()); // 1 section
+    d[0x54..0x56].copy_from_slice(&0xE0u16.to_le_bytes()); // opt size
+    d[0x56..0x58].copy_from_slice(&0x010Fu16.to_le_bytes()); // chars
+    let opt = 0x58;
+    d[opt..opt + 2].copy_from_slice(&0x010Bu16.to_le_bytes()); // PE32
+    d[opt + 2] = 14; // MajorLinkerVersion
+    d[opt + 3] = 0; // MinorLinkerVersion
+    d[opt + 16..opt + 20].copy_from_slice(&0x1000u32.to_le_bytes()); // EP rva
+    d[opt + 28..opt + 32].copy_from_slice(&0x0040_0000u32.to_le_bytes()); // image base
+    d[opt + 32..opt + 36].copy_from_slice(&0x1000u32.to_le_bytes()); // sect align
+    d[opt + 36..opt + 40].copy_from_slice(&0x200u32.to_le_bytes()); // file align
+    d[opt + 40..opt + 42].copy_from_slice(&5u16.to_le_bytes()); // MajorOS
+    d[opt + 42..opt + 44].copy_from_slice(&1u16.to_le_bytes()); // MinorOS → 5.1
+    d[opt + 68..opt + 70].copy_from_slice(&3u16.to_le_bytes()); // subsystem CUI
+    d[opt + 92..opt + 96].copy_from_slice(&16u32.to_le_bytes()); // num dirs
+    // Import directory (dir 1): rva 0x1000 → file 0x200.
+    d[opt + 96 + 8..opt + 96 + 12].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[opt + 96 + 12..opt + 96 + 16].copy_from_slice(&40u32.to_le_bytes());
+    // Section .text: vaddr 0x1000, raw 0x200/0x200, code+exec+read.
+    let sec = opt + 0xE0;
+    d[sec..sec + 5].copy_from_slice(b".text");
+    d[sec + 8..sec + 12].copy_from_slice(&0x200u32.to_le_bytes()); // vsize
+    d[sec + 12..sec + 16].copy_from_slice(&0x1000u32.to_le_bytes()); // vaddr
+    d[sec + 16..sec + 20].copy_from_slice(&0x200u32.to_le_bytes()); // raw size
+    d[sec + 20..sec + 24].copy_from_slice(&0x200u32.to_le_bytes()); // raw ptr
+    d[sec + 36..sec + 40].copy_from_slice(&0x6000_0020u32.to_le_bytes());
+    // Import descriptor @0x200: oft=0x1010, name=0x1030, ft=0x1010.
+    d[0x200..0x204].copy_from_slice(&0x1010u32.to_le_bytes());
+    d[0x20C..0x210].copy_from_slice(&0x1030u32.to_le_bytes());
+    d[0x210..0x214].copy_from_slice(&0x1010u32.to_le_bytes());
+    // Thunk @0x210 (rva 0x1010 → off 0x210): hint/name @0x1020.
+    d[0x210..0x214].copy_from_slice(&0x1020u32.to_le_bytes());
+    d[0x214..0x218].copy_from_slice(&0u32.to_le_bytes());
+    // Hint/name @0x220: hint=0, "Foo".
+    d[0x220..0x222].copy_from_slice(&0u16.to_le_bytes());
+    d[0x222..0x226].copy_from_slice(b"Foo\0");
+    // Lib name @0x230: "MFC42.DLL".
+    d[0x230..0x23A].copy_from_slice(b"MFC42.DLL\0");
+    d
+}
+
+#[test]
+fn pe32_mfc_triggers_microsoft_handler() {
+    let d = pe32_mfc_fixture();
+    let (ft, out) = show("pe32-mfc-synth", &d);
+    assert_eq!(ft_name(ft), "FT_PE32");
+    assert!(
+        out.iter().any(|r| r.record_type == "Operation system"
+            && r.record_name == "Windows"
+            && r.version == "XP"),
+        "no Windows XP OS record: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "MFC" && r.version == "4.20"),
+        "no MFC 4.20: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Visual C/C++" && r.version == "10.20"),
+        "no Visual C/C++ 10.20 (MFC-derived): {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Microsoft linker" && r.version == "14.00"),
+        "no linker version fill: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Microsoft Visual Studio" && r.version == "2015"),
+        "no VS 2015 tool record: {out:?}"
+    );
+}

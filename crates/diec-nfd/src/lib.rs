@@ -20,6 +20,8 @@ mod mach;
 mod mach_tables;
 pub mod parse;
 mod pe;
+mod pe_handlers;
+mod pe_tables;
 mod records;
 mod scans;
 mod signature;
