@@ -191,6 +191,7 @@ fn harness_output_render(data: &[u8]) {
             is_heuristic: None,
             is_a_heuristic: None,
             original_name: None,
+            engine: None,
         });
         offset = type_end;
         if offset >= data.len() {

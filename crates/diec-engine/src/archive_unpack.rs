@@ -1054,7 +1054,6 @@ fn extract_member_cab(data: &[u8], name: &str) -> Vec<u8> {
                 .map(|e| (e.name().to_string(), e.uncompressed_size()))
                 .collect::<Vec<_>>()
         })
-        .into_iter()
         .any(|(n, sz)| n == name && u64::from(sz) > MAX_SINGLE_MEMBER_BYTES);
     if oversized {
         return Vec::new();
