@@ -751,6 +751,40 @@ pub fn read_ansi_string_len(d: &[u8], off: usize, len: usize) -> Option<String> 
     read_ansi_string(d, off).map(|s| s.chars().take(len).collect())
 }
 
+/// Shannon byte entropy (bits/byte, 0..=8) over `d[off..off+size]`,
+/// mirroring `XBinary::getBinaryStatus(BSTATUS_ENTROPY)`. `size < 0`
+/// means "to end of file"; out-of-range regions yield 0.
+pub fn binary_entropy(d: &[u8], off: i64, size: i64) -> f64 {
+    let total = d.len() as i64;
+    let off = off.clamp(0, total);
+    let size = if size < 0 {
+        total - off
+    } else {
+        size.min(total - off)
+    };
+    if size <= 0 {
+        return 0.0;
+    }
+    let mut counts = [0u64; 256];
+    for &b in &d[off as usize..(off + size) as usize] {
+        counts[b as usize] += 1;
+    }
+    let n = size as f64;
+    counts
+        .iter()
+        .filter(|&&c| c > 0)
+        .map(|&c| {
+            let p = c as f64 / n;
+            -p * p.log2()
+        })
+        .sum()
+}
+
+/// `XBinary::isPacked` — the upstream `D_ENTROPY_THRESHOLD` is 6.5.
+pub fn is_packed(entropy: f64) -> bool {
+    entropy >= 6.5
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -862,5 +896,15 @@ mod tests {
         assert!(!is_plain_text(&[]));
         assert!(!is_plain_text(&[0, 1, 2, 3]));
         assert!(!is_plain_text(b"\xEF\xBB\xBFutf8 bom"));
+    }
+    #[test]
+    fn entropy_bounds() {
+        assert_eq!(binary_entropy(b"", 0, -1), 0.0);
+        assert_eq!(binary_entropy(&[0u8; 256], 0, -1), 0.0);
+        let uniform: Vec<u8> = (0..=255).collect();
+        assert!((binary_entropy(&uniform, 0, -1) - 8.0).abs() < 1e-9);
+        assert!(is_packed(binary_entropy(&uniform, 0, -1)));
+        // Out-of-range region → 0.
+        assert_eq!(binary_entropy(&uniform, 300, 10), 0.0);
     }
 }

@@ -49,6 +49,12 @@ pub struct PeInfo {
     pub is_dotnet: bool,
     /// .NET metadata version string ("BSJB" root), empty when absent.
     pub dotnet_version: String,
+    /// `#Strings` heap entries (`XCLIAssembly::getAnsiStrings`):
+    /// NUL-separated ANSI strings walked from index 1.
+    pub dotnet_ansi: Vec<String>,
+    /// `#US` heap entries (`XCLIAssembly::getUnicodeStrings`):
+    /// single-byte-length-prefixed UTF-16 strings walked from index 1.
+    pub dotnet_unicode: Vec<String>,
     /// Optional-header linker version bytes (`MajorLinkerVersion`,
     /// `MinorLinkerVersion`) — `nMajorLinkerVersion`/`nMinorLinkerVersion`.
     pub major_linker: u8,
@@ -301,6 +307,103 @@ fn dotnet_metadata_version(d: &[u8], l: &PeLayout) -> String {
         .unwrap_or_default()
 }
 
+/// Locate `.NET` metadata streams: CLI header (dir 14) → `BSJB` root
+/// → `{offset, size, name}` stream headers (`XCLIAssembly::getCliInfo`
+/// subset, name fields 4-aligned as upstream).
+fn dotnet_streams(d: &[u8], l: &PeLayout) -> Vec<(String, usize, usize)> {
+    let Some(cli_off) = rva_to_off(l, l.dir_rva[DIR_CLR]) else {
+        return Vec::new();
+    };
+    let Some(meta_rva) = rd_u32(d, cli_off + 8) else {
+        return Vec::new();
+    };
+    let Some(meta_off) = rva_to_off(l, meta_rva) else {
+        return Vec::new();
+    };
+    if rd_u32(d, meta_off) != Some(0x424A_5342) {
+        return Vec::new();
+    }
+    let Some(ver_len) = rd_u32(d, meta_off + 12).map(|v| v as usize) else {
+        return Vec::new();
+    };
+    if ver_len > 512 {
+        return Vec::new();
+    }
+    let Some(n_streams) = rd_u16(d, meta_off + 18 + ver_len).map(|v| v as usize) else {
+        return Vec::new();
+    };
+    let mut off = meta_off + 20 + ver_len;
+    let mut out = Vec::new();
+    for _ in 0..n_streams.min(64) {
+        let (Some(so), Some(ss)) = (rd_u32(d, off), rd_u32(d, off + 4)) else {
+            break;
+        };
+        let name = crate::parse::read_ansi_string_len(d, off + 8, 32).unwrap_or_default();
+        if name.is_empty() {
+            break;
+        }
+        // Stream offsets are relative to the metadata root; clamp the
+        // extent inside the file as upstream does.
+        let so = meta_off + so as usize;
+        let ss = (ss as usize).min(d.len().saturating_sub(so));
+        out.push((name.clone(), so, ss));
+        off += 8 + (name.len() + 1).div_ceil(4) * 4;
+        if off >= d.len() {
+            break;
+        }
+    }
+    out
+}
+
+/// `getAnsiStrings`: split `#Strings` at NULs starting at index 1.
+fn dotnet_ansi_strings(heap: &[u8]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut pos = 1usize;
+    while pos < heap.len() {
+        let end = heap[pos..]
+            .iter()
+            .position(|&b| b == 0)
+            .map(|p| pos + p)
+            .unwrap_or(heap.len());
+        out.push(String::from_utf8_lossy(&heap[pos..end]).into_owned());
+        pos = end + 1;
+    }
+    out
+}
+
+/// `getUnicodeStrings`: `#US` entries are `<u8 len><utf16 data>`;
+/// a 0x80 length reads as zero (upstream does not decode the full
+/// compressed-uint form — quirk kept verbatim).
+fn dotnet_unicode_strings(heap: &[u8]) -> Vec<String> {
+    let mut out = Vec::new();
+    if heap.len() <= 1 {
+        return out;
+    }
+    let mut pos = 1usize;
+    while pos < heap.len() {
+        let mut size = heap[pos] as usize;
+        if size == 0x80 {
+            size = 0;
+        }
+        if size > heap.len() - pos {
+            break;
+        }
+        pos += 1;
+        let mut s = String::new();
+        for i in 0..size / 2 {
+            let Some(w) = rd_u16(heap, pos + i * 2) else {
+                break;
+            };
+            if let Some(c) = char::from_u32(u32::from(w)) {
+                s.push(c);
+            }
+        }
+        out.push(s);
+        pos += size;
+    }
+    out
+}
+
 /// Collect PE facts needed by the NFD scans. Returns `None` when the
 /// buffer is not a plausible PE.
 pub fn collect(d: &[u8]) -> Option<PeInfo> {
@@ -336,6 +439,21 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
 
     info.is_dotnet = l.dir_rva[DIR_CLR] != 0;
     info.dotnet_version = dotnet_metadata_version(d, &l);
+    if info.is_dotnet {
+        let streams = dotnet_streams(d, &l);
+        let strings = streams.iter().find(|(n, _, _)| n == "#Strings");
+        let us = streams.iter().find(|(n, _, _)| n == "#US");
+        if let Some((_, o, sz)) = strings
+            && *o < d.len()
+        {
+            info.dotnet_ansi = dotnet_ansi_strings(&d[*o..*o + *sz]);
+        }
+        if let Some((_, o, sz)) = us
+            && *o < d.len()
+        {
+            info.dotnet_unicode = dotnet_unicode_strings(&d[*o..*o + *sz]);
+        }
+    }
 
     // Optional-header / COFF fields used by handle_OperationSystem and
     // handle_Microsoft.
@@ -597,6 +715,14 @@ impl PeInfo {
             }
         }
         None
+    }
+
+    /// `XPE::isSectionNamePresent` — raw byte-name membership test
+    /// (case-insensitive: our parser uppercases section names).
+    pub fn has_section_name(&self, name: &str) -> bool {
+        self.section_names
+            .iter()
+            .any(|n| n.eq_ignore_ascii_case(name))
     }
 
     /// Index of the section containing the entry point

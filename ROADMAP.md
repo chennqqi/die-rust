@@ -1983,6 +1983,12 @@ nrv 单测），前端 `npm run build` 通过。
   `docs/design/phase21-nfd-remaining.md`（21.J–21.N + Phase 22
   非 PE 启发 + Phase 23 差分 oracle）。全部 ⚠ partial 行均有补全
   计划；终态 = 全量移植 + 上游 harness 差分收敛后逐行升 ✅。**
+- **21.J 共享原语层已完成**：`pe_version.rs`（VS_VERSIONINFO
+  3 层递归 + FixedFileInfo + FileDescription 键查询）、`.NET`
+  `#Strings`/`#US` heap 提取 + dotAnsi/dotUnicode 内部扫描 map
+  （不下泄输出，供 21.L 消费）、`binary_entropy`/`is_packed(6.5)`/
+  `has_section_name`/`entrypoint_section_index` 原语。Rich 表此前
+  已生成，`_fixRichSignatures` 归 21.N。
 
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。

@@ -261,6 +261,11 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
     let mut types_m: DetectMap = DetectMap::new();
     let mut archive_m: DetectMap = DetectMap::new();
     let mut misc: DetectMap = DetectMap::new();
+    // .NET string-heap scan results feed handle_NETProtection (Phase
+    // 21.L); upstream keeps them as intermediate maps, so they are not
+    // drained into the output list.
+    let mut dot_ansi: DetectMap = DetectMap::new();
+    let mut dot_unicode: DetectMap = DetectMap::new();
 
     // Header scans run for every file (binary + archive tables filter on
     // FT_BINARY/FT_ARCHIVE which are always the secondary ft).
@@ -322,6 +327,8 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
                 &mut resources,
                 &mut code_section,
                 &mut ep_section,
+                &mut dot_ansi,
+                &mut dot_unicode,
             );
         }
         x if x == ft::FT_MSDOS => {
@@ -560,6 +567,8 @@ fn pe_scan(
     resources: &mut DetectMap,
     code_section: &mut DetectMap,
     ep_section: &mut DetectMap,
+    dot_ansi: &mut DetectMap,
+    dot_unicode: &mut DetectMap,
 ) {
     let Some(pe) = pe::collect(data) else {
         return;
@@ -715,6 +724,27 @@ fn pe_scan(
     let res = pe::collect_resources(data);
     if !res.is_empty() {
         crate::scans::resources_scan(resources, &res, t::PE_RESOURCES_RECORDS, actual, ftpe);
+    }
+
+    // .NET `#Strings`/`#US` heap scans (`mapDotAnsiStringsDetects` /
+    // `mapDotUnicodeStringsDetects`) — consumed by handle_NETProtection.
+    if !pe.dotnet_ansi.is_empty() {
+        string_scan(
+            dot_ansi,
+            &pe.dotnet_ansi,
+            t::PE_DOT_ANSISTRINGS_RECORDS,
+            actual,
+            ftpe,
+        );
+    }
+    if !pe.dotnet_unicode.is_empty() {
+        string_scan(
+            dot_unicode,
+            &pe.dotnet_unicode,
+            t::PE_DOT_UNICODESTRINGS_RECORDS,
+            actual,
+            ftpe,
+        );
     }
 
     // Rich records -> MSDOS table (upstream reuses it for PE).

@@ -1075,3 +1075,230 @@ fn pe32_bcb_handler() {
         "no C++ Builder tool: {out:?}"
     );
 }
+
+/// Build a `VS_VERSION_INFO` blob: root (fixed info, FileVersionMS
+/// 3.2.0.0) → StringFileInfo → "040904b0" → key/value leaves.
+fn vs_version_info_blob() -> Vec<u8> {
+    fn w16(v: u16, out: &mut Vec<u8>) {
+        out.extend(v.to_le_bytes());
+    }
+    let mut fd = Vec::new();
+    // level-3 node "FileDescription":"Compiled AutoIt Script"
+    let key = "FileDescription";
+    let val = "Compiled AutoIt Script";
+    let keyw: Vec<u8> = key
+        .encode_utf16()
+        .flat_map(|c| c.to_le_bytes())
+        .chain([0, 0])
+        .collect();
+    let valw: Vec<u8> = val
+        .encode_utf16()
+        .flat_map(|c| c.to_le_bytes())
+        .chain([0, 0])
+        .collect();
+    let kdelta = (6 + keyw.len()).div_ceil(4) * 4;
+    w16((kdelta + valw.len()) as u16, &mut fd); // wLength
+    w16((val.len() + 1) as u16, &mut fd); // wValueLength (chars incl NUL)
+    w16(1, &mut fd); // wType text
+    fd.extend(&keyw);
+    fd.resize(kdelta, 0);
+    fd.extend(&valw);
+    fd.resize(fd.len().div_ceil(4) * 4, 0); // siblings walk ALIGN4 steps
+    let fv = {
+        let key = "FileVersion";
+        let val = "3.2.0.0";
+        let keyw: Vec<u8> = key
+            .encode_utf16()
+            .flat_map(|c| c.to_le_bytes())
+            .chain([0, 0])
+            .collect();
+        let valw: Vec<u8> = val
+            .encode_utf16()
+            .flat_map(|c| c.to_le_bytes())
+            .chain([0, 0])
+            .collect();
+        let kdelta = (6 + keyw.len()).div_ceil(4) * 4;
+        let mut n = Vec::new();
+        w16((kdelta + valw.len()) as u16, &mut n);
+        w16((val.len() + 1) as u16, &mut n);
+        w16(1, &mut n);
+        n.extend(&keyw);
+        n.resize(kdelta, 0);
+        n.extend(&valw);
+        n
+    };
+    // level-2 "040904b0" node
+    let mut lang = Vec::new();
+    let lw: Vec<u8> = "040904b0"
+        .encode_utf16()
+        .flat_map(|c| c.to_le_bytes())
+        .chain([0, 0])
+        .collect();
+    let ldelta = (6 + lw.len()).div_ceil(4) * 4;
+    let llen = ldelta + fd.len() + fv.len(); // fd already 4-aligned
+    w16(llen as u16, &mut lang);
+    w16(0, &mut lang);
+    w16(0, &mut lang);
+    lang.extend(&lw);
+    lang.resize(ldelta, 0);
+    lang.extend(&fd);
+    lang.extend(&fv);
+    // level-1 "StringFileInfo"
+    let mut sfi = Vec::new();
+    let sw: Vec<u8> = "StringFileInfo"
+        .encode_utf16()
+        .flat_map(|c| c.to_le_bytes())
+        .chain([0, 0])
+        .collect();
+    let sdelta = (6 + sw.len()).div_ceil(4) * 4;
+    w16((sdelta + lang.len()) as u16, &mut sfi);
+    w16(0, &mut sfi);
+    w16(0, &mut sfi);
+    sfi.extend(&sw);
+    sfi.resize(sdelta, 0);
+    sfi.extend(&lang);
+    // root "VS_VERSION_INFO" + VS_FIXEDFILEINFO
+    let mut root = Vec::new();
+    let rw: Vec<u8> = "VS_VERSION_INFO"
+        .encode_utf16()
+        .flat_map(|c| c.to_le_bytes())
+        .chain([0, 0])
+        .collect();
+    let rdelta = (6 + rw.len()).div_ceil(4) * 4;
+    w16((rdelta + 52 + sfi.len()) as u16, &mut root);
+    w16(52, &mut root);
+    w16(0, &mut root);
+    root.extend(&rw);
+    root.resize(rdelta, 0);
+    let mut ffi = vec![0u8; 52];
+    ffi[0..4].copy_from_slice(&0xFEEF04BDu32.to_le_bytes());
+    ffi[8..12].copy_from_slice(&0x0003_0002u32.to_le_bytes()); // FileVersionMS 3.2
+    ffi[16..20].copy_from_slice(&0x0003_0002u32.to_le_bytes());
+    root.extend(&ffi);
+    root.extend(&sfi);
+    root
+}
+
+/// PE32 carrying a RT_VERSION resource → `resources_version` lookup.
+fn pe32_version_resource_fixture() -> Vec<u8> {
+    let mut d = pe32_delphi_fixture();
+    d[0x210..0x217].copy_from_slice(&[0u8; 7]); // drop Delphi markers
+    d.resize(0xC00, 0);
+    // Resource dir (dir 2): rva 0x2000 → file 0x400.
+    let opt = 0x58;
+    d[opt + 96 + 16..opt + 96 + 20].copy_from_slice(&0x2000u32.to_le_bytes());
+    d[opt + 96 + 20..opt + 96 + 24].copy_from_slice(&0x200u32.to_le_bytes());
+    // Second section covers rva 0x2000 at file 0x400.
+    let s0 = opt + 0xE0;
+    d[0x46..0x48].copy_from_slice(&2u16.to_le_bytes());
+    let s1 = s0 + 40;
+    d[s1..s1 + 5].copy_from_slice(b".rsrc");
+    d[s1 + 8..s1 + 12].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s1 + 12..s1 + 16].copy_from_slice(&0x2000u32.to_le_bytes());
+    d[s1 + 16..s1 + 20].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s1 + 20..s1 + 24].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s1 + 36..s1 + 40].copy_from_slice(&0x4000_0040u32.to_le_bytes());
+    // Tree @0x400: root(dir) → type 16 → dir2 → id 1 → dir3 → lang → data.
+    d[0x400 + 14..0x400 + 16].copy_from_slice(&1u16.to_le_bytes()); // n_id=1
+    d[0x410..0x414].copy_from_slice(&16u32.to_le_bytes()); // type=RT_VERSION
+    d[0x414..0x418].copy_from_slice(&0x8000_0018u32.to_le_bytes()); // →dir2
+    d[0x418 + 14..0x418 + 16].copy_from_slice(&1u16.to_le_bytes());
+    d[0x428..0x42C].copy_from_slice(&1u32.to_le_bytes()); // name id=1
+    d[0x42C..0x430].copy_from_slice(&0x8000_0030u32.to_le_bytes()); // →dir3
+    d[0x430 + 14..0x430 + 16].copy_from_slice(&1u16.to_le_bytes());
+    d[0x440..0x444].copy_from_slice(&0x409u32.to_le_bytes()); // lang
+    d[0x444..0x448].copy_from_slice(&0x50u32.to_le_bytes()); // →data @0x450
+    let blob = vs_version_info_blob();
+    d[0x450..0x454].copy_from_slice(&0x2060u32.to_le_bytes()); // data rva →0x460
+    d[0x454..0x458].copy_from_slice(&(blob.len() as u32).to_le_bytes());
+    d[0x460..0x460 + blob.len()].copy_from_slice(&blob);
+    d
+}
+
+#[test]
+fn pe32_version_resource_parsed() {
+    let d = pe32_version_resource_fixture();
+    let rv = diec_nfd::pe_version::resources_version(&d);
+    assert_eq!(rv.value("FileDescription"), "Compiled AutoIt Script");
+    assert_eq!(rv.value("FileVersion"), "3.2.0.0");
+    assert_eq!(rv.file_version_ms_str(), "3.2");
+}
+
+/// PE32 with a .NET CLI directory: `#Strings` heap carries
+/// "Microsoft.VisualBasic"; `#US` carries one UTF-16 entry.
+fn pe32_dotnet_fixture() -> Vec<u8> {
+    let mut d = pe32_delphi_fixture();
+    d[0x210..0x217].copy_from_slice(&[0u8; 7]);
+    d.resize(0xC00, 0);
+    // Second section maps rva 0x2000 → file 0x400 (holds CLR+metadata).
+    let opt = 0x58;
+    let s0 = opt + 0xE0;
+    d[0x46..0x48].copy_from_slice(&2u16.to_le_bytes());
+    let s1 = s0 + 40;
+    d[s1..s1 + 5].copy_from_slice(b".corm");
+    d[s1 + 8..s1 + 12].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s1 + 12..s1 + 16].copy_from_slice(&0x2000u32.to_le_bytes());
+    d[s1 + 16..s1 + 20].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s1 + 20..s1 + 24].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s1 + 36..s1 + 40].copy_from_slice(&0x4000_0020u32.to_le_bytes());
+    // Data dir 14 (CLR runtime) → rva 0x2000, file 0x400.
+    d[opt + 96 + 14 * 8..opt + 96 + 14 * 8 + 4].copy_from_slice(&0x2000u32.to_le_bytes());
+    d[opt + 96 + 14 * 8 + 4..opt + 96 + 14 * 8 + 8].copy_from_slice(&0x48u32.to_le_bytes());
+    // CLI header @0x400: cb, runtime ver, MetaData{rva=0x2040,size}, flags, entry.
+    d[0x400..0x404].copy_from_slice(&0x48u32.to_le_bytes());
+    d[0x404..0x406].copy_from_slice(&2u16.to_le_bytes());
+    d[0x406..0x408].copy_from_slice(&5u16.to_le_bytes());
+    d[0x408..0x40C].copy_from_slice(&0x2040u32.to_le_bytes());
+    d[0x40C..0x410].copy_from_slice(&0x200u32.to_le_bytes());
+    // Metadata root @0x440 (rva 0x2040).
+    let m = 0x440usize;
+    d[m..m + 4].copy_from_slice(&0x424A_5342u32.to_le_bytes());
+    d[m + 4..m + 6].copy_from_slice(&1u16.to_le_bytes());
+    d[m + 6..m + 8].copy_from_slice(&1u16.to_le_bytes());
+    let ver = b"v4.0.30319\0\0\0\0";
+    d[m + 12..m + 16].copy_from_slice(&(ver.len() as u32).to_le_bytes());
+    d[m + 16..m + 16 + ver.len()].copy_from_slice(ver);
+    let sbase = m + 16 + ver.len();
+    d[sbase..sbase + 2].copy_from_slice(&0u16.to_le_bytes()); // flags
+    d[sbase + 2..sbase + 4].copy_from_slice(&2u16.to_le_bytes()); // streams
+    let mut so = sbase + 4;
+    // "#Strings" stream @ meta+0x80 (file 0x4C0), "#US" @ +0x100.
+    let name_off = |n: &str, off: u32, size: u32, buf: &mut Vec<u8>, p: &mut usize| {
+        buf[*p..*p + 4].copy_from_slice(&off.to_le_bytes());
+        buf[*p + 4..*p + 8].copy_from_slice(&size.to_le_bytes());
+        let nb = n.as_bytes();
+        buf[*p + 8..*p + 8 + nb.len()].copy_from_slice(nb);
+        *p += 8 + (nb.len() + 1).div_ceil(4) * 4;
+    };
+    name_off("#Strings", 0x80, 0x40, &mut d, &mut so);
+    name_off("#US", 0x100, 0x40, &mut d, &mut so);
+    // #Strings heap @0x4C0: index0=NUL, then "Microsoft.VisualBasic\0X\0".
+    let hp = m + 0x80;
+    d[hp] = 0;
+    let s = b"Microsoft.VisualBasic\0";
+    d[hp + 1..hp + 1 + s.len()].copy_from_slice(s);
+    // #US heap @0x540: idx0=0, entry len=8 "Hi\0\0US!!" utf16.
+    let up = m + 0x100;
+    d[up] = 0;
+    d[up + 1] = 8;
+    let w: Vec<u8> = "Hi!!"
+        .encode_utf16()
+        .flat_map(|c| c.to_le_bytes())
+        .collect();
+    d[up + 2..up + 2 + w.len()].copy_from_slice(&w);
+    d
+}
+
+#[test]
+fn pe32_dotnet_heaps_parsed() {
+    let d = pe32_dotnet_fixture();
+    let pe = diec_nfd::pe::collect(&d).expect("pe");
+    assert!(pe.is_dotnet);
+    assert_eq!(pe.dotnet_version, "v4.0.30319");
+    assert!(pe.dotnet_ansi.iter().any(|s| s == "Microsoft.VisualBasic"));
+    assert!(pe.dotnet_unicode.iter().any(|s| s == "Hi!!"));
+    // Truncated heaps must not panic.
+    let mut t = d.clone();
+    t.truncate(0x4D0);
+    let _ = diec_nfd::scan(&t, diec_nfd::sniff_ft(&t), diec_nfd::ScanOptions::default());
+}

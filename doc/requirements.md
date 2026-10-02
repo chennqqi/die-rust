@@ -1323,3 +1323,4 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 - [2026-10-02] 将 Phase 21 剩余 deferred 项归化为正式规划。
 
 - [2026-10-02] 要求：所有 ⚠ partial 缺口都要补齐对齐，phase 不够可加；Qt 可用于 oracle harness，Rust 项目不得引入 Qt。
+- 2026-10-08：顺序执行 Phase 21.J–23 NFD 全量对齐计划；21.J 共享原语层（VS_VERSIONINFO/.NET heaps/Rich 表/entropy）完成。
