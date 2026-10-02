@@ -35,6 +35,13 @@ Phase 0 计划形成：
 - [`phase8-gui.md`](phase8-gui.md)：Phase 8 GUI 设计文档，Tauri v2 实现
   功能对齐上游 `die` 完整 GUI 的 `die-gui` 程序，含 IPC 架构、功能规格
   （7A 核心 + 7B 高级 + 7C 扩展）、测试策略和实现顺序（Accepted）。
+- [`phase11-gui-parity.md`](phase11-gui-parity.md)：Phase 11 GUI 深度对齐
+  设计，FileInfo 完整头部解析与 PE/ELF/Mach-O 专用视图（Complete）。
+- [`phase13-cli-parity.md`](phase13-cli-parity.md)：Phase 13 diec CLI
+  100% 上游对齐设计（In Progress 对应实现）。
+- [`phase17-gui-parity.md`](phase17-gui-parity.md)：Phase 17 GUI 差距 v4
+  补齐设计，demangle 20 模式、归档列表复用引擎接口、哈希算法扩展、
+  DEX 深视图、交互细节与 NFD/Unpacker/InfoDB ADR 决策项（Draft）。
 - [`decisions/`](decisions/)：重大决策的 ADR。
 
 设计文档必须链接所依据的 `docs/research/` 文档。被后续设计取代时保留历史内容并将状态改为 `Superseded`，同时链接替代文档或 ADR。

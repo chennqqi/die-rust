@@ -287,3 +287,72 @@ scanning:
 
 3. **`--recursive` backward compatibility**: `--recursive` is retained as
    an alias for `--recursive-dir` to avoid breaking existing scripts.
+
+## Phase 17: GUI Parity (2026-10-02)
+
+第四轮 GUI 差距复核（`docs/research/gui-gap-analysis-v4.md`，基线
+`DIE-engine@23fec32`）后的实现批次：
+
+### Demangle 模式矩阵（17.A）
+
+| Mode | 上游 XDemangle | die-gui |
+|------|---------------|---------|
+| Auto (`detectMode`) | ✅ | ✅ 忠实移植探测顺序 |
+| MSVC32/64/ARM32/ARM64 | ✅ | ✅ `msvc-demangler` |
+| GNU v3 (Itanium) | ✅ | ✅ |
+| Rust (legacy + v0) | ✅ | ✅ |
+| Borland32/64 | ✅ | ✅ 精简解码（name@qualifier@params） |
+| Watcom | ✅ | ✅ `W?..$..`/`W?...$_` 模式 |
+| D (DMD `_D`) | ✅ | ✅ 类型码表 + `FZ` 签名 |
+| Java | ✅ | ✅ 内部名/描述符 |
+| GNU v2 / GNAT / Swift / Go / Haskell / OCaml / Tru64 / SunPro | ✅ | ❌ deferred（模式枚举存在，返回未解码） |
+
+### Archive 格式矩阵（17.B）
+
+GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
+
+| Format | 上游 XArchive | diec-rust |
+|--------|--------------|-----------|
+| ZIP | ✅ | ✅ list + extract |
+| 7Z | ✅ | ✅ list + extract |
+| RAR | ✅ | ✅ list + extract |
+| TAR/GZIP-TAR | ✅ | ✅ list（legacy 路径保留） |
+| CAB/ISO9660/ARJ/BZ2/XZ/LZMA/SFX… | ✅ | ❌ deferred（引擎无实现） |
+
+### Hash 算法矩阵（17.C）
+
+固定面板 MD5/SHA1/SHA256/CRC32 + `compute_hash` 命名算法分发：
+
+| Algorithm | 上游 XHashWidget | die-gui |
+|-----------|-----------------|---------|
+| MD4, MD5 | ✅ | ✅ |
+| SHA1, SHA224, SHA256, SHA384, SHA512 | ✅ | ✅ |
+| SHA3-224/256/384/512 | ✅ | ✅ |
+| BLAKE2b512, BLAKE2s256, BLAKE3 | ✅ | ✅ |
+| Adler32, CRC32, CRC64(ECMA-182) | ✅ | ✅ |
+| SSDeep, TLSH, GOST, Tiger, Whirlpool, RIPEMD… | ✅ | ❌ deferred（native 依赖） |
+
+### DEX 深视图（17.D）
+
+`get_dex_deep_view` 新增 strings/types/protos/fields/methods/class_defs/
+map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸形输入不 panic。
+与上游 DEX widget 的七个子视图对齐；code/class_data/debug_info 等深层
+解码未实现（上游同样以十六进制显示为主）。
+
+### 交互补全（17.E）
+
+- 信息栏：`format_counts`（PE: Sections/Imports/Exports；ELF:
+  Programs/Sections；Mach-O: Commands/Segments/Sections/Libraries）+
+  修复 `extract_base_and_entry` 的 Mach-O 格式名匹配 bug。
+- Follow-in-Hex：PE 节 RawAddr、ELF 节 Offset、Mach-O 节 Offset 可点击
+  跳转（`follow.ts` 总线）。
+- Extra Information：扫描工具栏新增格式化文本导出对话框。
+- Hex 编辑入口：`edit_bytes_at_offset` 命令（.bak 备份、1 MiB 上限、
+  越界拒绝）+ HexViewer "Edit" 按钮。
+
+### Deferred（17.F ADR）
+
+- ADR 0035：NFD/SpecAbstract 引擎 — Deferred
+- ADR 0036：XStaticUnpacker 静态脱壳 — Deferred
+- ADR 0037：InfoDB 注释/书签 — Deferred
+- ADR 0038：i18n 增量覆盖，不做 .ts 批量转换 — Accepted

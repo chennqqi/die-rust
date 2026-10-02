@@ -78,3 +78,14 @@
   archive 成员解包安全边界：单成员 128 MiB、总解压 512 MiB、压缩比 100:1、
   成员数 20/100000、递归深度 32，比上游更严格的安全改进
   （Accepted, 2026-08-15）。
+- [`0035-nfd-engine.md`](0035-nfd-engine.md)：
+  NFD/SpecAbstract 第二扫描引擎移植 deferred（工作量等同 DIE 引擎本体，
+  且规则库许可证未审计）（Deferred, 2026-10-02）。
+- [`0036-static-unpacker.md`](0036-static-unpacker.md)：
+  XStaticUnpacker 静态脱壳 deferred，未来按 packer 逐个移植 + 真实样本
+  差分（Deferred, 2026-10-02）。
+- [`0037-infodb.md`](0037-infodb.md)：
+  InfoDB 注释/书签基础设施 deferred，待分析师工作流需求出现时再定 schema
+  （Deferred, 2026-10-02）。
+- [`0038-i18n-coverage.md`](0038-i18n-coverage.md)：
+  不做上游 .ts 批量转换，语言按需增量补齐（Accepted, 2026-10-02）。

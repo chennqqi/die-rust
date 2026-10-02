@@ -1805,3 +1805,44 @@ pub struct PeBatchInfo {
   - ADR 0033/0034 Accepted
   - 所有文档更新完成
 
+
+## Phase 17：GUI 差距 v4 补齐 — demangle / 归档 / 哈希 / DEX — DONE (2026-10-02)
+
+**背景**：`gui-gap-analysis-v4`（2026-10-02，固定 `DIE-engine@23fec32`）
+逐项实测确认 Phase 11/12 后 GUI 功能面对齐度约 85%。剩余差距中用户可
+感知且无需架构决策的部分在本 Phase 补齐；NFD/静态脱壳/InfoDB/自动更新
+等架构级缺口产出 ADR 后另行立项。
+
+差距分析：`docs/research/gui-gap-analysis-v4.md`
+设计文档：`docs/design/phase17-gui-parity.md`
+
+### 任务批次
+
+| 批次 | 内容 | 优先级 | 关键依赖 |
+|------|------|--------|---------|
+| 17.A | Demangle 扩展为 20 模式子集（MSVC32/64/ARM + Borland/Watcom + D/Java，Auto 探测对齐上游 `detectMode`） | P1 | `msvc-demangler`（纯 Rust）+ Borland/Watcom 精简移植 |
+| 17.B | `list_archive` 改调 `diec-engine::archive_unpack`，覆盖 ZIP/7Z/RAR 列表与成员提取；CAB/ISO 可选 | P1 | 引擎已有 ZIP/7Z/RAR 提取（ADR 0029 `rars`） |
+| 17.C | 哈希算法扩展（SHA3 系/BLAKE2/BLAKE3/Adler32/CRC64）+ FileInfo 算法勾选 UI | P2 | `sha3`/`blake2`/`blake3`/`adler2` 纯 Rust |
+| 17.D | DEX 深视图（string/type/proto/field/method/class_def/map 表） | P2 | `misc_viewer.rs` 扩展解析 |
+| 17.E | 交互细节：信息栏固定字段、格式子视图 Follow 链、Extra Information 文本导出、Hex 右键编辑入口 | P2 | — |
+| 17.F | ADR 决策产出：NFD(0035)/静态脱壳(0036)/InfoDB(0037)/多语言(0038) | P3 | 仅文档 |
+
+### 非目标
+
+NFD/静态脱壳/InfoDB 实现、自动更新（ADR 0019）、SSDeep/TLSH（native）、
+BZ2/XZ/LZMA 裸压缩流、MIPS/PPC/RISCV 反汇编、XStyles 主题生态。
+
+### 退出条件
+
+- 17.A：`?foo@@YAHXZ`/`__Z3foav`/`_ZN…`/`_D…` 解码正确，Auto 探测
+  对齐上游顺序；模式矩阵写入 COMPATIBILITY.md ✅（17 个单测通过）
+- 17.B：ZIP/7Z/RAR `list_archive` + `extract_archive_member` 工作；
+  畸形归档负向测试无 panic ✅（引擎 22 个归档测试通过）
+- 17.C：可选算法哈希（MD4/SHA3 系/BLAKE2/3/Adler32/CRC64）+
+  勾选 UI；RFC/NIST/官方向量单测通过 ✅
+- 17.D：DEX strings/types/protos/fields/methods/class_defs/map 七表
+  实现 + 合成 DEX 单测 ✅；真实样本行数差分待语料
+- 17.E：信息栏 `format_counts`/Follow 链/Extra Info 模态框/Hex
+  字节编辑入口 ✅
+- 17.F：ADR 0035–0038 产出 ✅（0035/0036/0037 Deferred，0038 Accepted）
+- `cargo fmt/clippy/test` 全绿，前端 `npm run build` 通过 ✅

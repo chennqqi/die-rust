@@ -1252,3 +1252,30 @@ scanner 按规则归属 drain 进 `diagnostics`；JS `_peCompareSigWithJumps`/`f
 但仓库根无 .gitmodules。修复：从 upstream/DIE-engine/.gitmodules
 生成根 .gitmodules（路径加前缀、URL 指向 horsicq 源仓库），
 git submodule foreach/status 本地验证通过。
+
+## 2026-10-02 GUI 上游差异复核与改进计划
+
+用户要求检查对比上游 `die` 图形界面与当前 `die-gui` 实现的差异，并
+根据分析结果制定改进计划。产出：固定基线 `DIE-engine@23fec32` 逐项
+实测复核（非复述 v3 结论），差距分析落盘
+`docs/research/gui-gap-analysis-v4.md`（V4-01~V4-22），改进计划为
+`docs/design/phase17-gui-parity.md`（17.A demangle / 17.B 归档 /
+17.C 哈希 / 17.D DEX / 17.E 交互细节 / 17.F ADR 决策项），ROADMAP
+追加 Phase 17。
+
+## 2026-10-02 顺序实施 Phase 17
+
+用户要求按顺序实现 Phase 17 各批次。实施结果：
+- 17.A Demangle：模式分发 + 上游 `detectMode` 忠实移植 + `msvc-demangler`
+  + Borland/Watcom/D/Java 自实现（17 单测）
+- 17.B 归档：引擎 `list_archive_members`/`extract_member`（ZIP/7Z/RAR），
+  GUI `list_archive` 改走引擎 + `extract_archive_member` 命令 + 前端提取
+- 17.C 哈希：17 种算法（MD4~SHA512/SHA3/BLAKE2/3/Adler32/CRC64），
+  `compute_hash`+`list_hash_algorithms` 命令 + FileInfo 勾选面板；
+  引擎 `Hash#*` 同步扩展
+- 17.D DEX：`parse_dex_deep_view` 七表 + MiscViewPanel 子标签
+- 17.E：`format_counts` 信息栏、follow.ts Follow-in-Hex、Extra Info
+  模态框、`edit_bytes_at_offset` Hex 编辑入口
+- 17.F：ADR 0035–0038 产出
+- 验证：fmt/clippy/workspace test 全绿，前端 build 通过，
+  COMPATIBILITY.md 已更新

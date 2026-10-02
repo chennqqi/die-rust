@@ -725,5 +725,11 @@ Phase 0 计划形成：
   上游 release `diec` 的全部可观察行为差距分析，含 6 项缺口（G1-G6）、
   上游行为规范、diec 现有基础设施评估、RAR 许可证调研和 ADR 需求，为
   ROADMAP Phase 13 提供证据基础（Draft）。
+- [`gui-gap-analysis-v4.md`](gui-gap-analysis-v4.md)：die-gui 与上游
+  `die` GUI 的第四轮差距复核，固定到 `DIE-engine@23fec32`（2026-09-30），
+  逐项实测当前实现（非复述 v3 结论），识别 V4-01~V4-22 差距项与
+  v3 基线后的上游增量，为 ROADMAP Phase 17 提供证据基础（Draft）。
+  历史轮次：v2/v3 未索引，见同目录 `gui-gap-analysis-v2.md` /
+  `gui-gap-analysis-v3.md`。
 
 每份文档遵守 [`../README.md`](../README.md) 的证据和状态约定。实验附件如需版本化，应使用文本格式并放入主题对应的子目录。
