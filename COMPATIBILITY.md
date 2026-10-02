@@ -432,5 +432,13 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 | BINARY dispatch | `NFD_Binary::getInfo` | ✅ header + archive 表 | |
 | MSDOS | `NFD_MSDOS::getInfo` | ✅ header + entrypoint + exp scan | |
 | PE32/PE64 | `NFD_PE::getInfo` | ⚠ partial | header/EP 链(NOP/JZ/E9-follow)/import hash/resources/section names/Rich/deep section；heuristic `handle_*` 未移植 |
-| ELF/Mach-O/LE/LX/NE/APK/JAR/JavaClass/DEX/Amiga/PDF/JPEG/CFBF/COM | 各自 `getInfo` | ❌ deferred | 表已生成，dispatch 走 generic binary 路径 |
+| COM | `NFD_COM::getInfo` | ✅ header + exp scan @0 | .com 后缀 + ≤64KiB 判定 |
+| NE | `NFD_NE::getInfo` | ⚠ partial | linker header + CS:IP 段表 EP scan；heuristics 未移植 |
+| LE/LX | `NFD_LE/LX::getInfo` | ⚠ partial | linker header 表；heuristics 未移植 |
+| ELF32/64 | `NFD_ELF::getInfo` | ⚠ partial | PT_LOAD EP→offset + EP scan；format record/handle_* 未移植 |
+| DEX | `NFD_DEX::getInfo` | ✅ string_ids + type_ids 两组 stringScan | |
+| APK | `NFD_APK::getInfo` | ✅ 成员名 CRC scan + regex scan | fancy-regex（上游 isRegExpPresent 子串语义） |
+| JAR | `NFD_JAR::getInfo` | ❌ 走 ZIP/generic 路径 | 上游 JAR 无表驱动记录 |
+| 文本 | `handle_Texts` | ⚠ 仅 "Plain text" format 记录 + CRLF/LF | 源语言 regex 启发式未移植 |
+| Mach-O/JavaClass/PDF/JPEG/CFBF/Amiga | 各自 `getInfo` | ❌ deferred | 上游为纯 heuristic（无签名表），generic binary 路径兜底 |
 | 引擎接入 | GUI scan-engine 选择器 | ✅ `ScanFlags::nfd` + CLI `--nfd` + GUI checkbox | 记录带 `engine=nfd` 标记，与 DIE 结果共存不去重 |

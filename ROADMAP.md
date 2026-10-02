@@ -1914,9 +1914,13 @@ nrv 单测），前端 `npm run build` 通过。
   resources、section names、Rich、deep section scans）。
 - 集成：`ScanFlags::nfd`、CLI `--nfd`、GUI engine 勾选；
   NFD 记录在 JSON/GUI 中带 `engine=nfd` 标记。
-- 仍未移植（显式 deferred）：heuristic `handle_*` 版本补全；
-  ELF/Mach-O/LE/LX/NE/APK/JAR/JavaClass/DEX/Amiga/PDF/JPEG/CFBF/COM
-  的 per-format `getInfo` 主体（表已生成，dispatch 走 generic 路径）。
+- 表驱动 dispatch 扩展：COM（header+exp）、NE（linker header+CS:IP
+  段表 EP）、LE/LX（linker header）、ELF32/64（PT_LOAD EP scan）、
+  DEX（string/type 双 stringScan）、APK（成员名 CRC + fancy-regex
+  archiveExpScan）、文本 "Plain text" format 记录（CRLF/LF/CR）。
+- 仍未移植（显式 deferred）：heuristic `handle_*` 版本补全与各格式
+  的 regex/结构启发式；Mach-O/JavaClass/PDF/JPEG/CFBF/Amiga/JAR
+  上游为纯 heuristic 模块（无签名表），走 generic binary 兜底。
 
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。
