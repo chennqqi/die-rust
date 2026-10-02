@@ -6,7 +6,8 @@
 //! checked and every loop is capped.
 
 /// Read a little-endian `u16` at `off`, or `None` when out of bounds.
-fn rd_u16(d: &[u8], off: usize) -> Option<u16> {
+/// Little-endian u16 at `off`; `None` when out of bounds.
+pub fn rd_u16(d: &[u8], off: usize) -> Option<u16> {
     d.get(off..off + 2)
         .map(|b| u16::from_le_bytes(b.try_into().unwrap()))
 }
@@ -744,6 +745,12 @@ fn elf_notes(
         p = next;
     }
 }
+/// `XBinary::read_ansiString(off, len)` — ANSI string capped at `len`
+/// bytes (NUL-terminated or len-limited, whichever comes first).
+pub fn read_ansi_string_len(d: &[u8], off: usize, len: usize) -> Option<String> {
+    read_ansi_string(d, off).map(|s| s.chars().take(len).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

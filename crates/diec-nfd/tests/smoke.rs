@@ -815,3 +815,169 @@ fn pe32_mfc_triggers_microsoft_handler() {
         "no VS 2015 tool record: {out:?}"
     );
 }
+
+/// PE32 with `.text` + `.rdata` (flags 0x40000040) holding
+/// "GCC: (GNU) 9.2.0" and linker version 2.25 — exercises
+/// `handle_GCC` (heur + GCC: version + MinGW minor table +
+/// GNU linker fill).
+fn pe32_gcc_fixture() -> Vec<u8> {
+    let mut d = vec![0u8; 0x800];
+    // Standard MS-DOS stub matching the GENERICLINKER v0 header record
+    // (e_lfanew 0x80, "This program cannot be run in DOS mode.").
+    d[0..2].copy_from_slice(b"MZ");
+    d[2..4].copy_from_slice(&0x90u16.to_le_bytes());
+    d[4..6].copy_from_slice(&3u16.to_le_bytes());
+    d[8..10].copy_from_slice(&4u16.to_le_bytes());
+    d[0x0C..0x0E].copy_from_slice(&0xFFFFu16.to_le_bytes());
+    d[0x10..0x12].copy_from_slice(&0xB8u16.to_le_bytes());
+    d[0x18..0x1A].copy_from_slice(&0x40u16.to_le_bytes());
+    d[0x3C..0x40].copy_from_slice(&0x80u32.to_le_bytes());
+    let stub = b"\x0E\x1F\xBA\x0E\x00\xB4\x09\xCD\x21\xB8\x01\x4C\xCD\x21This program cannot be run in DOS mode.\r\r\n$\0\0\0\0";
+    d[0x40..0x40 + stub.len()].copy_from_slice(stub);
+    d[0x80..0x84].copy_from_slice(b"PE\0\0");
+    d[0x84..0x86].copy_from_slice(&0x014Cu16.to_le_bytes());
+    d[0x86..0x88].copy_from_slice(&2u16.to_le_bytes()); // 2 sections
+    d[0x94..0x96].copy_from_slice(&0xE0u16.to_le_bytes());
+    d[0x96..0x98].copy_from_slice(&0x010Fu16.to_le_bytes());
+    let opt = 0x98;
+    d[opt..opt + 2].copy_from_slice(&0x010Bu16.to_le_bytes());
+    d[opt + 2] = 2; // MajorLinkerVersion
+    d[opt + 3] = 25; // MinorLinkerVersion → MinGW 5.3.0
+    d[opt + 16..opt + 20].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[opt + 28..opt + 32].copy_from_slice(&0x0040_0000u32.to_le_bytes());
+    d[opt + 32..opt + 36].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[opt + 36..opt + 40].copy_from_slice(&0x200u32.to_le_bytes());
+    d[opt + 68..opt + 70].copy_from_slice(&3u16.to_le_bytes());
+    d[opt + 92..opt + 96].copy_from_slice(&16u32.to_le_bytes());
+    // [0] .text raw 0x200/0x200.
+    let s0 = opt + 0xE0;
+    d[s0..s0 + 5].copy_from_slice(b".text");
+    d[s0 + 8..s0 + 12].copy_from_slice(&0x200u32.to_le_bytes());
+    d[s0 + 12..s0 + 16].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[s0 + 16..s0 + 20].copy_from_slice(&0x200u32.to_le_bytes());
+    d[s0 + 20..s0 + 24].copy_from_slice(&0x200u32.to_le_bytes());
+    d[s0 + 36..s0 + 40].copy_from_slice(&0x6000_0020u32.to_le_bytes());
+    // [1] .rdata raw 0x400/0x200, chars 0x40000040 (const data).
+    let s1 = s0 + 40;
+    d[s1..s1 + 6].copy_from_slice(b".rdata");
+    d[s1 + 8..s1 + 12].copy_from_slice(&0x200u32.to_le_bytes());
+    d[s1 + 12..s1 + 16].copy_from_slice(&0x2000u32.to_le_bytes());
+    d[s1 + 16..s1 + 20].copy_from_slice(&0x200u32.to_le_bytes());
+    d[s1 + 20..s1 + 24].copy_from_slice(&0x400u32.to_le_bytes());
+    d[s1 + 36..s1 + 40].copy_from_slice(&0x4000_0040u32.to_le_bytes());
+    // .rdata: first ANSI string carries the lowercase "gcc" marker
+    // (`sDllLib`), "GCC:" version string sits later in the section.
+    let dll_s = b"gcc library helpers\0";
+    d[0x400..0x400 + dll_s.len()].copy_from_slice(dll_s);
+    let gcc_s = b"GCC: (GNU) 9.2.0\0";
+    d[0x420..0x420 + gcc_s.len()].copy_from_slice(gcc_s);
+    d
+}
+
+#[test]
+fn pe32_gcc_mingw_handler() {
+    let d = pe32_gcc_fixture();
+    let (ft, out) = show("pe32-gcc-synth", &d);
+    assert_eq!(ft_name(ft), "FT_PE32");
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "GCC" && r.version == "9.2.0"),
+        "no GCC 9.2.0 compiler record: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "MinGW" && r.version == "5.3.0"),
+        "no MinGW tool record (linker 2.25 → 5.3.0): {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "GNU ld" && r.version == "2.25"),
+        "no GNU linker record: {out:?}"
+    );
+}
+
+/// PE32 with "Open Watcom ... 2002-10.5" at the entry point —
+/// exercises `handle_Watcom` (vi string → OPENWATCOMCCPP + inferred
+/// WATCOMLINKER).
+fn pe32_watcom_fixture() -> Vec<u8> {
+    let mut d = vec![0u8; 0x600];
+    d[0..2].copy_from_slice(b"MZ");
+    d[0x3C..0x40].copy_from_slice(&0x40u32.to_le_bytes());
+    d[0x40..0x44].copy_from_slice(b"PE\0\0");
+    d[0x44..0x46].copy_from_slice(&0x014Cu16.to_le_bytes());
+    d[0x46..0x48].copy_from_slice(&1u16.to_le_bytes());
+    d[0x54..0x56].copy_from_slice(&0xE0u16.to_le_bytes());
+    d[0x56..0x58].copy_from_slice(&0x010Fu16.to_le_bytes());
+    let opt = 0x58;
+    d[opt..opt + 2].copy_from_slice(&0x010Bu16.to_le_bytes());
+    d[opt + 2] = 13;
+    d[opt + 3] = 0;
+    d[opt + 16..opt + 20].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[opt + 28..opt + 32].copy_from_slice(&0x0040_0000u32.to_le_bytes());
+    d[opt + 32..opt + 36].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[opt + 36..opt + 40].copy_from_slice(&0x200u32.to_le_bytes());
+    d[opt + 92..opt + 96].copy_from_slice(&16u32.to_le_bytes());
+    let sec = opt + 0xE0;
+    d[sec..sec + 5].copy_from_slice(b".text");
+    d[sec + 8..sec + 12].copy_from_slice(&0x200u32.to_le_bytes());
+    d[sec + 12..sec + 16].copy_from_slice(&0x1000u32.to_le_bytes());
+    d[sec + 16..sec + 20].copy_from_slice(&0x200u32.to_le_bytes());
+    d[sec + 20..sec + 24].copy_from_slice(&0x200u32.to_le_bytes());
+    d[sec + 36..sec + 40].copy_from_slice(&0x6000_0020u32.to_le_bytes());
+    // Entry-point region (file 0x200): Watcom version string.
+    let ws = b"Open Watcom C++ ver 2002-10.5x\0pad";
+    d[0x200..0x200 + ws.len()].copy_from_slice(ws);
+    d
+}
+
+#[test]
+fn pe32_watcom_handler() {
+    let d = pe32_watcom_fixture();
+    let (ft, out) = show("pe32-watcom-synth", &d);
+    assert_eq!(ft_name(ft), "FT_PE32");
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Open Watcom C/C++" && r.version == "10.5"),
+        "no Open Watcom compiler record: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_name.contains("Watcom") && r.record_type == "Linker"),
+        "no inferred Watcom linker record: {out:?}"
+    );
+}
+
+/// PE32 with a security-directory WIN_CERTIFICATE (rev 0x200, type 2)
+/// and a single `NOVEXSTUB.DLL` import — exercises `handle_Signtools`
+/// and `handle_DongleProtection`.
+fn pe32_cert_dongle_fixture() -> Vec<u8> {
+    let mut d = pe32_mfc_fixture();
+    // Security dir (entry 4): file offset 0x300, size 0x28.
+    let opt = 0x58;
+    d[opt + 96 + 32..opt + 96 + 36].copy_from_slice(&0x300u32.to_le_bytes());
+    d[opt + 96 + 36..opt + 96 + 40].copy_from_slice(&0x28u32.to_le_bytes());
+    // WIN_CERTIFICATE at file 0x300: dwLength=0x28, rev=0x200, type=2.
+    d[0x300..0x304].copy_from_slice(&0x28u32.to_le_bytes());
+    d[0x304..0x306].copy_from_slice(&0x0200u16.to_le_bytes());
+    d[0x306..0x308].copy_from_slice(&2u16.to_le_bytes());
+    // Single import lib NOVEXSTUB.DLL.
+    let lib = b"NOVEXSTUB.DLL\0";
+    d[0x230..0x230 + lib.len()].copy_from_slice(lib);
+    d
+}
+
+#[test]
+fn pe32_cert_and_dongle_handlers() {
+    let d = pe32_cert_dongle_fixture();
+    let (ft, out) = show("pe32-cert-dongle-synth", &d);
+    assert_eq!(ft_name(ft), "FT_PE32");
+    assert!(
+        out.iter()
+            .any(|r| r.record_name == "Windows Authenticode" && r.version == "2.0"),
+        "no WinAuth signtool record: {out:?}"
+    );
+    assert!(
+        out.iter().any(|r| r.record_name == "Guardian Stealth"),
+        "no dongle record: {out:?}"
+    );
+}

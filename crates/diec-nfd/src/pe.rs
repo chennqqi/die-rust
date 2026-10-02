@@ -69,6 +69,11 @@ pub struct PeInfo {
     /// Import-directory section index (`getImageDirectoryEntrySection`),
     /// -1 when not found.
     pub import_section: i32,
+    /// Security-directory (dir 4) file offset — `VirtualAddress` there is
+    /// a file offset, not an RVA (`handle_Signtools` cert table).
+    pub cert_offset: usize,
+    /// See [`Self::cert_offset`]; `Size` field of the security dir.
+    pub cert_size: usize,
 }
 
 fn rd_u16(d: &[u8], off: usize) -> Option<u16> {
@@ -308,6 +313,8 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
     info.characteristics = rd_u16(d, l.opt_off - 20 + 18).unwrap_or(0);
     info.image_base = l.image_base;
     info.import_section = import_section_index(&l);
+    info.cert_offset = l.dir_rva[4] as usize;
+    info.cert_size = l.dir_size[4] as usize;
 
     info.extents = l
         .sections
@@ -511,6 +518,20 @@ impl PeInfo {
             .iter()
             .find(|e| e.code)
             .map(|e| (e.off, e.size))
+    }
+
+    /// Index of the section containing the entry point
+    /// (`nEntryPointSection`), -1 when outside all raw extents.
+    pub fn entrypoint_section_index(&self) -> i32 {
+        let ep = self.entry_point_offset;
+        if ep < 0 {
+            return -1;
+        }
+        self.extents
+            .iter()
+            .position(|e| ep as usize >= e.off && (ep as usize) < e.off + e.size)
+            .map(|i| i as i32)
+            .unwrap_or(-1)
     }
 
     /// File offset/size of the section containing the entry point,

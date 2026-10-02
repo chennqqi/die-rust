@@ -769,6 +769,22 @@ fn pe_scan(
     crate::pe_handlers::import_heuristics(&pe, ftpe, imports);
     crate::pe_handlers::debug_data(data, &pe, ftpe, misc);
     crate::pe_handlers::microsoft(data, &pe, opts.deep_scan, ftpe, header, entrypoint, misc);
+    crate::pe_handlers::gcc(
+        data,
+        &pe,
+        opts.deep_scan,
+        ftpe,
+        header,
+        overlay,
+        entrypoint,
+        misc,
+    );
+    crate::pe_handlers::watcom(data, &pe, ftpe, header, entrypoint, misc);
+    crate::pe_handlers::signtools(data, &pe, ftpe, misc);
+    crate::pe_handlers::dongle(&pe, ftpe, misc);
+    crate::pe_handlers::neolite(data, &pe, opts.deep_scan, ftpe, misc);
+    crate::pe_handlers::petools(section_names, ftpe, misc);
+    crate::pe_handlers::joiners(data, &pe, ftpe, imports, entrypoint, misc);
 }
 
 /// MSDOS scan pipeline: linker-header + header records, entry-point

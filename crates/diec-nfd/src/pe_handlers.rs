@@ -53,7 +53,8 @@ pub fn normal_code_section(pe: &PeInfo) -> Option<&SectionExtent> {
 /// is not code (`0x60000020`) or uninitialized (`0x40000040`).
 pub fn normal_data_section(pe: &PeInfo) -> Option<&SectionExtent> {
     for (i, s) in pe.extents.iter().enumerate().skip(1) {
-        if (s.name == "DATA" || s.name == ".data")
+        // Raw-name compare upstream; our parser uppercases names.
+        if (s.name.eq_ignore_ascii_case("DATA") || s.name.eq_ignore_ascii_case(".data"))
             && (s.flags & 0xFF00_00FF) == 0xC000_0040
             && s.size != 0
             && pe.import_section != i as i32
@@ -355,7 +356,10 @@ pub fn debug_data(data: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
             "",
         );
     }
-    if let Some(dbg) = pe.extents.iter().find(|s| s.name == ".debug_info")
+    if let Some(dbg) = pe
+        .extents
+        .iter()
+        .find(|s| s.name.eq_ignore_ascii_case(".debug_info"))
         && dbg.size > 8
         && let Some(v) = crate::parse::rd_u32(data, dbg.off + 4).map(|x| x as u16)
         && v <= 7
@@ -629,4 +633,479 @@ fn find_u32_le(d: &[u8], off: usize, size: usize, val: u32) -> Option<usize> {
         .windows(4)
         .position(|w| w == needle)
         .map(|i| off + i)
+}
+
+/// `getConstDataSection` — first `.rdata` section (index ≥1) with
+/// masked characteristics `0x40000040` and non-zero raw size.
+fn const_data_section(pe: &PeInfo) -> Option<&SectionExtent> {
+    // Upstream compares the raw name against ".rdata"; our parser
+    // uppercases names, so compare case-insensitively.
+    pe.extents.iter().skip(1).find(|s| {
+        s.name.eq_ignore_ascii_case(".rdata")
+            && (s.flags & 0xFF00_00FF) == 0x4000_0040
+            && s.size != 0
+    })
+}
+
+/// First ANSI string at a section offset (`read_ansiString` at the
+/// section base) — the `sDllLib` input of `handle_GCC`.
+fn first_ansi(data: &[u8], off: usize) -> String {
+    crate::parse::read_ansi_string(data, off).unwrap_or_default()
+}
+
+/// `get_GCC_vi1`: find "GCC:" inside `[off, off+size)` and parse the
+/// version string (copied `SpecAbstract::_get_GCC_string` semantics).
+fn gcc_vi1(data: &[u8], off: usize, size: usize) -> (String, String) {
+    let Some(hit) = crate::parse::find_ansi(data, off, size, b"GCC:") else {
+        return (String::new(), String::new());
+    };
+    let s = crate::parse::read_ansi_string(data, hit).unwrap_or_default();
+    if !s.contains("GCC:") {
+        return (String::new(), String::new());
+    }
+    let info = if s.contains("MinGW") {
+        "MinGW"
+    } else if s.contains("MSYS2") {
+        "MSYS2"
+    } else if s.contains("Cygwin") {
+        "Cygwin"
+    } else {
+        ""
+    };
+    let words: Vec<&str> = s.split(' ').collect();
+    let version = if s.contains("(experimental)") || s.contains("(prerelease)") {
+        words
+            .iter()
+            .rev()
+            .take(3)
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else if let Some(i) = s.find("(GNU) c ") {
+        s[i + 8..].split(' ').collect::<Vec<_>>().join(" ")
+    } else if s.contains("GNU") {
+        words.iter().skip(2).cloned().collect::<Vec<_>>().join(" ")
+    } else if s.contains("Rev1, Built by MSYS2 project") {
+        words
+            .iter()
+            .rev()
+            .take(2)
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else if s.contains("(Ubuntu ") {
+        s.rsplit(") ")
+            .next()
+            .and_then(|t| t.split(' ').next())
+            .unwrap_or("")
+            .to_string()
+    } else if s.contains("StartOS)") {
+        s.rsplit(')')
+            .next()
+            .and_then(|t| t.split(' ').next())
+            .unwrap_or("")
+            .to_string()
+    } else if let Some(i) = s.find("GCC: (c) ") {
+        s[i + 9..].split(' ').next().unwrap_or("").to_string()
+    } else {
+        words.last().copied().unwrap_or("").to_string()
+    };
+    (version, info.to_string())
+}
+
+/// `get_GCC_vi2`: find "gcc-" and take `section("-",1,1).section("/",0,0)`.
+fn gcc_vi2(data: &[u8], off: usize, size: usize) -> String {
+    let Some(hit) = crate::parse::find_ansi(data, off, size, b"gcc-") else {
+        return String::new();
+    };
+    let s = crate::parse::read_ansi_string(data, hit).unwrap_or_default();
+    s.split('-')
+        .nth(1)
+        .and_then(|t| t.split('/').next())
+        .unwrap_or("")
+        .to_string()
+}
+
+/// `handle_GCC` — GCC/MinGW/MSYS/MSYS2/Cygwin chain: const-data "GCC:"
+/// version string, Cygwin DLL version, `.stabstr` GCC path markers,
+/// GNU linker version fill, MinGW linker-minor→GCC version table.
+#[allow(clippy::too_many_arguments)]
+pub fn gcc(
+    data: &[u8],
+    pe: &PeInfo,
+    deep: bool,
+    ftpe: u16,
+    header: &DetectMap,
+    overlay: &DetectMap,
+    entrypoint: &DetectMap,
+    misc: &mut DetectMap,
+) {
+    if pe.is_dotnet {
+        return;
+    }
+    let has_generic = header.contains_key(&n::RECORD_NAME_GENERICLINKER);
+    let mut heur = false;
+    if has_generic && pe.major_linker == 2 {
+        heur = matches!(pe.minor_linker, 22..=36 | 56);
+    }
+
+    // sDllLib — first ANSI string of the const-data section (deep scan).
+    let cd = if deep { const_data_section(pe) } else { None };
+    let dll_lib = cd.map(|s| first_ansi(data, s.off)).unwrap_or_default();
+
+    let mut tool: Option<(u16, String)> = None;
+    let mut compiler: Option<(u16, String)> = None;
+    let mut linker: Option<(u16, String)> = None;
+
+    if has_lib(pe, "msys-1.0.dll") || dll_lib.contains("msys-") {
+        tool = Some((n::RECORD_NAME_MSYS, "1.0".to_string()));
+    }
+
+    let detect = dll_lib.contains("gcc")
+        || dll_lib.contains("libgcj")
+        || dll_lib.contains("cyggcj")
+        || dll_lib == "_set_invalid_parameter_handler"
+        || has_lib(pe, "libgcc_s_dw2-1.dll")
+        || overlay.contains_key(&n::RECORD_NAME_MINGW)
+        || entrypoint.contains_key(&n::RECORD_NAME_GCC);
+
+    if detect || heur {
+        if let Some(cs) = cd {
+            let sz = cs.size.min(1 << 22);
+            let (ver, info) = gcc_vi1(data, cs.off, sz);
+            let mut cver = ver;
+            if info == "MinGW" {
+                tool = Some((n::RECORD_NAME_MINGW, String::new()));
+            } else if info == "MSYS2" {
+                tool = Some((n::RECORD_NAME_MSYS2, String::new()));
+            } else if info == "Cygwin" {
+                tool = Some((n::RECORD_NAME_CYGWIN, String::new()));
+            }
+            if cver.is_empty() {
+                cver = gcc_vi2(data, cs.off, sz);
+            }
+            if cver.is_empty()
+                && let Some(ds) = normal_data_section(pe)
+            {
+                cver = gcc_vi2(data, ds.off, ds.size.min(1 << 22));
+            }
+            if tool.is_none()
+                && let Some(ep) = entrypoint.get(&n::RECORD_NAME_GCC)
+                && ep.info.contains("MinGW")
+            {
+                tool = Some((n::RECORD_NAME_MINGW, String::new()));
+            }
+            if !cver.is_empty() {
+                compiler = Some((n::RECORD_NAME_GCC, cver));
+            }
+            if !detect && let Some(cs2) = cd {
+                let sz2 = cs2.size.min(1 << 22);
+                if crate::parse::find_ansi(data, cs2.off, sz2, b"Mingw-w64 runtime failure:")
+                    .is_some()
+                {
+                    tool = Some((n::RECORD_NAME_MINGW, String::new()));
+                }
+            }
+        }
+        if detect && compiler.is_none() {
+            compiler = Some((n::RECORD_NAME_GCC, String::new()));
+        }
+        // Cygwin DLL version: import name ^CYGWIN → digits → "%.2f".
+        for h in &pe.import_headers {
+            let up = h.name.to_ascii_uppercase();
+            if up.starts_with("CYGWIN") {
+                let digits: String = up.chars().filter(|c| c.is_ascii_digit()).collect();
+                if let Ok(dv) = digits.parse::<f64>()
+                    && dv != 0.0
+                {
+                    tool = Some((n::RECORD_NAME_CYGWIN, format!("{dv:.2}")));
+                }
+                if tool.is_none() {
+                    tool = Some((n::RECORD_NAME_CYGWIN, String::new()));
+                }
+            }
+        }
+        // .stabstr GCC path markers when no compiler identified yet.
+        if compiler.is_none()
+            && let Some(sr) = pe
+                .extents
+                .iter()
+                .find(|s| s.name.eq_ignore_ascii_case(".stabstr"))
+        {
+            let sz = sr.size.min(1 << 22);
+            if crate::parse::find_ansi(data, sr.off, sz, b"/gcc/mingw32/").is_some() {
+                tool = Some((n::RECORD_NAME_MINGW, String::new()));
+            } else if crate::parse::find_ansi(data, sr.off, sz, b"/gcc/i686-pc-cygwin/").is_some() {
+                tool = Some((n::RECORD_NAME_CYGWIN, String::new()));
+            }
+        }
+        if compiler.is_none()
+            && matches!(
+                tool.as_ref().map(|t| t.0),
+                Some(n::RECORD_NAME_MINGW)
+                    | Some(n::RECORD_NAME_MSYS)
+                    | Some(n::RECORD_NAME_MSYS2)
+                    | Some(n::RECORD_NAME_CYGWIN)
+            )
+        {
+            compiler = Some((n::RECORD_NAME_GCC, String::new()));
+        }
+        if matches!(compiler, Some((n::RECORD_NAME_GCC, _))) && tool.is_none() {
+            tool = Some((n::RECORD_NAME_MINGW, String::new()));
+        }
+        if matches!(compiler, Some((n::RECORD_NAME_GCC, _))) && has_generic {
+            linker = Some((
+                n::RECORD_NAME_GNULINKER,
+                format!("{}.{}", pe.major_linker, pe.minor_linker),
+            ));
+        }
+        if let Some((nm, ver)) = &mut tool
+            && *nm == n::RECORD_NAME_MINGW
+            && ver.is_empty()
+            && pe.major_linker == 2
+        {
+            *ver = match pe.minor_linker {
+                23 => "4.7.0-4.8.0",
+                24 => "4.8.2-4.9.2",
+                25 => "5.3.0",
+                29 | 30 => "7.3.0",
+                _ => "",
+            }
+            .to_string();
+        }
+    }
+
+    if let Some((nm, ver)) = linker {
+        emit(misc, ftpe, rt::RECORD_TYPE_LINKER, nm, &ver, "");
+    }
+    if let Some((nm, ver)) = compiler {
+        emit(misc, ftpe, rt::RECORD_TYPE_COMPILER, nm, &ver, "");
+    }
+    if let Some((nm, ver)) = tool {
+        emit(misc, ftpe, rt::RECORD_TYPE_TOOL, nm, &ver, "");
+    }
+}
+
+/// `handle_Watcom` — WATCOMLINKER header detect + EP WATCOMCCPP +
+/// `get_Watcom_vi` strings near the entry point ("Open Watcom"/"WATCOM"
+/// with ` 2002-`/`. 1988-` version extraction).
+pub fn watcom(
+    data: &[u8],
+    pe: &PeInfo,
+    ftpe: u16,
+    header: &DetectMap,
+    entrypoint: &DetectMap,
+    misc: &mut DetectMap,
+) {
+    let mut linker: Option<(String, String)> = None;
+    let mut compiler: Option<(u16, String, String)> = None;
+
+    if let Some(rec) = header.get(&n::RECORD_NAME_WATCOMLINKER) {
+        linker = Some((
+            String::new(),
+            format!("{}.{:02}", pe.major_linker, pe.minor_linker),
+        ));
+        let _ = rec;
+    }
+    if let Some(rec) = entrypoint.get(&n::RECORD_NAME_WATCOMCCPP) {
+        compiler = Some((
+            n::RECORD_NAME_WATCOMCCPP,
+            rec.version.clone(),
+            rec.info.clone(),
+        ));
+    }
+
+    // get_Watcom_vi over [EP, EP+0x100).
+    if pe.entry_point_offset >= 0 {
+        let off = pe.entry_point_offset as usize;
+        let sz = 0x100usize;
+        if let Some(hit) = crate::parse::find_ansi(data, off, sz, b"Open Watcom") {
+            let _ = hit;
+            let ver = crate::parse::find_ansi(data, off, sz, b" 2002-")
+                .and_then(|o| crate::parse::read_ansi_string_len(data, o + 6, 4))
+                .unwrap_or_else(|| "2002".to_string());
+            compiler = Some((n::RECORD_NAME_OPENWATCOMCCPP, ver, String::new()));
+        } else if crate::parse::find_ansi(data, off, sz, b"WATCOM").is_some() {
+            let ver = crate::parse::find_ansi(data, off, sz, b". 1988-")
+                .and_then(|o| crate::parse::read_ansi_string_len(data, o + 7, 4))
+                .unwrap_or_else(|| "1988".to_string());
+            compiler = Some((n::RECORD_NAME_WATCOMCCPP, ver, String::new()));
+        }
+    }
+    if linker.is_some() && compiler.is_none() {
+        compiler = Some((n::RECORD_NAME_WATCOMCCPP, String::new(), String::new()));
+    }
+    if linker.is_none() && compiler.is_some() {
+        linker = Some((String::new(), String::new()));
+    }
+
+    if let Some((_, ver)) = linker {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_LINKER,
+            n::RECORD_NAME_WATCOMLINKER,
+            &ver,
+            "",
+        );
+    }
+    if let Some((nm, ver, info)) = compiler {
+        emit(misc, ftpe, rt::RECORD_TYPE_COMPILER, nm, &ver, &info);
+    }
+}
+
+/// `handle_Signtools` — security-directory first cert with
+/// `wRevision=0x200`/`wCertificateType=2` → WINAUTH "2.0"/"PKCS #7".
+pub fn signtools(data: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
+    if pe.cert_offset == 0 || pe.cert_size == 0 {
+        return;
+    }
+    let off = pe.cert_offset;
+    if off + 8 > data.len() {
+        return;
+    }
+    // First WIN_CERTIFICATE: dwLength @0, wRevision @4, wCertType @6.
+    let (Some(rev), Some(cty)) = (
+        crate::parse::rd_u16(data, off + 4),
+        crate::parse::rd_u16(data, off + 6),
+    ) else {
+        return;
+    };
+    if rev == 0x200 && cty == 2 {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_SIGNTOOL,
+            n::RECORD_NAME_WINAUTH,
+            "2.0",
+            "PKCS #7",
+        );
+    }
+}
+
+/// `handle_DongleProtection` — single `NOVEX*` import → Guardian
+/// Stealth dongle record (emitted via the SFX map upstream; we use misc).
+pub fn dongle(pe: &PeInfo, ftpe: u16, misc: &mut DetectMap) {
+    if pe.import_headers.len() == 1
+        && pe.import_headers[0]
+            .name
+            .to_ascii_uppercase()
+            .starts_with("NOVEX")
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_DONGLEPROTECTION,
+            n::RECORD_NAME_GUARDIANSTEALTH,
+            "",
+            "",
+        );
+    }
+}
+
+/// `handle_NeoLite` — EP section contains "NeoLite Executable File
+/// Compressor" (deep scan, EP not in section 0).
+pub fn neolite(data: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut DetectMap) {
+    if pe.is_dotnet || pe.entrypoint_section_index() == 0 || !deep {
+        return;
+    }
+    if let Some((off, size)) = pe.entrypoint_section_extent(data) {
+        let sz = size.min(1 << 22);
+        if crate::parse::find_ansi(data, off, sz, b"NeoLite Executable File Compressor").is_some() {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_PACKER,
+                n::RECORD_NAME_NEOLITE,
+                "1.0",
+                "",
+            );
+        }
+    }
+}
+
+/// `handle_PETools` — section-name detects VMUNPACKER/XVOLKOLAK/HOODLUM
+/// are re-emitted as PETools records.
+pub fn petools(section_names: &DetectMap, ftpe: u16, misc: &mut DetectMap) {
+    for nm in [
+        n::RECORD_NAME_VMUNPACKER,
+        n::RECORD_NAME_XVOLKOLAK,
+        n::RECORD_NAME_HOODLUM,
+    ] {
+        if let Some(rec) = section_names.get(&nm) {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_PETOOL,
+                nm,
+                &rec.version,
+                &rec.info,
+            );
+        }
+    }
+}
+
+/// `handle_Joiners` — BladeJoiner/ExeJoiner (import+EP detects + overlay
+/// present), Celesty File Binder and NJoiner (import detect + named
+/// resources).
+#[allow(clippy::too_many_arguments)]
+pub fn joiners(
+    data: &[u8],
+    pe: &PeInfo,
+    ftpe: u16,
+    imports: &DetectMap,
+    entrypoint: &DetectMap,
+    misc: &mut DetectMap,
+) {
+    let overlay_size = if pe.overlay_offset >= 0 {
+        data.len().saturating_sub(pe.overlay_offset as usize)
+    } else {
+        0
+    };
+    for nm in [n::RECORD_NAME_BLADEJOINER, n::RECORD_NAME_EXEJOINER] {
+        if imports.contains_key(&nm)
+            && entrypoint.contains_key(&nm)
+            && overlay_size != 0
+            && let Some(rec) = entrypoint.get(&nm)
+        {
+            emit(
+                misc,
+                ftpe,
+                rt::RECORD_TYPE_JOINER,
+                nm,
+                &rec.version,
+                &rec.info,
+            );
+        }
+    }
+    let res = crate::pe::collect_resources(data);
+    let has_res = |name: &str| res.iter().any(|r| r.name2.as_deref() == Some(name));
+    if imports.contains_key(&n::RECORD_NAME_CELESTYFILEBINDER)
+        && has_res("RBIND")
+        && let Some(rec) = imports.get(&n::RECORD_NAME_CELESTYFILEBINDER)
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_JOINER,
+            n::RECORD_NAME_CELESTYFILEBINDER,
+            &rec.version,
+            &rec.info,
+        );
+    }
+    if imports.contains_key(&n::RECORD_NAME_NJOINER)
+        && (has_res("NJ") || has_res("NJOY"))
+        && let Some(rec) = imports.get(&n::RECORD_NAME_NJOINER)
+    {
+        emit(
+            misc,
+            ftpe,
+            rt::RECORD_TYPE_JOINER,
+            n::RECORD_NAME_NJOINER,
+            &rec.version,
+            &rec.info,
+        );
+    }
 }
