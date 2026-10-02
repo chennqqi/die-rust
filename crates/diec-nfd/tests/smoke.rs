@@ -75,3 +75,118 @@ fn malformed_inputs_no_panic() {
         let _ = i;
     }
 }
+
+// ---- Phase 21.F: per-format dispatch coverage ----------------------------
+
+/// Build a minimal ZIP with a single stored member carrying `name`.
+fn zip_with_member(name: &str) -> Vec<u8> {
+    let nb = name.as_bytes();
+    let mut d = Vec::new();
+    // Local file header.
+    d.extend_from_slice(b"PK\x03\x04");
+    d.extend_from_slice(&[0u8; 4]); // version/flags
+    d.extend_from_slice(&[0u8; 4]); // method+mtime+mdate
+    d.extend_from_slice(&[0u8; 12]); // crc/sizes
+    d.extend_from_slice(&(nb.len() as u16).to_le_bytes());
+    d.extend_from_slice(&[0u8; 2]); // extra len
+    d.extend_from_slice(nb);
+    // Central directory at current offset.
+    let cd = d.len();
+    d.extend_from_slice(b"PK\x01\x02");
+    d.extend_from_slice(&[0u8; 24]); // version..crc/sizes
+    d.extend_from_slice(&(nb.len() as u16).to_le_bytes());
+    d.extend_from_slice(&[0u8; 8]); // extra/comment/disk/attrs
+    d.extend_from_slice(&[0u8; 8]); // attrs+lho
+    d.extend_from_slice(nb);
+    // EOCD.
+    d.extend_from_slice(b"PK\x05\x06");
+    d.extend_from_slice(&[0u8; 4]); // disk
+    d.extend_from_slice(&1u16.to_le_bytes());
+    d.extend_from_slice(&1u16.to_le_bytes());
+    d.extend_from_slice(&(nb.len() as u32 + 46).to_le_bytes()); // cd size
+    d.extend_from_slice(&(cd as u32).to_le_bytes());
+    d.extend_from_slice(&[0u8; 2]); // comment len
+    d
+}
+
+/// Build a minimal DEX header + string table holding `strs`.
+fn dex_with_strings(strs: &[&str]) -> Vec<u8> {
+    let mut d = vec![0u8; 0x70];
+    d[..8].copy_from_slice(b"dex\n035\0");
+    let n = strs.len() as u32;
+    let sid_off = 0x70usize;
+    let mut data_off = sid_off + strs.len() * 4;
+    let mut out = d.clone();
+    out.resize(data_off, 0);
+    let mut ids = Vec::new();
+    for s in strs {
+        ids.push(data_off as u32);
+        // uleb128 len + bytes + NUL
+        let l = s.len();
+        out.push(l as u8); // single-byte uleb128 (test strings < 128)
+        out.extend_from_slice(s.as_bytes());
+        out.push(0);
+        data_off = out.len();
+    }
+    for (i, off) in ids.iter().enumerate() {
+        out[sid_off + i * 4..sid_off + i * 4 + 4].copy_from_slice(&off.to_le_bytes());
+    }
+    out[0x38..0x3C].copy_from_slice(&n.to_le_bytes());
+    out[0x3C..0x40].copy_from_slice(&(sid_off as u32).to_le_bytes());
+    out
+}
+
+#[test]
+fn apk_member_name_scan_hits_protector_record() {
+    let d = zip_with_member("assets/secData0.jar");
+    let ft = diec_nfd::sniff_ft_named(&d, "x.apk");
+    assert_eq!(diec_nfd::ft_name(ft), "FT_APK");
+    let out = diec_nfd::scan(&d, ft, diec_nfd::ScanOptions::default());
+    assert!(
+        out.iter().any(|r| r.record_name.contains("SecShell")),
+        "expected SecShell member-name detection: {out:?}"
+    );
+}
+
+#[test]
+fn dex_string_scan_hits_protector_record() {
+    let d = dex_with_strings(&["ALLATORIxDEMO", "Lfoo/Bar;"]);
+    let out = diec_nfd::scan(
+        &d,
+        diec_nfd::gen_names::ft::FT_DEX,
+        diec_nfd::ScanOptions::default(),
+    );
+    assert!(
+        out.iter().any(|r| r.record_name == "Allatori Obfuscator"),
+        "expected Allatori detection: {out:?}"
+    );
+}
+
+#[test]
+fn plain_text_gets_format_record() {
+    let d = b"#include <stdio.h>\nint main() { return 0; }\n".to_vec();
+    let out = diec_nfd::scan(
+        &d,
+        diec_nfd::gen_names::ft::FT_BINARY,
+        diec_nfd::ScanOptions::default(),
+    );
+    assert!(
+        out.iter()
+            .any(|r| r.record_type == "Format" && r.record_name == "Plain" && r.info == "LF"),
+        "expected Plain text format record: {out:?}"
+    );
+}
+
+#[test]
+fn com_suffix_sniffs_to_com() {
+    let d = vec![0xC3u8; 128];
+    assert_eq!(
+        diec_nfd::ft_name(diec_nfd::sniff_ft_named(&d, "tool.com")),
+        "FT_COM"
+    );
+    // Without the suffix the same bytes stay generic.
+    assert_eq!(
+        diec_nfd::ft_name(diec_nfd::sniff_ft_named(&d, "tool.bin")),
+        "FT_BINARY"
+    );
+}

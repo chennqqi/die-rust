@@ -7,11 +7,15 @@
 
 use diec_core::signature::{match_signature, parse_signature};
 
-use crate::gen_names::{FT_STR, RECORD_NAME_STR, RECORD_TYPE_STR, ft};
+use crate::gen_names::{FT_STR, RECORD_NAME_STR, RECORD_TYPE_STR, ft, name, rtype};
 use crate::gen_tables as t;
+use crate::parse;
 use crate::pe;
 use crate::records::SignatureRecord;
-use crate::scans::{DetectMap, ScanRecord, const_scan, msrich_scan, signature_scan, string_scan};
+use crate::scans::{
+    DetectMap, ScanRecord, archive_exp_scan, archive_scan, const_scan, msrich_scan, signature_scan,
+    string_scan,
+};
 use crate::signature::get_signature;
 
 /// One emitted detection (normalized `SCANSTRUCT`).
@@ -134,17 +138,24 @@ fn memory_scan(
 pub fn sniff_ft(data: &[u8]) -> u16 {
     if data.len() >= 4 {
         if data.starts_with(b"MZ") {
-            // PE iff a sane e_lfanew + PE\0\0 signature.
+            // e_lfanew points at the secondary signature: PE\0\0 for
+            // Win32, NE/LX/LE for the 16/32-bit OS/2-DOS families.
             if data.len() > 0x40 {
                 let pe_off =
                     u32::from_le_bytes([data[0x3C], data[0x3D], data[0x3E], data[0x3F]]) as usize;
-                if data.get(pe_off..pe_off + 4) == Some(b"PE\0\0") {
-                    let magic_off = pe_off + 24;
-                    return match data.get(magic_off..magic_off + 2) {
-                        Some(&[0x0B, 0x01]) => ft::FT_PE32,
-                        Some(&[0x0B, 0x02]) => ft::FT_PE64,
-                        _ => ft::FT_MSDOS,
-                    };
+                match data.get(pe_off..pe_off + 2) {
+                    Some(b"PE") if data.get(pe_off + 2..pe_off + 4) == Some(b"\0\0") => {
+                        let magic_off = pe_off + 24;
+                        return match data.get(magic_off..magic_off + 2) {
+                            Some(&[0x0B, 0x01]) => ft::FT_PE32,
+                            Some(&[0x0B, 0x02]) => ft::FT_PE64,
+                            _ => ft::FT_MSDOS,
+                        };
+                    }
+                    Some(b"NE") => return ft::FT_NE,
+                    Some(b"LX") => return ft::FT_LX,
+                    Some(b"LE") => return ft::FT_LE,
+                    _ => {}
                 }
             }
             return ft::FT_MSDOS;
@@ -174,11 +185,37 @@ pub fn sniff_ft(data: &[u8]) -> u16 {
         if data.starts_with(&[0xD0, 0xCF, 0x11, 0xE0]) {
             return ft::FT_CFBF;
         }
-        if data.starts_with(b"\x7F") && data.get(1..4) == Some(b"LE\0".as_slice()) {
-            return ft::FT_LE;
-        }
     }
     ft::FT_BINARY
+}
+
+/// [`sniff_ft`] plus filename-derived types: `.com` (bounded DOS COM
+/// images), `.apk` and `.jar` ZIP subtypes.
+pub fn sniff_ft_named(data: &[u8], file_name: &str) -> u16 {
+    let lower = file_name.to_ascii_lowercase();
+    // COM images have no signature; upstream requires the .com suffix
+    // and a <=64 KiB image (DOS COM loading model). Only generic types
+    // (MZ-less BINARY or a bare MZ stub) are reclassified.
+    let ft = sniff_ft(data);
+    if lower.ends_with(".com")
+        && data.len() <= 0x10000
+        && (ft == ft::FT_BINARY || ft == ft::FT_MSDOS)
+    {
+        return ft::FT_COM;
+    }
+    match ft {
+        x if x == ft::FT_MSDOS => ft::FT_MSDOS,
+        x if x == ft::FT_ZIP => {
+            if lower.ends_with(".apk") {
+                ft::FT_APK
+            } else if lower.ends_with(".jar") {
+                ft::FT_JAR
+            } else {
+                ft::FT_ZIP
+            }
+        }
+        x => x,
+    }
 }
 
 /// Scan `data` with the NFD engine. `hint_ft` is a `gen_names::ft::*`
@@ -197,6 +234,9 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
     let mut resources: DetectMap = DetectMap::new();
     let mut code_section: DetectMap = DetectMap::new();
     let mut ep_section: DetectMap = DetectMap::new();
+    let mut strings_m: DetectMap = DetectMap::new();
+    let mut types_m: DetectMap = DetectMap::new();
+    let mut archive_m: DetectMap = DetectMap::new();
 
     // Header scans run for every file (binary + archive tables filter on
     // FT_BINARY/FT_ARCHIVE which are always the secondary ft).
@@ -207,6 +247,34 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
         file_type,
         ft::FT_BINARY,
     );
+    if file_type == ft::FT_BINARY && parse::is_plain_text(data) {
+        // NFD_Binary::handle_Texts — format record "Plain text"/
+        // "UTF-8 text" with the line-ending info. The C++/script regex
+        // heuristics of handle_Texts are not ported.
+        let mut rec = ScanRecord::from_basic(&crate::records::BasicRecord {
+            variant: 0,
+            ft: ft::FT_BINARY,
+            rtype: rtype::RECORD_TYPE_FORMAT,
+            name: name::RECORD_NAME_PLAIN,
+            version: "",
+            info: "",
+        });
+        let head = &data[..data.len().min(4096)];
+        rec.info = if let Some(lf) = head.iter().position(|&b| b == b'\n') {
+            let crlf =
+                (lf > 0 && head[lf - 1] == b'\r') || (lf + 1 < head.len() && head[lf + 1] == b'\r');
+            if crlf {
+                "CRLF".to_string()
+            } else {
+                "LF".to_string()
+            }
+        } else if head.contains(&b'\r') {
+            "CR".to_string()
+        } else {
+            String::new()
+        };
+        header.insert(name::RECORD_NAME_PLAIN, rec);
+    }
     signature_scan(
         &mut header,
         &header_sig,
@@ -234,6 +302,108 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
         x if x == ft::FT_MSDOS => {
             msdos_scan(data, &header_sig, &mut header, &mut entrypoint);
         }
+        x if x == ft::FT_COM => {
+            // NFD_COM::getInfo — header signatures at 0 plus the
+            // expression records, both into the header map.
+            signature_scan(
+                &mut header,
+                &header_sig,
+                t::G_COM_RECORDS,
+                file_type,
+                ft::FT_COM,
+            );
+            signature_exp_scan(
+                &mut header,
+                data,
+                0,
+                t::G_COM_EXP_RECORDS,
+                file_type,
+                ft::FT_COM,
+            );
+        }
+        x if x == ft::FT_NE => {
+            // NFD_NE::getInfo — linker header records plus entry-point
+            // signatures at the CS:IP-derived offset.
+            signature_scan(
+                &mut header,
+                &header_sig,
+                t::G_MSDOS_LINKER_HEADER_RECORDS,
+                file_type,
+                ft::FT_MSDOS,
+            );
+            if let Some(ep_off) = parse::ne_entry_offset(data) {
+                let ep_sig = get_signature(data, ep_off, 150);
+                signature_scan(
+                    &mut entrypoint,
+                    &ep_sig,
+                    t::G_NE_ENTRYPOINT_RECORDS,
+                    file_type,
+                    ft::FT_NE,
+                );
+            }
+        }
+        x if x == ft::FT_LE || x == ft::FT_LX => {
+            // NFD_LE/NFD_LX::getInfo — header linker records (the rest of
+            // each module is heuristic fixup, not yet ported).
+            signature_scan(
+                &mut header,
+                &header_sig,
+                t::G_MSDOS_LINKER_HEADER_RECORDS,
+                file_type,
+                ft::FT_MSDOS,
+            );
+        }
+        x if x == ft::FT_ELF32 || x == ft::FT_ELF64 || x == ft::FT_ELF => {
+            // NFD_ELF::getInfo — entry-point signatures only; the format
+            // record and handle_* fixups are heuristic and not ported.
+            if let Some(ep_off) = parse::elf_entry_offset(data) {
+                let ep_sig = get_signature(data, ep_off, 150);
+                signature_scan(
+                    &mut entrypoint,
+                    &ep_sig,
+                    t::G_ELF_ENTRYPOINT_RECORDS,
+                    file_type,
+                    ft::FT_ELF,
+                );
+            }
+        }
+        x if x == ft::FT_DEX => {
+            // NFD_DEX::getInfo — string-id contents and type descriptors.
+            let (strings, types) = parse::dex_strings(data);
+            string_scan(
+                &mut strings_m,
+                &strings,
+                t::G_DEX_STRING_RECORDS,
+                file_type,
+                ft::FT_DEX,
+            );
+            string_scan(
+                &mut types_m,
+                &types,
+                t::G_DEX_TYPE_RECORDS,
+                file_type,
+                ft::FT_DEX,
+            );
+        }
+        x if x == ft::FT_APK => {
+            // NFD_APK::getInfo — member-name CRC scan and regex scan over
+            // the ZIP central directory names.
+            let names = parse::zip_member_names(data);
+            archive_scan(
+                &mut archive_m,
+                &names,
+                t::G_APK_FILE_RECORDS,
+                file_type,
+                ft::FT_APK,
+            );
+            archive_exp_scan(
+                &mut archive_m,
+                &names,
+                t::G_APK_FILEEXP_RECORDS,
+                file_type,
+                ft::FT_APK,
+            );
+        }
         _ => {}
     }
 
@@ -249,6 +419,9 @@ pub fn scan(data: &[u8], hint_ft: u16, opts: ScanOptions) -> Vec<Detection> {
     drain(&section_names, &mut out);
     drain(&code_section, &mut out);
     drain(&ep_section, &mut out);
+    drain(&archive_m, &mut out);
+    drain(&strings_m, &mut out);
+    drain(&types_m, &mut out);
     out
 }
 

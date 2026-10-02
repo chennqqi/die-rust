@@ -112,6 +112,30 @@ pub fn archive_scan(
     string_scan(map, member_names, records, ft1, ft2);
 }
 
+/// Port of `NFD_Binary::archiveExpScan`: regex (`XBinary::isRegExpPresent`,
+/// substring match) between member names and record patterns.
+pub fn archive_exp_scan(
+    map: &mut DetectMap,
+    member_names: &[String],
+    records: &[StringRecord],
+    ft1: u16,
+    ft2: u16,
+) {
+    for name_str in member_names {
+        for rec in records {
+            if !ft_matches(rec.basic.ft, ft1, ft2) || map.contains_key(&rec.basic.name) {
+                continue;
+            }
+            let Ok(re) = fancy_regex::Regex::new(rec.string) else {
+                continue;
+            };
+            if matches!(re.find(name_str), Ok(Some(_))) {
+                map.insert(rec.basic.name, ScanRecord::from_basic(&rec.basic));
+            }
+        }
+    }
+}
+
 /// Port of `NFD_Binary::constScan`: match `(const1, const2)` with
 /// `0xFFFFFFFF` acting as a per-field wildcard. A wildcard-const1 record
 /// may replace an existing entry.

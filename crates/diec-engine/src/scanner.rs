@@ -508,8 +508,13 @@ fn detection_from_nfd(file_type: &str, rec: diec_nfd::Detection) -> ScanDetectio
 /// `diec_nfd::sniff_ft` recovers the broad file class from magic bytes,
 /// mirroring the `SpecAbstract::_processDetect` dispatch. Only the deep
 /// scan flag is currently consulted by the ported paths.
-fn run_nfd_pass(data: &[u8], flags: &crate::host::ScanFlags, detections: &mut Vec<ScanDetection>) {
-    let ft = diec_nfd::sniff_ft(data);
+fn run_nfd_pass(
+    data: &[u8],
+    file_name: &str,
+    flags: &crate::host::ScanFlags,
+    detections: &mut Vec<ScanDetection>,
+) {
+    let ft = diec_nfd::sniff_ft_named(data, file_name);
     let opts = diec_nfd::ScanOptions {
         deep_scan: flags.deep,
     };
@@ -722,7 +727,7 @@ pub fn scan_bytes(
     // Its records are appended after the DIE results and carry the
     // `engine = "nfd"` marker. See ADR 0035.
     if flags.nfd {
-        run_nfd_pass(&data, &flags, &mut detections);
+        run_nfd_pass(&data, file_name, &flags, &mut detections);
     }
 
     // Add "Unknown" placeholder when no detections were found.
@@ -1102,7 +1107,7 @@ impl Scanner {
         // Its records are appended after the DIE results and carry the
         // `engine = "nfd"` marker. See ADR 0035.
         if flags.nfd {
-            run_nfd_pass(&data, &flags, &mut detections);
+            run_nfd_pass(&data, file_name, &flags, &mut detections);
         }
 
         // Add "Unknown" placeholder when no detections were found.

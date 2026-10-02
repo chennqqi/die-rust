@@ -15,6 +15,7 @@
 #![warn(missing_docs)]
 
 mod engine;
+mod parse;
 mod pe;
 mod records;
 mod scans;
@@ -26,6 +27,7 @@ pub mod gen_names;
 pub mod gen_tables;
 
 pub use engine::{
-    Detection, ScanOptions, ft_name, name_id, rtype_id, scan, sniff_ft, supported_ft,
+    Detection, ScanOptions, ft_name, name_id, rtype_id, scan, sniff_ft, sniff_ft_named,
+    supported_ft,
 };
 pub use scans::ScanRecord;
