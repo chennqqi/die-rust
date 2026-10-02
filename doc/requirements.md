@@ -1311,3 +1311,5 @@ Phase 21 NFD/SpecAbstract 第二引擎实际实施：diec-nfd crate（纯 Rust
 匹配核心）+ tools/nfd_codegen.py 签名表生成（35 表/1730 条 @5188e047）+
 BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 勾选集成（engine=nfd 标记）。
+
+- 2026-10-07: 继续 Phase 21 —— 实现 Mach-O 语义切片（解析器+版本映射表+OS/SDK/工具链识别），更新兼容矩阵。

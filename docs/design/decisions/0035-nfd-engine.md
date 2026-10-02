@@ -12,10 +12,19 @@
 > incl. NOP/JZ/E9-follow, import hashes, resources, section names, Rich
 > records, deep section scans). Integration: `ScanFlags::nfd` /
 > CLI `--nfd` / GUI engine checkbox; records carry `engine="nfd"`.
-> Not yet ported: heuristic `handle_*` version enrichment, and the
-> ELF/Mach-O/LE/LX/NE/APK/JAR/JavaClass/DEX/Amiga/PDF/JPEG/CFBF/COM
-> per-format `getInfo` bodies (their tables are generated; dispatch is
-> stubbed to the generic binary path).
+> Later slices added: COM (header + exp), NE (linker header + CS:IP
+> entrypoint), LE/LX (linker header), ELF32/64 (`elf.rs` — OSABI/
+> interpreter/note/comment chain + debug-data + libraries + tool
+> metadata), DEX (string/type scans), APK (member-name scans, signing
+> block v2/v3/Walle/GooglePlay, Kotlin/Java, Android OS), ZIP container
+> info, PDF version fixup, MSDOS extender/vintage banners, and Mach-O
+> 32/64 (`mach.rs` + `mach_tables.rs` — LC_* command driven OS/SDK/
+> Xcode/clang/Swift/ld version chain, Foundation/codesign/Qt/Carbon/
+> Cocoa/VMProtect/Zig records; CAFEBABE FAT-vs-JavaClass
+> disambiguation follows the upstream field-validity walk).
+> Still deferred: heuristic `handle_*` version enrichment, per-format
+> regex heuristics, and JavaClass/PDF/JPEG/CFBF/Amiga/JAR/MACHOFAT
+> `getInfo` bodies (generic binary fallback).
 
 ## Context
 

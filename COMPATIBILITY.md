@@ -440,5 +440,7 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 | APK | `NFD_APK::getInfo` | ✅ 成员名 scan + 签名块 + Kotlin/Java/OS | v2/v3 签名块互斥、Walle/GooglePlay ID、Kotlin 成员判定；META-INF 证书解压未移植 |
 | JAR | `NFD_JAR::getInfo` | ❌ 走 ZIP/generic 路径 | 上游 JAR 无表驱动记录 |
 | 文本 | `handle_Texts` | ⚠ 仅 "Plain text" format 记录 + CRLF/LF | 源语言 regex 启发式未移植 |
-| Mach-O/JavaClass/PDF/JPEG/CFBF/Amiga | 各自 `getInfo` | ❌ deferred | 上游为纯 heuristic（无签名表），generic binary 路径兜底 |
+| Mach-O32/64 | `NFD_MACH::getInfo` | ⚠ partial | CPU/LC_VERSION_MIN_*/LC_BUILD_VERSION → OS + SDK 版本链 + Foundation→SDK/Xcode/clang/Swift 版本表（54+28+133+93 行已搬运）+ codesign + Qt/Carbon/Cocoa/VMProtect + `__cstring` Zig 标记 + Objective-C info；heuristic packer 段（`handle_Protection` 其余项）未移植 |
+| Mach-O FAT | — | ⚠ sniff 为 FT_MACHOFAT，走 generic binary | 上游 NFD_MACH 对 FAT 无专属 handler；与 JavaClass 的 CAFEBABE 消歧按上游字段校验（arch 记录逐项合法）+ `u32be@4>10` 回退 |
+| JavaClass/PDF/JPEG/CFBF/Amiga | 各自 `getInfo` | ❌ deferred | 上游为纯 heuristic（无签名表），generic binary 路径兜底 |
 | 引擎接入 | GUI scan-engine 选择器 | ✅ `ScanFlags::nfd` + CLI `--nfd` + GUI checkbox | 记录带 `engine=nfd` 标记，与 DIE 结果共存不去重 |

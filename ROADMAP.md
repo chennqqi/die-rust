@@ -1929,9 +1929,17 @@ nrv 单测），前端 `npm run build` 通过。
   （15 条 vintage 运行时横幅，deep-scan 门控）、APK Signature Block
   ID 扫描（v2/v3 互斥、Walle、GooglePlay）、Kotlin/Java 语言判定
   （成员名探针）、Android OS 记录。
+- Mach-O 语义层：`mach.rs` thin Mach-O 解析器（32/64、双端序、
+  LC_SEGMENT*/LC_LOAD_DYLIB/LC_VERSION_MIN_*/LC_BUILD_VERSION/
+  LC_CODE_SIGNATURE）+ `mach_tables.rs` 版本映射（Foundation 54 /
+  iOS 28 / Xcode 133 / toolchain 93，上游 `xmach.cpp` 提取）；
+  OS 识别（CPU→LC 覆盖→Foundation 版本修正）、SDK/Xcode/clang/
+  Swift/ld 版本链、codesign、Qt/Carbon/Cocoa/VMProtect、`__cstring`
+  Zig 标记、Objective-C info。CAFEBABE 消歧：FAT arch 记录逐项校验
+  → MACHOFAT，否则 `u32be@4>10` → JAVACLASS（对齐上游判定序）。
 - 仍未移植（显式 deferred）：heuristic `handle_*` 版本补全与各格式
-  的 regex/结构启发式；Mach-O/JavaClass/PDF/JPEG/CFBF/Amiga/JAR
-  上游为纯 heuristic 模块（无签名表），走 generic binary 兜底。
+  的 regex/结构启发式；JavaClass/PDF/JPEG/CFBF/Amiga/JAR
+  与 Mach-O FAT 专属 handler，走 generic binary 兜底。
 
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。
