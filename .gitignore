@@ -43,3 +43,4 @@ __pycache__/
 # Compiled capstone oracle binary (rebuilt from disasm_oracle.c + upstream vendored lib)
 /tools/capstone-oracle/disasm_oracle
 /tools/msdos-oracle/build/
+/tools/demangle-oracle/build/

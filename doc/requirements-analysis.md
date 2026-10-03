@@ -678,3 +678,14 @@ enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回�
 ## 2026-10-05 Phase 41-44 立项分析
 
 四项剩余差距的可行性核查：(1) WIM 压缩流——上游有完整 xlzxdecoder(954)+xxpressdecoder(388)，LZX BLOCK_UNCOMPRESSED=3 块可简易编码做 oracle fixture，XPRESS 编码器可手写，立项中型；(2) MSDOS stubs——compareEP/compareOverlay 等继承 Binary_Script 基类，只需实现 XMSDOS::getEntryPointOffset/getOverlayOffset 语义 + capstone x86-16 getDisasmNextAddress，立项中型；(3) 剩余 DM 模式——capstone 后端已具备，~30 模式纯接线+快照，立项小；(4) demangler——上游 XCppfilt(GNU cp-demangle/d-demangle/rust-demangle)，当前 msvc-demangler 标注精简实现，先跑 oracle 差异评估再定移植粒度。不立项维持：i18n 其余 17 语言（ADR 0038 增量）、RNC old 变体（语料缺口非代码）、InstallSimple/XStyles/更新器。
+
+## Phase 44 分析摘要
+
+- 上游 XDemangle 为完全自研（非 XCppfilt）；差异评估 72/124 对齐后
+  按 oracle 逐项移植：gnu2_*（约800行上游逻辑）、swift_* 节点栈、
+  watcom_*/dlang_*/borland_* 全语法。
+- 关键 quirk 记录：Tru64 `__X` 共用 gnu2 引擎；msvc64 `A`=fastcall、
+  `C`=pascal、ARM `A`→`&`；上游 `_vt$`/`_GLOBAL_N` 原文输出；
+  cpp_demangle 的 `{vtable(...)}` 需改写 `vtable for`；`NR`/`NO`/
+  `TC`/`GTt`/`GR` 上游不支持须回退 raw；`T<n>_` seq-id=n+1。
+- 240+ 对 oracle 语料全部一致；fmt/clippy/test 全绿。

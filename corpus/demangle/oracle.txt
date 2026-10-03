@@ -1,0 +1,247 @@
+msvc	?foo@@YAXH@Z	void __cdecl foo(int)
+msvc	?func@@YAHPAVMyClass@@H@Z	int __cdecl func(class MyClass *, int)
+msvc	??0MyClass@@QAE@XZ	public: __thiscall MyClass::MyClass(void)
+msvc	??1MyClass@@UAE@XZ	public: virtual __thiscall MyClass::~MyClass(void)
+msvc	??4MyClass@@QAEAAV0@ABV0@@Z	public: class MyClass & __thiscall MyClass::operator=(class MyClass const &)
+msvc	?x@@3HA	int x
+msvc	??_7MyClass@@6B@	const MyClass::`vftable'
+msvc	?virtual_method@MyClass@@UAEHXZ	public: virtual int __thiscall MyClass::virtual_method(void)
+msvc	?get@?$basic_string@DU?$char_traits@D@std@@@std@@QAEPADXZ	public: char * __thiscall std::basic_string<char, struct std::char_traits<char>>::get(void)
+msvc	??_C@_0BC@EJHL@Hello?5World@	??_C@_0BC@EJHL@Hello?5World@
+msvc	?add@@YAHHH@Z	int __cdecl add(int, int)
+msvc	?print@MyClass@@SGXABV1@@Z	public: static void __stdcall MyClass::print(class MyClass const &)
+msvc	?data@NS@@3V?$vector@H@A@@A	class A::vector<int> NS::data
+msvc	?static_func@Outer@Inner@@SAXXZ	public: static void __cdecl Inner::Outer::static_func(void)
+msvc32	?foo@@YAXH@Z	void __cdecl foo(int)
+msvc32	?_foo@4	?_foo@4
+msvc32	@foo@4	@foo@4
+msvc32	_foo@8	_foo@8
+msvc64	?foo@@YAXH@Z	void __fastcall foo(int)
+msvc64	?bar@@YA_K_J@Z	unsigned __int64 __fastcall bar(__int64)
+msvcarm32	?foo@@YAXH@Z	void & foo(int)
+msvcarm64	?foo@@YAXH@Z	void & foo(int)
+gnuv3	_Z3foov	foo()
+gnuv3	_ZN3foo3barEi	foo::bar(int)
+gnuv3	_ZNKSt6vectorIiSaIiEE4sizeEv	std::vector<int, std::allocator<int> >::size() const
+gnuv3	_ZN1AC1Ev	A::A()
+gnuv3	_ZN1AD2Ev	A::~A()
+gnuv3	_ZSt4cout	std::cout
+gnuv3	_ZN9MyClass4funcERKS_	_ZN9MyClass4funcERKS_
+gnuv3	_ZpliRK1AS1_	operator+(int, A const&, A const&)
+gnuv3	_ZThn8_N1A3fooEv	non-virtual thunk to A::foo()
+gnuv3	_ZN3FooIidE3barET0_T_	Foo<int, double>::bar(double, int)
+gnuv3	_ZN3Foo3barIPcEEvT_	void Foo::bar<char*>(char*)
+gnuv3	_ZGVN3Foo3barEv	_ZGVN3Foo3barEv
+gnuv3	_ZN3Foo3barIiEEvT_	void Foo::bar<int>(int)
+gnuv3	_Z1fIiEvT_	void f<int>(int)
+gnuv3	_ZN11MyNamespace3funEPFiiE	MyNamespace::fun(int (*)(int))
+gccwin	@_Z3foov@0	__fastcall foo()
+gccwin	__Z3fooi@4	__Z3fooi@4
+gccmac	__Z3foov	foo()
+java	Java_com_example_Foo_bar	Java_com_example_Foo_bar
+java	_ZN1A1bEPc	A.b(char)
+borland32	@foo$qii	foo(int, int)
+borland32	@TMyClass@Bar$qqrv	__fastcall TMyClass::Bar()
+borland32	@Classes@TList@$bctr$qqrv	__fastcall Classes::TList::TList()
+borland32	@std@vector@$bctr$qqrv	__fastcall std::vector::vector()
+borland64	_Z3foov	foo()
+watcom	W?foo$pf()v	void (__far *foo)()
+watcom	W?bar$n()v	void bar()
+rust	_ZN4test4main17h0123456789abcdefE	test::main
+rust	_RNvNtC5crate7mymod4func	_RNvNtC5crate7mymod4func
+rust	_ZN3std2io5stdio6_print17hb1234abcd5678efE	_ZN3std2io5stdio6_print17hb1234abcd5678efE
+gnat	_ada_foo	foo
+gnat	_ada_main	main
+gnat	_ada_pkg__proc__1	pkg.proc
+dlang	_Dmain	D main
+dlang	_D3foo3barFiZi	foo.bar(int)
+dlang	_D4test6Module8functionFNaNbNiNfZAya	test.Module.function()
+dlang	_D3std5stdio5printFNdAaZv	std.stdio.print(char[])
+swift	$s4main4testyyF	main.test() -> ()
+swift	_$s10Foundation3URLV4pathSSvg	Foundation.URL.path.getter : Swift.String
+swift	$sS2isSb_	$sS2isSb_
+go	main.main	main.main
+go	net/http.(*Server).Serve	net/http.(*Server).Serve
+go	runtime.gopanic	runtime.gopanic
+go	type:.eq.struct{net/http.server}	type:.eq.struct{net/http.server}
+haskell	base_GHCziBase_zdfMonadIO_closure	base_GHC.Base_$fMonadIO_closure
+haskell	Main_main_closure	Main_main_closure
+haskell	base_GHCziInt_I32zh_con_info	base_GHC.Int_I32#_con_info
+ocaml	camlFoo__bar_1234	Foo.bar
+ocaml	camlFoo__anonfun__bar_42	Foo.anonfun.bar
+ocaml	camlStdlib__List__map_123	Stdlib.List.map
+tru64	__Xfoo__Fi	__Xfoo__Fi
+tru64	__Xbar__3ABC	__Xbar__3ABC
+sun	__1cGfoo6Fi_v_	__1cGfoo6Fi_v_
+sun	__1cDABC3foo6M_i_	__1cDABC3foo6M_i_
+sun	__0Ffuncv	__0Ffuncv
+sun	__1cDbar6Fii_v_	void bar(int, int)
+sun	__1cDfoo6Fvi_i_	__1cDfoo6Fvi_i_
+sun	__1cDABC3foo6M_i_	__1cDABC3foo6M_i_
+gnuv2	foo__Fi	foo(int)
+gnuv2	foo__Fii	foo(int, int)
+gnuv2	__3Foo	Foo::Foo(void)
+gnuv2	bar__3FooFi	Foo::bar(int)
+gnuv2	__vt_3Foo	Foo virtual table
+gnuv2	foo__Q23Bar3BazFi	Bar::Baz::foo(int)
+gnuv2	plus__Fff	plus(float, float)
+gnuv2	__ls__FR7ostream	operator<<(ostream &)
+tru64	foo__XFi	foo__XFi
+tru64	bar__X3FooFi	bar__X3FooFi
+tru64	__vtbl__3Foo	__vtbl__3Foo
+tru64	func__X_	func__X_
+watcom	W?foo$pv	void *foo
+watcom	W?bar$qn()v	W?bar$qn()v
+watcom	W?baz$n(i)v	void baz(int)
+watcom	W?foo$n()i	int foo()
+watcom	W?x$pfn()v	void (__far *x)()
+borland32	@foo$qi	foo(int)
+borland32	@foo$qv	foo()
+borland32	@bar$qsii	bar(short, int, int)
+borland32	@TMyClass@Bar$qrp1TMyClass	@TMyClass@Bar$qrp1TMyClass
+borland32	@foo$qpc	foo(*char)
+borland32	@foo$qpi	foo(*int)
+dlang	_D4test3funFZi	test.fun()
+dlang	_D3foo4funcFPviZv	foo.func(void*, int)
+dlang	_D3foo3barFAiZi	foo.bar(int[])
+dlang	_D3foo3barFAyaZAya	foo.bar(immutable(char)[])
+dlang	_D3foo3barFKZiZv	_D3foo3barFKZiZv
+dlang	_D3foo3barFNaNbNiNfZAya	foo.bar()
+swift	$s4main3fooyyF	main.foo() -> ()
+swift	$s4main3barSiyF	main.bar() -> Swift.Int
+swift	$sSi4plusS2i_Sitp	$sSi4plusS2i_Sitp
+swift	$s4mainAAyyF	main.main() -> ()
+swift	$s4main1a1bS2i_SitF	$s4main1a1bS2i_SitF
+msvc	?f@@YAP6AHH@ZH@Z	int (__cdecl * __cdecl f(int))(int)
+msvc	??_R0?AVMyClass@@@8	??_R0?AVMyClass@@@8
+msvc	??_GMyClass@@UAEPAXI@Z	public: virtual void * __thiscall MyClass::`scalar deleting dtor'(unsigned int)
+msvc	?f@@YAXAAY01H@Z	void __cdecl f(int (&)[2])
+gnuv3	_ZTv0_n12_N1A3fooEv	virtual thunk to A::foo()
+gnuv3	_ZGVZ3foovE1x	guard variable for foo()::x
+gnuv3	_ZN3FooIiE3barIdEEvT0_	_ZN3FooIiE3barIdEEvT0_
+gnuv3	_ZN1AIiE1fEv	A<int>::f()
+gnuv3	_ZNR1A3fooEv	_ZNR1A3fooEv
+java	_ZN3pkg5Class4funcEv	pkg.Class.func()
+rust	_ZN4core3ops8function6FnOnce9call_once17h1234567890abcdeE	_ZN4core3ops8function6FnOnce9call_once17h1234567890abcdeE
+tru64	a__X	a(void)
+tru64	a__XFi	a__XFi
+tru64	bar__X3Foo	bar(Foo)
+tru64	foo__Xi	foo(int)
+tru64	foo__X	foo(void)
+gnuv2	_$_3Foo	Foo::~Foo(void)
+gnuv2	_$_Q23Bar3Baz	Bar::Baz::~Baz(void)
+gnuv2	_._3Foo	Foo::~Foo(void)
+gnuv2	_vt$3Foo	3Foo virtual table
+gnuv2	_vt.3Foo.3Bar	3Foo::3Bar virtual table
+gnuv2	_vt$Q23Bar3Baz	Q23Bar3Baz virtual table
+gnuv2	_3Foo$var	Foo::var
+gnuv2	_Q23Bar3Baz$var	Bar::Baz::var
+gnuv2	__ls__3FooFR3Bar	Foo::operator<<(Bar &)
+gnuv2	__3FooFi	Foo::Foo(int)
+gnuv2	foo__3FooSFii	Foo::foo(int, int)
+gnuv2	foo__3FooCFii	foo__3FooCFii
+gnuv2	foo__t3Vec1Zi	Vec<int>::foo(void)
+gnuv2	foo__3FooH1ZUi_Vv	foo__3FooH1ZUi_Vv
+gnuv2	__opPc__3FooFi	Foo::operator char *(int)
+gnuv2	foo__Fie	foo(int,...)
+gnuv2	foo__FiT0	foo(int, int)
+gnuv2	foo__FiN21	foo__FiN21
+gnuv2	_GLOBAL_$I$main	global constructors keyed to main
+gnuv2	_GLOBAL_$D$main	global destructors keyed to main
+gnuv2	_GLOBAL_$N$3foo3bar	{anonymous}::3foo3bar
+gnuv2	__ti3Foo	Foo type_info node
+gnuv2	__tf3Foo	Foo type_info function
+gnuv2	foo__3FooFPC3Bar	Foo::foo(Bar const *)
+gnuv2	foo__FPPc	foo(char **)
+gnuv2	foo__FRC3Bar	foo(Bar const &)
+gnuv2	foo__FM3BarFi_v	foo(void (Bar::)(int))
+gnuv3	_ZTIN1A1bE	typeinfo for A::b
+gnuv3	_ZTS1A	typeinfo name for A
+gnuv3	_ZTV1A	vtable for A
+gnuv3	_ZTT1A	VTT for A
+gnuv3	_ZThn8_N1A3fooEv	non-virtual thunk to A::foo()
+gnuv3	_ZTV0_n12_N1A3fooEv	_ZTV0_n12_N1A3fooEv
+gnuv3	_ZN3FooIidE3barET0_T_	Foo<int, double>::bar(double, int)
+gnuv3	_ZNR1A3fooEv	_ZNR1A3fooEv
+gnuv3	_ZNO1A3fooEv	_ZNO1A3fooEv
+gnuv3	_ZNKR1A3fooEv	_ZNKR1A3fooEv
+gnuv3	_Z1fIiEvT_	void f<int>(int)
+gnuv3	_ZN3FooIiE3barIdEEvT0_	_ZN3FooIiE3barIdEEvT0_
+gnuv3	_ZN1AIiE1fEv	A<int>::f()
+gnuv3	_ZGVZ3foovE1x	guard variable for foo()::x
+gnuv3	_ZN11MyNamespace3funEPFiiE	MyNamespace::fun(int (*)(int))
+swift	_$s3Foo3barAAyyF	_$s3Foo3barAAyyF
+swift	$s10Foundation3URLV4pathSSvs	Foundation.URL.path.setter : Swift.String
+watcom	W?f$pn()i	int (*f)()
+watcom	W?f$xpn()v	const void (*f)()
+watcom	W?f$qn()v	W?f$qn()v
+watcom	W?bar$qn()v	W?bar$qn()v
+borland32	@foo$qrpc	foo(*&char)
+borland32	@foo$qxppc	foo(**const char)
+java	_ZN1A1bEPPc	A.b(char)
+java	_ZN3pkg5Class4funcEPc	pkg.Class.func(char)
+dlang	_D3foo3barFPiZv	foo.bar(int*)
+gnuv3	_ZTC1A0_1B	_ZTC1A0_1B
+gnuv3	_ZGTtN1A1fEv	_ZGTtN1A1fEv
+gnuv3	_ZTIi	typeinfo for int
+gnuv3	_ZTSi	typeinfo name for int
+gnuv3	_ZGVN1A1xE	guard variable for A::x
+gnuv3	_ZGR1x_	_ZGR1x_
+gnuv3	_ZTho8_N1A3fooEv	_ZTho8_N1A3fooEv
+gnuv3	_ZTvn8_n12_N1A3fooEv	virtual thunk to A::foo()
+gnuv2	__pl__3FooFR3Foo	Foo::operator+(Foo &)
+gnuv2	__nw__FUi	operator new(unsigned int)
+gnuv2	__dl__FPv	operator delete(void *)
+gnuv2	__vc__3FooFi	Foo::operator[](int)
+gnuv2	foo__FUi	foo(unsigned int)
+gnuv2	foo__FPcN31	foo__FPcN31
+gnuv2	foo__FQ22ns2ns3Cls	foo(ns::ns, Cls)
+gnuv2	foo__Ft5Array1Zi	foo(Array<int>)
+gnuv2	__vt_t5Array1Zi	__vt_t5Array1Zi
+gnuv2	foo__FPFii	foo__FPFii
+gnuv2	foo__FA10_i	foo__FA10_i
+gnuv2	foo__FXc	foo__FXc
+gnuv2	foo__FUlScb	foo(unsigned long, signed char, bool)
+gnuv2	__3FooFRC3Foo	Foo::Foo(Foo const &)
+gnuv2	__t3Foo1ZiFi	Foo<int>::Foo(int)
+gnuv2	foo__Q2t3Vec1Zi3BarFi	Vec<int>::Bar::foo(int)
+gnuv2	__cl__3FooFi	Foo::operator()(int)
+gnuv2	x__3Foo	Foo::x(void)
+gnuv2	_foo__Fi	_foo(int)
+gnuv2	foo__F	foo(void)
+gnuv2	__bad	__bad
+gnuv2	__Q22ns3Cls	ns::Cls::Cls(void)
+gnuv2	__Q22ns3ClsFi	ns::Cls::Cls(int)
+gnuv3	_ZN3FooIidE3barET1_T_	_ZN3FooIidE3barET1_T_
+gnuv3	_ZN1A1fIiEEvT_	void A::f<int>(int)
+gnuv3	_Z3fooIiEvPT_	void foo<int>(int*)
+gnuv3	_ZNSt8__detail5__fiE	_ZNSt8__detail5__fiE
+gnuv3	_Z2f1I1fEvv	void f1<f>()
+gnuv3	_ZNK1A1fEi	A::f(int) const
+gnuv3	_ZN1A1fERKS_i	A::f(A const&, int)
+gnuv3	_ZN1AC2Ev	A::A()
+gnuv3	_ZN1AD0Ev	A::~A()
+gnuv3	_ZN1AD1Ev	A::~A()
+swift	_$s4main1aySiF	_$s4main1aySiF
+swift	$s3foo3baryS2i_SitF	foo.bar(Swift.Int, Swift.Int) -> Swift.Int
+swift	_$sS2isSj_xxx	_$sS2isSj_xxx
+swift	$s1A1bSiyF	A.b() -> Swift.Int
+watcom	W?f$p[5]i	int (*f)[5]
+watcom	W?f$prpn()v	void (*&*f)()
+watcom	W?f$gn()v	__far void f()
+watcom	W?op$call:n()v	W?op$call:n()v
+watcom	W?y$$dt:n()v	W?y$$dt:n()v
+watcom	W?n$m:3Cls:()v	W?n$m:3Cls:()v
+watcom	W?g$:3Tpl$3Cls:()v	W?g$:3Tpl$3Cls:()v
+borland32	@foo$qri	foo(&int)
+borland32	@foo$qxi	foo(const int)
+borland32	@foo$qwi	foo(volatile int)
+borland32	@A@B@$bctr$qqrv	__fastcall A::B::B()
+borland32	@foo$basg$qqr1A	@foo$basg$qqr1A
+borland32	@foo$blsh$qqrv	@foo$blsh$qqrv
+dlang	_D3foo3barFAyaZv	foo.bar(immutable(char)[])
+dlang	_D3foo3barFBiiZv	_D3foo3barFBiiZv
+dlang	_D3foo3barFDiZiZv	_D3foo3barFDiZiZv
+dlang	_D3foo3barCQebe	_D3foo3barCQebe
+dlang	_D3foo3barFNaNbZv	foo.bar()
+dlang	_D3foo8__T4TestViiZ6TestFiZv	_D3foo8__T4TestViiZ6TestFiZv

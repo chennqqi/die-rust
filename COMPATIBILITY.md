@@ -314,14 +314,14 @@ scanning:
 | Mode | 上游 XDemangle | die-gui |
 |------|---------------|---------|
 | Auto (`detectMode`) | ✅ | ✅ 忠实移植探测顺序 |
-| MSVC32/64/ARM32/ARM64 | ✅ | ✅ `msvc-demangler` |
-| GNU v3 (Itanium) | ✅ | ✅ |
+| MSVC32/64/ARM32/ARM64 | ✅ | ✅ `msvc-demangler` + Phase 44 约定/fixup 层（static access 码、ARM `&` quirk、`Unknown` 字面量、`*dtor` 命名） |
+| GNU v3 (Itanium) | ✅ | ✅ `cpp_demangle` + Phase 44 fixup（thunk/`T<n>_` 展开/`NR`·`NO`·`TC`·`GTt`·`GR` 回退/`vtable for` 渲染） |
 | Rust (legacy + v0) | ✅ | ✅ |
-| Borland32/64 | ✅ | ✅ 精简解码（name@qualifier@params） |
-| Watcom | ✅ | ✅ `W?..$..`/`W?...$_` 模式 |
-| D (DMD `_D`) | ✅ | ✅ 类型码表 + `FZ` 签名 |
-| Java | ✅ | ✅ 内部名/描述符 |
-| GNU v2 / GNAT / Swift / Go / Haskell / OCaml / Tru64 / SunPro | ✅ | ✅ 精简解码（Phase 18.A，详见 Phase 18 节） |
+| Borland32/64 | ✅ | ✅ Phase 44 忠实移植 `borland_*`（`::` 作用域、`$b` 操作符、`qr`/`qs` 约定、指针限定符链） |
+| Watcom | ✅ | ✅ Phase 44 忠实移植 `watcom_*`（名回引、`::` 模板、指针/数组/成员指针、内存模型、`W?f$` 签名） |
+| D (DMD `_D`) | ✅ | ✅ Phase 44 忠实移植 `dlang_*`（类型/属性/调用约定/元组/模板/回引） |
+| Java | ✅ | ✅ Phase 44：Itanium 解析 + 上游 MODE_JAVA 渲染（丢指针、`::`→`.`；JNI `Java_*` 不解码） |
+| GNU v2 / GNAT / Swift / Go / Haskell / OCaml / Tru64 / SunPro | ✅ | ✅ Phase 18.A 精简解码 → Phase 44 全部替换为上游忠实移植，oracle 差分通过 |
 
 ### Archive 格式矩阵（17.B）
 
@@ -341,7 +341,7 @@ GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
 | ACE | ✅ | ✅ list + extract（stored + tech 1 LZ+Huffman，Phase 33） |
 | CPIO | ✅ | ✅ list + extract（Phase 32，六变体） |
 | UDF | ✅ | ✅ list + extract（ECMA-167 严格锚点校验，Phase 36） |
-| WIM | ✅ | ✅ list + extract（stored 资源全链校验，Phase 37；压缩流 list 但解压产空 ⚠） |
+| WIM | ✅ | ✅ list + extract（stored + XPRESS/LZX 压缩流，Phase 37/41；LZMS/solid 与上游一致拒绝） |
 
 ### Hash 算法矩阵（17.C）
 
@@ -395,20 +395,33 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 按 `docs/design/phase18-deferred-parity.md` 实施，除另行标注外全部为
 精简实现（不追求上游 100% ABI 语义；无法解码时原样返回符号）。
 
-### Demangle 补齐（18.A）
+### Demangle 补齐（18.A → Phase 44 全部重写）
 
-`demangle.rs` 全部 20 种上游模式均有解码路径：
+`demangle.rs` 全部 20 种上游模式均有解码路径。18.A 的精简解码器
+在 Phase 44 被上游 `XDemangle` 忠实移植全部替换（oracle 语料
+`corpus/demangle/` 240+ 对字节一致，`demangle_matches_upstream_
+oracle` 差分锁定）：
 
 | Mode | 实现 | 说明 |
 |------|------|------|
-| Swift | ✅ 精简 | `$s`/`_$s`/`$S` 前缀 + 长度前缀段 + `yF`/`Si` 等类型码；复杂泛型/替换回退原名 |
-| Go | ✅ 精简 | `%XX` 解码 + `·`/`∕` → `.`；Go 符号本身多为明文 |
-| GNAT (Ada) | ✅ 精简 | `_ada_` 前缀 + `__` 段切分 + `O<op>` 操作符表 |
-| GNU v2 | ✅ 精简 | `__vt_`/`_$_`/`name__class F<sig>` 形 + 单字母类型码 |
-| Haskell | ✅ 精简 | `Module.function`/`ZC`/`zi` 等 GHC 前缀去除 |
-| OCaml | ✅ 精简 | `caml<Mod>__<name>_<id>` → `Mod.name` |
-| Tru64 | ✅ 精简 | `__X`/`__vtbl__`/`name__X<sig>` 形 |
-| SunPro | ✅ 精简 | `__1c<len><name><sig>` ARM/CC 方言 |
+| Swift | ✅ 移植 | `swift_*` 节点栈后序解析：类型/泛型/元组/函数/effects/witness/accessor 后缀；未覆盖形态 fail-closed |
+| Go | ✅ 移植 | `go_demangle`：`·`→`.`、`∕`→`/`、`%XX` UTF-8 解码（无效字节→raw） |
+| GNAT (Ada) | ✅ 移植 | `gnat_demangle`/`gnat_decodeEncodedName` 全量 |
+| GNU v2 | ✅ 移植 | `gnu2_*`：ctor/dtor/operator/模板/回引(`T`/`N`)/成员指针/`__ti`/`__tf`/`_GLOBAL_`/`__vt_`/`_vt$`/static-data 特殊形式 |
+| Haskell | ✅ 移植 | `haskell_demangle` z-encoding 全表 |
+| OCaml | ✅ 移植 | `ocaml_demangle` 全量 |
+| Tru64 | ✅ 移植 | `gnu2_demangle(s, allow_x=true)`——`__X` ARM-mode 标记 |
+| SunPro | ✅ 移植 | `sun_demangle`：`__1c` 长度字母 + `6F` 签名，全消费校验 |
+| D | ✅ 移植 | `dlang_*` 全语法 |
+| Watcom | ✅ 移植 | `watcom_*` 全语法 |
+| Borland32 | ✅ 移植 | `borland_*` 全语法 |
+| MSVC* | ✅ crate+fixup | `msvc-demangler` + 上游约定表/`&`-quirk/`Unknown`/`*dtor` |
+| Itanium 系 | ✅ crate+fixup | `cpp_demangle` + thunk/`T<n>_`/`NR`/`NO`/`TC`/`GTt`/`GR`/`vtable for` 修正 |
+| Java | ✅ | Itanium 解析 + 上游 MODE_JAVA 渲染 |
+
+已知近似（记录在 ROADMAP Phase 44）：`T<n>_` 展开对"最近模板
+参数"为近似实现；Java 模式 `*`/`&` 全域剔除对 `operator*`/
+`operator&` 名存在理论偏差。
 
 ### Archive 补齐（18.B/18.C）
 

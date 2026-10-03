@@ -2417,12 +2417,27 @@ oracle 失败而非能力缺失。全部剩余项重排：
   `getModeFromDisasmMode` 的 MODE_32 默认 quirk。capstone-oracle
   扩至 44 模式、corpus/disasm 新增 33 fixture 快照逐指令 parity，
   前端下拉同步 33 项（上游 disasmIdToString 标签）。
-- **Phase 44：MSVC/D demangler 语义补齐**（中-大，评估后定粒度）
-  上游 `XCppfilt`（GNU cp-demangle/d-demangle/rust-demangle）+
-  `XDemangle`。当前 `msvc-demangler` crate 标注"精简实现"。
-  方案 A：移植 cp-demangle MSVC 子集关键语义；方案 B：换更完整
-  crate。先差异评估（上游 oracle 跑 mangled 语料对比），按缺口
-  大小决定移植范围。
+- **Phase 44：Demangler 语义补齐**（✅ 完成）
+  评估后发现上游 `XDemangle` 为完全自研（非 XCppfilt），Phase 18.A
+  的精简解码器全部替换为忠实移植：D 语言 `dlang_*`、Watcom
+  `watcom_*`、Swift `swift_*`（节点栈后序解析）、GNU v2 `gnu2_*`
+  （含 `__ti`/`__tf`/`_GLOBAL_`/`_$_`/`_._`/`__vt_`/`_vt$`/`_vt.`/
+  `_<class>$<var>` 特殊形式、`T`/`N` 参数回引、`t` 模板、`H` 模板
+  函数、`Q` 限定名、`M` 成员指针），Tru64 走同一引擎加 `__X`
+  ARM-mode 标记（`gnu2_demangle(s, true)`）。MSVC 保留
+  `msvc-demangler` + fixup 层：static 成员 access 码（C/D/K/L/S/T）
+  后无 this-quals 直读约定、ARM 模式 `A` 落入 pointerTypes 渲染
+  `&` 的 quirk、`O`/`P`/`S` → 字面 `Unknown`、scalar/vector
+  deleting `dtor`。Itanium 侧 fixup：`Th`/`Tv` → `non-virtual/
+  virtual thunk to X`（cpp_demangle 的 `{...}` 风格被覆盖）、
+  `NR`/`NO` ref-qual 嵌套名上游不支持 → raw、`TV`/`TT` 输出
+  `{vtable(...)}`→`vtable for`、`TC`/`GTt`/`GR` 上游不支持 → raw、
+  `T_`/`T<n>_` 按"最近的 I<args>E"先展开再 demangle。Java 模式
+  镜像上游 MODE_JAVA：丢弃全部指针串 + `::`→`.`。oracle 语料
+  corpus/demangle 240+ 对全部字节一致；`demangle_matches_upstream_
+  oracle` 差分测试锁定。已知近似：`T` 展开取"首令牌前最近的 I
+  列表"（上游"最近模板参数"语义的近似）；Java 模式的 `*`/`&` 全域
+  剔除对 `operator*`/`operator&` 等极端名存在理论偏差。
 
 每 phase 验收同前：上游 oracle 差分 + 负向 + fmt/clippy/test
 全绿 + NFD 差分 0 差异。
