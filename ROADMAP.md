@@ -2304,9 +2304,18 @@ oracle 失败而非能力缺失。全部剩余项重排：
   LHARK 重映射），上游 oracle `unpacked:true` 全部验收；
   `secondary_archives.rs` 27 项（7 方法字节 parity + 截断/
   位翻转 fail-closed）。
-- **Phase 36：UDF**（生成器 ~300 行 + 枚举 ~400 行）
-  ECMA-167 VRS(BEA01/NSR03/TEA01) + AVDP + PVD/LVD/PD/FSD +
-  FE/ICB/FID 链合成器；移植 `xudf.cpp` 枚举核心。
+- **Phase 36：UDF** ✅ 完成
+  `udf.rs` 移植 `xudf.cpp` 的 `isValid` + `_parseFileSystem`：
+  严格锚点探测（sector 256/last/last-256/512 顺序；tag checksum、
+  版本 2/3、保留字节、TagLocation、DescriptorCRC 全验）+
+  VRS(BEA01→NSR02/03→TEA01) 非严格回退；BFS 遍历 FE 树
+  （FIFO 顺序、visited 去重、OSTA CS0 8/16 文件名、FID
+  4 字节对齐步进）。记录字段：STORE、size=InformationLength、
+  非根目录发 dir 记录；提取用 extent 长度（window_size 携带）。
+  上游 quirk 记录：LVD 的 FSD 位置直接读 +248（extent_ad 的
+  length 字段位）——已按上游行为复制。语料 `gen_p36_corpus.py`
+  合成完整校验镜像（VRS+PVD/LVD/TD+FSD+两级目录+AVDP@256），
+  oracle `unpacked:true` 3 记录字节 parity。
 - **Phase 37：WIM**（生成器 + 枚举 ~400 行）
   MSWIM 头 + lookup table + XML 元数据/dirent 合成器；移植
   `xwim.cpp` 枚举核心。

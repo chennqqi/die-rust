@@ -15,6 +15,7 @@ mod lha;
 mod lha_legacy;
 mod lzh_decode;
 mod lzhuf;
+mod udf;
 
 /// Secondary format detected by [`list_secondary`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,11 +28,8 @@ pub enum SecondaryKind {
     Ace,
     /// CPIO archive (`070701`/`070702`/`070707`/`0x71C7` magics).
     Cpio,
-    /// UDF filesystem image (ECMA-167 descriptors at 32 KiB+).
-    ///
-    /// Gated (Phase 32): upstream `isValid` requires a checksum-verified
-    /// Anchor Volume Descriptor chain and no generator/tool exists on this
-    /// host to produce a conforming sample, so detection is not wired.
+    /// UDF filesystem image (ECMA-167 descriptors at 32 KiB+,
+    /// checksum-verified Anchor Volume Descriptor chain).
     Udf,
     /// WIM image (`MSWIM` signature).
     ///
@@ -95,6 +93,9 @@ pub fn list_secondary(data: &[u8]) -> Option<(SecondaryKind, Vec<SecondaryRecord
     if ace::is_ace(data) {
         return ace::list(data).map(|m| (SecondaryKind::Ace, m));
     }
+    if udf::is_udf(data) {
+        return udf::list(data).map(|m| (SecondaryKind::Udf, m));
+    }
     None
 }
 
@@ -137,6 +138,17 @@ pub fn extract_secondary(data: &[u8], kind: SecondaryKind, name: &str) -> Vec<u8
         SecondaryKind::Ace => rec.method == 1,
         _ => false,
     };
+    // UDF members are STORE streams whose copy size is the extent
+    // length carried in `window_size` (may differ from `packed_size`,
+    // which reports InformationLength like upstream COMPRESSEDSIZE).
+    if kind == SecondaryKind::Udf {
+        let soff = rec.data_offset as usize;
+        let send = match soff.checked_add(rec.window_size as usize) {
+            Some(e) if e <= data.len() => e,
+            _ => return Vec::new(),
+        };
+        return data[soff..send].to_vec();
+    }
     if stored {
         return data[off..end].to_vec();
     }

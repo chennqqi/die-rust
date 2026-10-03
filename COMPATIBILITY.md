@@ -333,7 +333,8 @@ GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
 | LHA/LZH | ✅ | ✅ list + extract（stored `-lh0-`/`-lz4-`/`-pm0-`、主流 `-lh4-`..`-lh7-`、`-lh1-` LZHUF、legacy `-lzs-`/`-lz5-`/`-lhx-`/`-lk7-`/`-pm1-`/`-pm2-`，Phase 32/34/35 全方法覆盖） |
 | ACE | ✅ | ✅ list + extract（stored + tech 1 LZ+Huffman，Phase 33） |
 | CPIO | ✅ | ✅ list + extract（Phase 32，六变体） |
-| UDF/WIM | ✅ | ❌ gated（无合法样本，Phase 32） |
+| UDF | ✅ | ✅ list + extract（ECMA-167 严格锚点校验，Phase 36） |
+| WIM | ✅ | ❌ gated（无合法样本，Phase 32） |
 
 ### Hash 算法矩阵（17.C）
 

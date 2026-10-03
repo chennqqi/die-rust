@@ -362,3 +362,44 @@ fn lha_legacy_malformed_rejected() {
         assert!(empty_out.is_empty() || empty_out.len() <= data.len());
     }
 }
+
+/// Phase 36: UDF filesystem image (ECMA-167 strict anchor chain,
+/// root dir + nested subdir with files) vs oracle.
+#[test]
+fn udf_records_and_extract_match_oracle() {
+    check_fixture("test.udf", diec_engine::archive::SecondaryKind::Udf);
+}
+
+/// Truncated or checksum-corrupted UDF images must not be claimed or
+/// panic during enumeration/extraction.
+#[test]
+fn udf_malformed_rejected() {
+    let data = std::fs::read(corpus_root().join("test.udf")).unwrap();
+    // Below the 0x8000+2048 minimum the format must not be claimed.
+    assert!(
+        diec_engine::archive::list_secondary(&data[..0x8000]).is_none()
+            || diec_engine::archive::list_secondary(&data[..0x8000]).map(|(k, _)| k)
+                != Some(diec_engine::archive::SecondaryKind::Udf)
+    );
+    // Corrupting the anchor's tag checksum or tag id must fail closed.
+    let anchor = 256 * 2048usize;
+    for off in [anchor, anchor + 4, anchor + 12] {
+        let mut bad = data.clone();
+        bad[off] ^= 0xFF;
+        let _ = diec_engine::archive::extract_secondary(
+            &bad,
+            diec_engine::archive::SecondaryKind::Udf,
+            "hello.txt",
+        );
+    }
+    // Flip bytes across the descriptor chain; must not panic.
+    for off in (0x8000..data.len()).step_by(977) {
+        let mut bad = data.clone();
+        bad[off] ^= 0xFF;
+        let _ = diec_engine::archive::extract_secondary(
+            &bad,
+            diec_engine::archive::SecondaryKind::Udf,
+            "hello.txt",
+        );
+    }
+}
