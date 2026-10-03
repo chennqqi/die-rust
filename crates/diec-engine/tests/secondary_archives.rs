@@ -403,3 +403,49 @@ fn udf_malformed_rejected() {
         );
     }
 }
+
+/// Phase 37: WIM image (uncompressed, v1.13 0xD0 header, lookup table
+/// + SHA-1 verified metadata, nested directory) vs oracle.
+#[test]
+fn wim_records_and_extract_match_oracle() {
+    check_fixture("test.wim", diec_engine::archive::SecondaryKind::Wim);
+}
+
+/// Truncated or corrupted WIM images must fail closed.
+#[test]
+fn wim_malformed_rejected() {
+    let data = std::fs::read(corpus_root().join("test.wim")).unwrap();
+    // Signature/header truncation must not be claimed.
+    assert!(
+        diec_engine::archive::list_secondary(&data[..0x60]).map(|(k, _)| k)
+            != Some(diec_engine::archive::SecondaryKind::Wim)
+    );
+    // Corrupt the signature, version, lookup table and metadata hash;
+    // enumeration/extraction must not panic.
+    for off in [
+        0usize,
+        4,
+        0x0C,
+        0x10,
+        0x2C,
+        data.len() - 150,
+        data.len() - 40,
+    ] {
+        let mut bad = data.clone();
+        bad[off] ^= 0xFF;
+        let _ = diec_engine::archive::extract_secondary(
+            &bad,
+            diec_engine::archive::SecondaryKind::Wim,
+            "readme.txt",
+        );
+    }
+    for off in (0..data.len()).step_by(127) {
+        let mut bad = data.clone();
+        bad[off] ^= 0xFF;
+        let _ = diec_engine::archive::extract_secondary(
+            &bad,
+            diec_engine::archive::SecondaryKind::Wim,
+            "subdir/inner.bin",
+        );
+    }
+}

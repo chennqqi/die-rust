@@ -334,7 +334,7 @@ GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
 | ACE | ✅ | ✅ list + extract（stored + tech 1 LZ+Huffman，Phase 33） |
 | CPIO | ✅ | ✅ list + extract（Phase 32，六变体） |
 | UDF | ✅ | ✅ list + extract（ECMA-167 严格锚点校验，Phase 36） |
-| WIM | ✅ | ❌ gated（无合法样本，Phase 32） |
+| WIM | ✅ | ✅ list + extract（stored 资源全链校验，Phase 37；压缩流 list 但解压产空 ⚠） |
 
 ### Hash 算法矩阵（17.C）
 

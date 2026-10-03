@@ -2316,9 +2316,22 @@ oracle 失败而非能力缺失。全部剩余项重排：
   length 字段位）——已按上游行为复制。语料 `gen_p36_corpus.py`
   合成完整校验镜像（VRS+PVD/LVD/TD+FSD+两级目录+AVDP@256），
   oracle `unpacked:true` 3 记录字节 parity。
-- **Phase 37：WIM**（生成器 + 枚举 ~400 行）
-  MSWIM 头 + lookup table + XML 元数据/dirent 合成器；移植
-  `xwim.cpp` 枚举核心。
+- **Phase 37：WIM** ✅ 完成
+  `wim.rs`（~1100 行）移植 `xwim.cpp` 的 `isValid` +
+  `initUnpack` 枚举管线：头版本/分卷/压缩配置校验、
+  资源描述符 flags（0x10 仅 v0xE00 dead）、物理范围
+  不重叠（含头/LUT/XML/integrity/本地流）、lookup 表
+  50/52 字节流描述符（新格式非空唯一 hash、legacy 唯一
+  非零 id）、元数据资源 SHA-1 校验、`_parseMetadataDir`
+  全套（8 字节对齐、UTF-16LE 终止符、`_reserveMetadataRange`
+  防重解析、alt-stream/`__streams__` 命名、深度 0 隐藏根
+  修正、MAX_DEPTH/RECORDS/PATH 上限）、refcount 对账、
+  多镜像 `image_N/` 前缀、boot 描述符别名校验。
+  范围：stored 资源端到端；压缩元数据枚举 fail-closed、
+  压缩文件流 list 正常但提取产空（XPRESS/LZX 分块解码
+  未移植，记录为缺口）。语料 `gen_p37_corpus.py` 合成
+  v1.13 未压缩 WIM（SHA-1 链完整），oracle 3 记录
+  `unpacked:true` 字节 parity。
 - **Phase 38：SSDeep**（小）
   XHashWidget pin `291e3ef6` 提取上游实现做 oracle；若不可
   检出则落 libfuzzy 兼容参考实现并记 ADR 偏离（ADR 0039

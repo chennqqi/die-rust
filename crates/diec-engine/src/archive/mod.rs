@@ -16,6 +16,7 @@ mod lha_legacy;
 mod lzh_decode;
 mod lzhuf;
 mod udf;
+mod wim;
 
 /// Secondary format detected by [`list_secondary`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,11 +32,7 @@ pub enum SecondaryKind {
     /// UDF filesystem image (ECMA-167 descriptors at 32 KiB+,
     /// checksum-verified Anchor Volume Descriptor chain).
     Udf,
-    /// WIM image (`MSWIM` signature).
-    ///
-    /// Gated (Phase 32): same reason as [`SecondaryKind::Udf`]; a valid
-    /// WIM needs a correct lookup table plus XML metadata, which cannot
-    /// be synthesized cheaply enough to satisfy the oracle gate.
+    /// WIM image (`MSWIM` signature + lookup table + metadata).
     Wim,
 }
 
@@ -96,6 +93,9 @@ pub fn list_secondary(data: &[u8]) -> Option<(SecondaryKind, Vec<SecondaryRecord
     if udf::is_udf(data) {
         return udf::list(data).map(|m| (SecondaryKind::Udf, m));
     }
+    if wim::is_wim(data) {
+        return wim::list(data).map(|m| (SecondaryKind::Wim, m));
+    }
     None
 }
 
@@ -144,6 +144,22 @@ pub fn extract_secondary(data: &[u8], kind: SecondaryKind, name: &str) -> Vec<u8
     if kind == SecondaryKind::Udf {
         let soff = rec.data_offset as usize;
         let send = match soff.checked_add(rec.window_size as usize) {
+            Some(e) if e <= data.len() => e,
+            _ => return Vec::new(),
+        };
+        return data[soff..send].to_vec();
+    }
+    // WIM: stored streams copy verbatim (upstream verifies the record's
+    // SHA-1 digest at unpack; the generator and real images both carry
+    // real digests).  Compressed streams (XPRESS/LZX) return empty —
+    // the chunked decode plumbing is not ported yet, matching the
+    // fail-closed contract of the other formats.
+    if kind == SecondaryKind::Wim {
+        if rec.method != 1 {
+            return Vec::new();
+        }
+        let soff = rec.data_offset as usize;
+        let send = match soff.checked_add(rec.packed_size as usize) {
             Some(e) if e <= data.len() => e,
             _ => return Vec::new(),
         };
