@@ -2228,19 +2228,22 @@ name/size/packed/dir/mtime + 提取字节 parity；上游提取失败的
 压缩成员断言我们也产空（同一 fail-closed 契约）。NFD 差分
 148 文件 0 差异（含新语料）。嵌套扫描门不变。
 
-### 不立项项（永久，附理由）
+### 不立项项（分类见 ADR 0042；触发后重议）
 
 - **InstallSimple 静态解包**：上游 `xinstallsimple.cpp` 整体在
   `USE_XEMULATOR` 内，XEmulator 既不是 submodule 也未检入
-  pin 树——无源码可移植、无 oracle 可验证，永久跳过。
+  pin 树——无源码可移植、无 oracle 可验证。**Blocked**（ADR 0042
+  #4）：解除条件为独立 pin horsicq/XEmulator 源 + 可复现 oracle
+  构建 + 沙盒执行安全评审。
 - **tauri 自动更新**（ADR 0019）：上游 XUpdate/XOnlineTools
   为未检出 Qt 组件且非 diec 控制台路径；更新签名密钥与
-  更新服务器属产品/分发决策，无 infra 前不产生代码缺口。
-- **XStyles 主题生态**：上游 Qt 样式体系，平台差异永久项；
-  GUI 主题若需要走 Tauri 自有方案另行立项。
+  更新服务器属产品/分发决策。**Conditional** → Phase 48。
+- **XStyles 主题生态**：上游 Qt 样式体系（QSS），**Permanent**
+  平台差异；如有主题需求走 Tauri-native CSS 变量方案
+  （Conditional → Phase 49）。
 - **RNC old 变体/加密流真实语料**：代码已全量移植，真实
-  ProPack 样本属语料缺口非代码任务（遇样本补测；若 Phase 内
-  可合成 oracle-acceptable 流则并入对应 phase）。
+  ProPack 样本属语料缺口非代码任务（**Conditional** →
+  Phase 47 生成器/哈希清单路线）。
 
 ### Phase 33-40：剩余项规划（2026-10-03 复审后立项）
 
@@ -2441,3 +2444,71 @@ oracle 失败而非能力缺失。全部剩余项重排：
 
 每 phase 验收同前：上游 oracle 差分 + 负向 + fmt/clippy/test
 全绿 + NFD 差分 0 差异。
+
+### Phase 45-49：有意偏离项治理与条件性 phase（2026-10-12 规划）
+
+Phase 44 收官后，剩余差距全部为有意偏离/受阻项。按
+`docs/design/decisions/0042-intentional-deviation-governance.md`
+的分类盘点，处置如下。盘点过程中核实了两处此前文档偏差：
+XStaticUnpacker 非 XEmulator 模块实际已全部落地（Phase 26-28，
+仅 InstallSimple 与 ASPack/Petite 模拟器分支受阻）；右键菜单
+Windows-only 实为 parity（上游 `registerContext` 同样
+`#ifdef Q_OS_WIN` 包裹）。
+
+**Scheduled（上游源与 oracle 均在 pin 基线内）：**
+
+- **Phase 45：i18n 术语锚定批量草稿**（中型，修订 ADR 0038 的执行方式）
+  上游 `dep/XTranslation/dicts/dict_*.po`（24 语言领域术语表）
+  与 `translations/die_*.ts`（22 语言）均已检入 pin 树，可作为
+  术语参照源（键空间不相交的事实不变：`.ts` 不作机械转换，仅
+  提取术语）。范围：
+  - `tools/i18n-glossary` 提取 `.po` msgid→msgstr 术语对 +
+    `.ts` 中本 UI 存在的串，构建 per-locale 术语锚定表；
+  - 对 en 目录 269 键生成剩余语言草稿 JSON——术语命中走锚定
+    译文、未命中保留 en 占位并标记 `x-draft: true`；
+  - 校验工具：键集合 parity、`{{var}}` 占位符、格式符保留检查，
+    接入测试门；
+  - 设置页语言下拉扩展；RTL 语言（ar/he/fa）验证 `dir` 布局。
+  验收：全部新 locale 键 parity 测试通过、术语命中处与上游
+  `.po` 字典一致、draft 标记可机器统计；不声称未经人工审校的
+  locale 为"完成质量"。
+- **Phase 46：NFD/SpecAbstract 收尾**（小型，ADR 0035 partial → full）
+  盘点后残余仅两处真实缺口（`handle_AnslymPacker` 上游注释死
+  代码，属 parity 不补）：`handle_PolyMorph`（`nfd_pe.cpp:8283`
+  调用点存活）+ ZIP 族 member handler `handle_Metainfos`/
+  `handle_Microsoftoffice`/`handle_OpenOffice`/`handle_JAR`/
+  `handle_IPA`（`promote.rs` 标注 "Phase 23.C pending"）。
+  oracle = SpecAbstract harness；验收同前 + engine=nfd/die 双路
+  差分。
+- **Phase 47：RNC old 变体/加密流语料**（小型，语料工程）
+  `tools/` 内写 RNC1 old-variant + 加密 key 流生成器，镜像
+  `ancient.rs` 解码器语义产出上游 oracle 可接受流；或经哈希
+  清单引入真实 ProPack 样本（二进制不入库）。验收：生成流在
+  上游 Qt oracle 与 Rust 两侧解出相同字节。
+
+**Conditional（触发条件未满足，仅登记不产码）：**
+
+- **Phase 48：Tauri 自动更新**（ADR 0019 既定 Implementation Plan）
+  触发：发布 infra 决策（Ed25519 密钥对、私钥 CI 存储、更新
+  manifest 端点）。范围：`tauri-plugin-updater` + `tauri.conf.json`
+  pubkey + "Check for Updates" 入口 + 签名校验/无效签名/离线
+  负向测试 + 降级防护。私钥永不入仓。
+- **Phase 49：Tauri-native 主题扩展**
+  触发：用户/分发方提出 light/dark/system 之外的主题需求。
+  范围：XStyles（pin `948dd85`，未检出——需按需拉取该 commit）
+  代表性主题翻译为 CSS 变量集 + 自定义主题覆盖入口。定位为
+  视觉近似，非 QSS 选择器等价。
+
+**Permanent / Blocked / Parity（不再单独编号）：**
+
+- **Permanent**：归档安全上限（ADR 0030，有意加固——任何放宽
+  必须新 ADR + 显式 opt-out，默认不变）；InfoDB 侧车 JSON
+  存储格式（ADR 0037 Superseded，功能已交付无 SQLite）；
+  XStyles 平台差异本身。
+- **Blocked**：InstallSimple + ASPack/Petite 模拟器分支
+  （XEmulator 不在 pin 基线；解除需独立 pin horsicq/XEmulator
+  源 + 可复现 oracle + 沙盒执行安全评审）。
+- **Parity**：右键菜单 Windows-only（上游同样仅 Windows）。
+- **维护任务**：vendored `db/`/`db_extra/` 与上游 submodule pin
+  的漂移（vendored 中 10 条规则仍调已删的 `PE.isNET`，已加
+  compat 别名）——下次规则同步时重对齐并移除别名。

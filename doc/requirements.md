@@ -1403,3 +1403,12 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   Java 模式镜像上游 MODE_JAVA 渲染（丢指针、`::`→`.`）。
 - 要求：与上游 oracle（tools/demangle-oracle）字节级一致，
   corpus/demangle 差分测试锁定；不支持的形态 fail-closed 回原名。
+
+## 2026-10-12 有意偏离项治理规划
+
+- 需求：对全部剩余有意偏离/受阻/条件项进行规划，不盲补，逐项分类
+  与排期。
+- 交付：ADR 0042（分类学 + 12 项盘点表 + 处置）；ROADMAP 新增
+  Phase 45-49 规划；COMPATIBILITY 状态统一为 Permanent/Scheduled/
+  Conditional/Blocked/Parity 五种；修正 ADR 0041 陈旧状态头与
+  README；修正 pe_handlers.rs/promote.rs 陈旧注释。

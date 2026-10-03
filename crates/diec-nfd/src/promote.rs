@@ -784,8 +784,8 @@ fn container_header(d: &[u8], res: &mut ResultMaps) -> bool {
 /// `NFD_ZIP::getInfo` container leg — the valid-archive path emits the
 /// member-metadata record (`handle_Container`); invalid archives fall
 /// back to the strict central-directory walk (`handle_ContainerHeader`).
-/// The Metainfos/Office/OpenOffice/JAR/IPA member handlers are Phase
-/// 23.C pending items.
+/// The Metainfos/Office/OpenOffice/JAR/IPA member handlers are
+/// scheduled for Phase 46 (ADR 0042 #8).
 pub(crate) fn zip_scan(d: &[u8], res: &mut ResultMaps) {
     if let Some(records) = zip_records(d) {
         zip_container(&records, res);

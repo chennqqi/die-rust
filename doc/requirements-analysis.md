@@ -689,3 +689,14 @@ enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回�
   cpp_demangle 的 `{vtable(...)}` 需改写 `vtable for`；`NR`/`NO`/
   `TC`/`GTt`/`GR` 上游不支持须回退 raw；`T<n>_` seq-id=n+1。
 - 240+ 对 oracle 语料全部一致；fmt/clippy/test 全绿。
+
+## 2026-10-12 有意偏离项治理
+
+- 盘点 12 项：归档安全上限/XStyles/InfoDB 侧车格式=Permanent；
+  i18n(Phase 45)/NFD 残余(46)/RNC 语料(47)=Scheduled；
+  updater(48)/主题(49)/TLSH/规则库漂移=Conditional；
+  InstallSimple+ASPack/Petite 模拟器分支=Blocked(XEmulator)；
+  右键菜单=Parity（上游 Q_OS_WIN，此前误分类）。
+- 关键核实：XStaticUnpacker 非模拟器模块已全部落地（原文档偏差）；
+  NFD 残余仅 handle_PolyMorph + ZIP 族 5 个 member handler；
+  XTranslation dicts+ts 已检出可作 i18n 术语锚定源。

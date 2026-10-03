@@ -98,5 +98,10 @@
   BZ2/XZ/LZMA 裸流通过纯 Rust `bzip2-rs`+`lzma-rs` 实现解码，
   拒绝 native `bzip2`/`xz2`（Accepted, 2026-10-05）。
 - [`0041-disasm-architectures.md`](0041-disasm-architectures.md)：
-  MIPS/PPC/RISC-V 等反汇编架构 deferred——纯 Rust 覆盖不完整，
-  capstone native 绑定是唯一完整路径但增加构建负担（Deferred, 2026-10-05）。
+  非 x86/ARM 反汇编架构经 `capstone` crate 实现——Phase 39 落地
+  MIPS/PPC/RISC-V 11 变体，Phase 43 补齐全部剩余 DM 模式
+  （Accepted v3, 2026-10-05，早期 Deferred 决议被反转）。
+- [`0042-intentional-deviation-governance.md`](0042-intentional-deviation-governance.md)：
+  有意偏离项治理——全量偏离盘点、五种处置分类（Permanent /
+  Scheduled / Conditional / Blocked / Parity）、Phase 45-50 规划
+  （Accepted, 2026-10-12）。

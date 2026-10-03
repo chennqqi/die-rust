@@ -1,7 +1,7 @@
 # ADR 0041: Additional Disassembly Architectures — Deferred
 
 **Date**: 2026-10-05
-**Status**: Deferred (re-evaluated 2026-10-03, Phase 30 — decision upheld)
+**Status**: Accepted (v3, reversed 2026-10-05 Phase 39 — `capstone` crate path; Phase 43 completed all remaining DM modes)
 
 ## Context
 

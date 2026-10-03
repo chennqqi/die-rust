@@ -1,9 +1,10 @@
-//! PE semantic handlers — bounded port of `NFD_PE::handle_*` slices that
-//! do not depend on the Rich-description table:
-//! `handle_OperationSystem`, `handle_import`, `handle_DebugData`, and the
-//! non-Rich portion of `handle_Microsoft` (MFC/VB/linker-version/
-//! Visual-Studio version chain). Rich-derived linker/compiler version
-//! enrichment remains deferred.
+//! PE semantic handlers — port of `NFD_PE::handle_*`:
+//! `handle_OperationSystem`, `handle_import`, `handle_DebugData`,
+//! `handle_Microsoft` (MFC/VB/linker-version/Visual-Studio chain plus
+//! the Rich toolchain path: `MSDOS_richScan` + `_fixRichSignatures`
+//! minor-version reconstruction), and the later `handle_*` batches
+//! (GCC/Watcom/Signtools/DongleProtection/Installers/SFX/Tools/
+//! NETProtection/Protection/FixDetects — see `handle_result` order).
 
 use crate::gen_tables as t;
 use crate::pe::{PeInfo, SectionExtent};

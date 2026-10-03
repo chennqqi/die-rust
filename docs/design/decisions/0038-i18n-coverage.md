@@ -39,3 +39,14 @@ translations per language.
 - If demand arises, the path is: `frontend/src/i18n/<lang>.json`
   mirroring the English key set, then a settings option — no engine
   work required.
+
+## 2026-10-12 revision (ADR 0042, Phase 45 scheduled)
+
+The no-mechanical-.ts-conversion decision stands (key spaces remain
+disjoint), but the "wait for contributors" posture is upgraded to a
+scheduled phase: Phase 45 generates per-locale draft catalogs anchored
+by upstream `dep/XTranslation/dicts/dict_*.po` terminology pairs and
+`translations/die_*.ts` strings — both checked out in the pinned tree —
+with key-parity/`{{var}}`/format-specifier validation in tests. Draft
+entries carry a machine-auditable `x-draft` marker; unreviewed locales
+are not claimed as finished quality.

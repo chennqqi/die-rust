@@ -304,6 +304,21 @@ scanning:
 3. **`--recursive` backward compatibility**: `--recursive` is retained as
    an alias for `--recursive-dir` to avoid breaking existing scripts.
 
+4. **InfoDB storage format** (ADR 0037, Superseded): annotations and
+   bookmarks persist as sidecar JSON (`<file>.diec.json`) rather than
+   upstream's SQLite InfoDB. Functional parity delivered in Phase 19;
+   storage format is a permanent product difference.
+
+5. **Shell context menu**: Windows-only registry integration —
+   **parity, not a deviation**: upstream `XOptions::registerContext`
+   is itself `#ifdef Q_OS_WIN` guarded. Linux/macOS shell integration
+   would be a new product feature, not an alignment item.
+
+> Full intentional-deviation inventory with dispositions and revisit
+> triggers: ADR 0042
+> (`docs/design/decisions/0042-intentional-deviation-governance.md`)
+> and ROADMAP "Phase 45-49".
+
 ## Phase 17: GUI Parity (2026-10-02)
 
 第四轮 GUI 差距复核（`docs/research/gui-gap-analysis-v4.md`，基线
@@ -383,12 +398,23 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
   Edit/Undo 按钮，切换文件时丢弃会话。上游 XHexView 的编辑同样
   即时落盘且视图内可逆；本会话层在命令侧补齐可逆性。
 
-### Deferred（17.F ADR）
+### Deviation/Deferral ADR（治理分类见 ADR 0042）
 
-- ADR 0035：NFD/SpecAbstract 引擎 — Accepted (partial, Phase 21)
-- ADR 0036：XStaticUnpacker 静态脱壳 — Deferred
-- ADR 0037：InfoDB 注释/书签 — Deferred
-- ADR 0038：i18n 增量覆盖，不做 .ts 批量转换 — Accepted
+- ADR 0035：NFD/SpecAbstract 引擎 — Accepted (partial, Phase 21)；
+  残余 `handle_PolyMorph` + ZIP 族 member handlers 已排
+  **Phase 46**
+- ADR 0036：XStaticUnpacker 静态脱壳 — 全部非模拟器模块已落地
+  （Phase 20/26/27/28）；仅 InstallSimple + ASPack/Petite 模拟器
+  分支 **Blocked**（XEmulator 不在 pin 基线）
+- ADR 0037：InfoDB 注释/书签 — Superseded：侧车 JSON 已实现
+  （Phase 19），存储格式为永久产品差异
+- ADR 0038：i18n 增量覆盖 — Accepted；术语锚定草稿生成已排
+  **Phase 45**
+- ADR 0019：Tauri 自动更新 — **Conditional**（Phase 48，待签名
+  infra 决策）
+- ADR 0030：归档安全上限 — **Permanent** 有意加固
+- ADR 0039：SSDeep 已 clean-room 落地（Phase 38）；TLSH
+  **Conditional**（待可用纯 Rust 实现 + oracle）
 
 ## Phase 18: Deferred Parity（2026-10-05）
 
@@ -482,7 +508,7 @@ oracle` 差分锁定）：
 | AutoIt v2/EA05/EA06 | `XAUTOIT` | ✅ v2 流加密 + MT(EA05) + LAME(EA06) + 位读取器 + JB01/变体 inflate + 多记录枚举 | oracle 记录名+大小逐字节差分（3 格式）|
 | EnigmaVB | `XEnigmaVB` | ✅ 节载容器 + 目录树（深度≤1024/节点≤100000）+ aPLib + 输出界限 | oracle 记录差分（stored+compressed 合成）|
 | BoxedApp | `XBoxedApp` | ✅ `.bxpck` 节 + `.main` 认证 + 节点表 STORE/ZLIB | oracle 记录差分（合成）|
-| InstallSimple | `XInstallSimple` | ❌ deferred（不可验证） | 上游整体 `#ifdef USE_XEMULATOR`，XEmulator 不在 submodule 基线，无 oracle 可建 |
+| InstallSimple | `XInstallSimple` | ❌ Blocked（不可验证） | 上游整体 `#ifdef USE_XEMULATOR`，XEmulator 不在 submodule 基线，无 oracle 可建；解除条件见 ADR 0042 #4 |
 | 容器归档浏览 | 归档 widget `getRecords` | ✅ `list_archive_members`/`extract_member`/`ArchiveKind`（AutoIt/EnigmaVB/BoxedApp） | 刻意不入 `is_archive` 嵌套扫描门（上游 `FT_FLAG_STATICUNPACKERS` opt-in）|
 | PE 节名大小写 | `SECTION_RECORD.sName` 原始大小写 | ✅ 修复全局大写化偏差；全部比较点按上游区分大小写 | `.enigma1`/`.bxpck` 等表条目此前漏检 |
 
@@ -569,8 +595,8 @@ oracle` 差分锁定）：
 
 | 项 | 状态 | 备注 |
 |----|------|------|
-| i18n 键位覆盖 | ✅ 5 locale × 269 键全齐 | en/zh-CN/ru/de/fr；此前 ru/de/fr 各缺 239 键、zh-CN 缺 `tabs.struct`。其余 17 种上游 Qt `.ts` 语言属 ADR 0038 增量项（键空间不相交，不批量转换） |
+| i18n 键位覆盖 | ✅ 5 locale × 269 键全齐 | en/zh-CN/ru/de/fr；此前 ru/de/fr 各缺 239 键、zh-CN 缺 `tabs.struct`。其余语言属 ADR 0038/0042 项，已排 Phase 45（术语锚定草稿 + 键 parity 校验，非直接 .ts 转换） |
 | 归档视图二级格式 | ✅ 已接线 | Phase 36/37 的 UDF/WIM 曾漏接 `list_archive_members`——本 phase 补齐 `ArchiveKind::Udf/Wim` 映射 + 回归测试 |
-| XStyles 主题生态 | ❌ 永久平台差异 | 上游 Qt 样式体系；本项目 CSS 变量主题（light/dark/system）为有意形态差异 |
-| InstallSimple | ❌ 不立项 | 上游 `#ifdef USE_XEMULATOR`，XEmulator 不在 pin 基线，无 oracle |
-| Tauri 自动更新 | ❌ 不立项 | ADR 0019：分发/签名属产品决策 |
+| XStyles 主题生态 | 永久平台差异 | 上游 Qt QSS 体系；本项目 CSS 变量主题（light/dark/system）为有意形态差异；扩展需求走 Phase 49（ADR 0042 #2） |
+| InstallSimple（+aspack/petite 脱壳） | Blocked | 上游 `#ifdef USE_XEMULATOR`，XEmulator 不在 pin 基线；解除条件见 ADR 0042 #4 |
+| Tauri 自动更新 | Conditional → Phase 48 | ADR 0019：需 Ed25519 签名密钥对 + manifest 端点 + CI 私钥托管的 infra 决策 |
