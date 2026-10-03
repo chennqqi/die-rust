@@ -330,7 +330,7 @@ GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
 | ISO9660 | ✅ | ✅ list + extract（base spec；Joliet/RockRidge 名不解码，Phase 18.B） |
 | BZ2/XZ/LZMA | ✅ | ✅ 单流解压（`bzip2-rs`/`lzma-rs`，伪成员 `data`，Phase 18.C） |
 | ARJ | ✅ | ✅ list + extract（stored 0/5/6 + 压缩 method 1-4，Phase 33） |
-| LHA/LZH | ✅ | ✅ list + extract（stored `-lh0-`/`-lz4-`/`-pm0-` + 压缩 `-lh4-`..`-lh7-`，Phase 32/34；lh1/legacy 门控 Phase 35） |
+| LHA/LZH | ✅ | ✅ list + extract（stored `-lh0-`/`-lz4-`/`-pm0-`、主流 `-lh4-`..`-lh7-`、`-lh1-` LZHUF、legacy `-lzs-`/`-lz5-`/`-lhx-`/`-lk7-`/`-pm1-`/`-pm2-`，Phase 32/34/35 全方法覆盖） |
 | ACE | ✅ | ✅ list + extract（stored + tech 1 LZ+Huffman，Phase 33） |
 | CPIO | ✅ | ✅ list + extract（Phase 32，六变体） |
 | UDF/WIM | ✅ | ❌ gated（无合法样本，Phase 32） |

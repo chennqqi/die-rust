@@ -657,3 +657,8 @@ enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回�
 - 粒度按 ≤3-4k 上游行/phase 拆 8 个 phase（33-40）。
 
 - 2026-10-03 Phase 33 续：ACE 解码器（uac_dcpr.c）核心为 DWORD LE MSB-first 位读取器 + 非稳定 quicksort 驱动的 makeCode 直接查找表 + meta-Huffman delta 宽度编码 + LZ77 环缓冲（old_dist[4]）；码表派生对同宽符号排序敏感，生成器必须逐字镜像 sortRange/makeCode 才能产出确定性合法流。TECH.PARM 低半字节 + 10 = 字典位宽，经 SecondaryRecord.window_size 透传。ARJ method-4 为 decodeLen/decodePtr 的 unary(前导1计数)+定宽后缀格式，无 blockSize 头；生成器按 token→(n 个1,0?,n 位后缀) 反编码。
+
+## 2026-10-04 Phase 35（LHA legacy + LZHUF）
+
+需求：补齐 LHA 全部剩余压缩方法。移植上游 `xlha_legacy_*`（lhasa/dearkmodule 移植链，ISC 许可）与 `xlzhufdecoder`（Okumura LZHUF 自适应 Huffman）。
+要点：(1) `_methodToHandle` 分派——`-lzs-`/`-lz5-`/`-lhx-`/`-lk7-`/`-pm1-`/`-pm2-`→legacy 驱动、`-lh1-`→LZHUF、`-lh0-`/`-lz4-`/`-pm0-`/`-lhd-`→stored；(2) `-lk7-` 仅由 level-1 + OS 0x20 + `-lh7-` 头经 LHARK 重映射产生，裸 `-lk7-` 标签上游不识别；(3) LZHUF 解码 `c += bit; c = son[c]` 选的是位置槽——编码端从 `prnt[leaf]` 起链，叶子边不占位（此前生成器多发一位导致上游拒绝）；(4) PM1 强收尾 copy 块、PM2 自适应树重建阈值、各环缓冲预填值均属可观察语义须逐字保留。

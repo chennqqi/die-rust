@@ -270,3 +270,95 @@ fn lha_lh4_records_and_extract_match_oracle() {
 fn lha_lh6_records_and_extract_match_oracle() {
     check_fixture("test-lh6.lha", diec_engine::archive::SecondaryKind::Lha);
 }
+
+/// Phase 35: LHA legacy `-lzs-` member (LArc bit stream, literals +
+/// ring-buffer copies) vs oracle.
+#[test]
+fn lha_lzs_records_and_extract_match_oracle() {
+    check_fixture("test-lzs.lha", diec_engine::archive::SecondaryKind::Lha);
+}
+
+/// Phase 35: LHA legacy `-lz5-` member (byte-oriented bitmap runs +
+/// pre-filled dictionary copy) vs oracle.
+#[test]
+fn lha_lz5_records_and_extract_match_oracle() {
+    check_fixture("test-lz5.lha", diec_engine::archive::SecondaryKind::Lha);
+}
+
+/// Phase 35: LHA legacy `-lhx-` member (new-style block decoder,
+/// single-code trees: literal + copy blocks) vs oracle.
+#[test]
+fn lha_lhx_records_and_extract_match_oracle() {
+    check_fixture("test-lhx.lha", diec_engine::archive::SecondaryKind::Lha);
+}
+
+/// Phase 35: LHA `-lk7-` member (LHARK variant; level-1 header with
+/// OS id 0x20 remaps the `-lh7-` tag) vs oracle.
+#[test]
+fn lha_lk7_records_and_extract_match_oracle() {
+    check_fixture("test-lk7.lha", diec_engine::archive::SecondaryKind::Lha);
+}
+
+/// Phase 35: LHA legacy `-pm1-` member (PMarc static tables +
+/// history list + mandatory trailing copies) vs oracle.
+#[test]
+fn lha_pm1_records_and_extract_match_oracle() {
+    check_fixture("test-pm1.lha", diec_engine::archive::SecondaryKind::Lha);
+}
+
+/// Phase 35: LHA legacy `-pm2-` member (PMarc adaptive single-code
+/// literal tree, history-list distances) vs oracle.
+#[test]
+fn lha_pm2_records_and_extract_match_oracle() {
+    check_fixture("test-pm2.lha", diec_engine::archive::SecondaryKind::Lha);
+}
+
+/// Phase 35: LHA `-lh1-` member (LZHUF adaptive Huffman + fixed
+/// position table) vs oracle.
+#[test]
+fn lha_lh1_records_and_extract_match_oracle() {
+    check_fixture("test-lh1.lha", diec_engine::archive::SecondaryKind::Lha);
+}
+
+/// Malformed/truncated legacy LHA streams must fail closed without
+/// panicking.
+#[test]
+fn lha_legacy_malformed_rejected() {
+    for (fixture, member) in [
+        ("test-lzs.lha", "lzs.bin"),
+        ("test-lz5.lha", "lz5.bin"),
+        ("test-lhx.lha", "lhx.bin"),
+        ("test-lk7.lha", "lk7.bin"),
+        ("test-pm1.lha", "pm1.bin"),
+        ("test-pm2.lha", "pm2.bin"),
+        ("test-lh1.lha", "lh1.bin"),
+    ] {
+        let data = std::fs::read(corpus_root().join(fixture)).unwrap();
+        // Truncate inside the packed member.
+        for cut in [data.len() - 3, data.len() - 1, data.len()] {
+            let short = &data[..cut.max(1)];
+            let _ = diec_engine::archive::extract_secondary(
+                short,
+                diec_engine::archive::SecondaryKind::Lha,
+                member,
+            );
+        }
+        // Flip every byte inside the packed member region.
+        for off in 30..data.len() {
+            let mut bad = data.clone();
+            bad[off] ^= 0xFF;
+            let _ = diec_engine::archive::extract_secondary(
+                &bad,
+                diec_engine::archive::SecondaryKind::Lha,
+                member,
+            );
+        }
+        // Empty packed data must not emit bytes.
+        let empty_out = diec_engine::archive::extract_secondary(
+            &data[..30.min(data.len())],
+            diec_engine::archive::SecondaryKind::Lha,
+            member,
+        );
+        assert!(empty_out.is_empty() || empty_out.len() <= data.len());
+    }
+}

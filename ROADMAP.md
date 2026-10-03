@@ -2285,10 +2285,25 @@ oracle 失败而非能力缺失。全部剩余项重排：
   fixture 上游 `unpacked:true`。
   测试：secondary_archives.rs 增至 19 项（四方法字节
   parity + 截断/位翻转不 panic）。NFD 差分 173 文件 0 差异。
-- **Phase 35：LHA legacy 变体**（~1.8k+ 上游行，可分 35.B）
-  `xlha_legacy_*`（lzs/lz5/lk7/pm1/pm2 + dearkmodule 框架），
-  注意 `xlha_legacy.LICENSE`/`PROVENANCE.md` 归属保留；超出
-  粒度上限的按方法分批。
+- **Phase 35：LHA legacy 变体** ✅ 完成
+  `lha_legacy.rs` 移植 `xlha_legacy_*`（lhasa/dearkmodule 移植
+  链，ISC 许可与 PROVENANCE 已在文件头保留）：
+  - `-lzs-`：LArc 2 KiB 环缓冲、1-bit 命令 + 8/11/4 位字段；
+  - `-lz5-`：4 KiB 预填字典、bitmap 批式命令、2 字节 copy；
+  - `-lhx-`/`-lk7-`：新样式块解码（pt/lt/pos 三段树，`n=0`
+    单码特判；lk7 的 OFFSET_BITS=6 与 10-bit 环缓冲）；
+  - `-pm1-`：PMarc 静态解码树 + 历史链表 + 强收尾 copy 块；
+  - `-pm2-`：PMarc 自适应 Huffman + 历史缓冲。
+  `lzhuf.rs` 移植 `xlzhufdecoder`（Okumura LZHUF）：自适应
+  Huffman（son/prnt/freq + 628 频阈值重建）+ 4 KiB LZSS
+  （d_code/d_len 静态位表）。要点：decode 的
+  `c += bit; c = son[c]` 选的是**位置槽**——编码端须从
+  `prnt[leaf]`（持有叶子的槽位）起链，叶子边不占位。
+  语料：`tools/gen_p35_corpus.py` 镜像编码器生成七方法
+  fixture（lk7 用 level-1 + OS 0x20 + `-lh7-` 头触发上游
+  LHARK 重映射），上游 oracle `unpacked:true` 全部验收；
+  `secondary_archives.rs` 27 项（7 方法字节 parity + 截断/
+  位翻转 fail-closed）。
 - **Phase 36：UDF**（生成器 ~300 行 + 枚举 ~400 行）
   ECMA-167 VRS(BEA01/NSR03/TEA01) + AVDP + PVD/LVD/PD/FSD +
   FE/ICB/FID 链合成器；移植 `xudf.cpp` 枚举核心。

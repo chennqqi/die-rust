@@ -12,7 +12,9 @@ mod arj;
 mod arj_decode;
 mod cpio;
 mod lha;
+mod lha_legacy;
 mod lzh_decode;
+mod lzhuf;
 
 /// Secondary format detected by [`list_secondary`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -171,6 +173,15 @@ pub fn extract_secondary(data: &[u8], kind: SecondaryKind, name: &str) -> Vec<u8
             return lzh_decode::decompress_lzh(packed, rec.size as usize, i32::from(tag[3] - b'0'))
                 .unwrap_or_default();
         }
+        // `-lh1-` uses the adaptive-Huffman LZHUF decoder.
+        if tag == *b"-lh1" {
+            return lzhuf::decompress_lh1(packed, rec.size as usize).unwrap_or_default();
+        }
+        // Legacy methods route to the Lhasa-derived codecs
+        // (`-lzs`/`-lz5`/`-lhx`/`-lk7`/`-pm1`/`-pm2`; `-lk7` is the
+        // remap of level-1 OS 0x20 `-lh7-` applied in lha.rs).
+        return lha_legacy::decompress_lha_legacy(packed, rec.size as usize, &tag)
+            .unwrap_or_default();
     }
     Vec::new()
 }
