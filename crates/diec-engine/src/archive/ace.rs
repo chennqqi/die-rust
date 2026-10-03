@@ -71,6 +71,9 @@ struct Block {
     file_time: u32,
     attributes: u32,
     tech_type: u8,
+    /// `TECH.PARM` byte at file-header offset 28; its low nibble + 10
+    /// gives the decoder dictionary bits.
+    tech_parameter: u8,
     volume_number: u8,
     version_extract: u8,
 }
@@ -117,6 +120,7 @@ fn read_block(d: &[u8], off: usize) -> Option<Block> {
         file_time: 0,
         attributes: 0,
         tech_type: 0,
+        tech_parameter: 0,
         volume_number: 0,
         version_extract: 0,
     };
@@ -167,6 +171,7 @@ fn read_block(d: &[u8], off: usize) -> Option<Block> {
             b.file_time = rd32(d, off + 15)?;
             b.attributes = rd32(d, off + 19)?;
             b.tech_type = *body.get(23)?; // off+27
+            b.tech_parameter = *body.get(24)?; // off+28
             let name_size = rd16(d, off + 33)? as usize;
             if name_size > ACE1_MAX_FILENAME || name_size > head_size - ACE1_FILE_MIN_HEAD_SIZE {
                 return None;
@@ -312,6 +317,8 @@ pub fn list(d: &[u8]) -> Option<Vec<SecondaryRecord>> {
             modified: format_dos(b.file_time),
             data_offset: b.data_offset as u64,
             method,
+            // Upstream maps `TECH.PARM`'s low nibble to `1 << (n + 10)`.
+            window_size: 1u64 << ((u64::from(b.tech_parameter) & 15) + 10),
         });
         idx += 1;
     }

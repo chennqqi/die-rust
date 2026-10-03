@@ -2247,12 +2247,26 @@ name/size/packed/dir/mtime + 提取字节 parity；上游提取失败的
 `XArchive/Algos` 含 ARJ/ACE/LZH 完整解码器，假压缩流导致
 oracle 失败而非能力缺失。全部剩余项重排：
 
-- **Phase 33：ARJ+ACE 压缩解码器**（~1.8k 上游行）
-  `xarjdecoder.cpp`（ARJ method 1-3 Huffman+LZSS、method 4
-  快速 LZSS、GARBLE 口令修饰符）+ `xacedecoder.cpp`（ACE
-  tech 1 LZ77+Huffman）。语料：镜像解码器写编码器生成合法
-  压缩流（FSG/MEW/NsPack 已验证模式），上游 oracle 验收后
-  移植；提取字节差分。
+- **Phase 33：ARJ+ACE 压缩解码器**（~1.8k 上游行）✅ 完成
+  `arj_decode.rs`（~700 行）：`xarjdecoder.cpp` 完整移植——
+  method 1-3 Huffman+LZSS（`decode_c`/`decode_p`/`make_table`
+  指针链以 Slot/TableSel 枚举重写）、method 4 快速 LZSS
+  （`decode_len`/`decode_ptr` unary+定宽后缀）。常数与上游
+  一致（DDICSIZ=26624/THRESHOLD=3/MAXMATCH=256）。
+  `ace_decode.rs`（~700 行）：`xacedecoder.cpp`（uac_dcpr.c）
+  完整移植——DWORD LE MSB-first 位读取器、sortRange 非稳定
+  快排逐字移植（等宽符号顺序影响码表填充）、make_code
+  直接查找表、meta-Huffman delta 解码、LZ77 环缓冲 +
+  old_dist[4] 距离缓存。
+  接线：`SecondaryRecord.window_size`（ACE TECH.PARM 低半字
+  节 → `1<<(n+10)`）；`extract_secondary` 分派 ARJ 1-4、ACE
+  61→decoder；不支持方法仍产空（fail-closed）。
+  语料：`gen_p32_corpus.py` 镜像解码器写编码器——ARJ m1
+  （canonical Huffman 表 + LZSS token）、ARJ m4、ACE tech-1
+  （literal+match+meta 表 run 编码）；上游 oracle 对三个
+  fixture 全部 `unpacked:true`，提取字节差分一致。
+  测试：secondary_archives.rs 增至 14 项（m1/m4/tech-1 字节
+  parity + 截断畸形流不 panic 产空）。
 - **Phase 34：LHA 主流压缩方法**（~2k 上游行）
   `xlzhdecoder.cpp`（lh5/6/7 静态+动态 Huffman LZSS）+
   `xlzhufdecoder.cpp`（lh4/lzhuf）。同 33 语料模式。

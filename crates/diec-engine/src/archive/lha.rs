@@ -204,12 +204,11 @@ fn read_member(d: &[u8], off: usize) -> Option<Member> {
                     }
                     unix_mode = rd16(&header, data_pos);
                 }
-                0x42
-                    if data_size < 16
-                        || rd32(&header, data_pos + 4) != 0
-                        || rd32(&header, data_pos + 12) != 0
-                        || rd32(&header, data_pos) != compressed as u32
-                        || rd32(&header, data_pos + 8) != original =>
+                0x42 if data_size < 16
+                    || rd32(&header, data_pos + 4) != 0
+                    || rd32(&header, data_pos + 12) != 0
+                    || rd32(&header, data_pos) != compressed as u32
+                    || rd32(&header, data_pos + 8) != original =>
                 {
                     return None;
                 }
@@ -299,6 +298,7 @@ pub fn list(d: &[u8]) -> Option<Vec<SecondaryRecord>> {
             data_offset: (off + m.header_size) as u64,
             // First 4 tag bytes: "-lh0"/"-lhd"/"-lz4" etc.
             method: u32::from_be_bytes(m.method[..4].try_into().unwrap()),
+            window_size: 0,
         });
         let next = off.checked_add(m.header_size)?.checked_add(m.compressed)?;
         if next <= off {

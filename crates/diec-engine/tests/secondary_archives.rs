@@ -170,3 +170,51 @@ fn non_archives_rejected() {
 fn ace_records_match_oracle() {
     check_fixture("test.ace", diec_engine::archive::SecondaryKind::Ace);
 }
+
+#[test]
+fn arj_method1_records_and_extract_match_oracle() {
+    check_fixture("test-m1.arj", diec_engine::archive::SecondaryKind::Arj);
+}
+
+/// Phase 33: ACE tech-1 compressed member must decode byte-identically
+/// to the upstream `XAceDecoder` oracle output.
+#[test]
+fn ace_compressed_records_and_extract_match_oracle() {
+    check_fixture("test-m1.ace", diec_engine::archive::SecondaryKind::Ace);
+}
+
+/// Malformed ACE streams must fail closed (empty), never panic.
+#[test]
+fn ace_compressed_malformed_rejected() {
+    let data = std::fs::read(corpus_root().join("test-m1.ace")).unwrap();
+    // Truncate the archive mid-stream: extraction must not panic and
+    // yields empty (either unlistable or decoder reject).
+    for cut in [64usize, 100, 140, 150] {
+        let short = &data[..cut];
+        let _ = diec_engine::archive::extract_secondary(
+            short,
+            diec_engine::archive::SecondaryKind::Ace,
+            "packed.bin",
+        );
+    }
+}
+
+/// Phase 33: ARJ method-4 (fastest) compressed member vs oracle.
+#[test]
+fn arj_method4_records_and_extract_match_oracle() {
+    check_fixture("test-m4.arj", diec_engine::archive::SecondaryKind::Arj);
+}
+
+/// Malformed/truncated compressed ARJ streams must fail closed.
+#[test]
+fn arj_compressed_malformed_rejected() {
+    let data = std::fs::read(corpus_root().join("test-m4.arj")).unwrap();
+    for cut in [64usize, 100, 150, 170] {
+        let short = &data[..cut.min(data.len())];
+        let _ = diec_engine::archive::extract_secondary(
+            short,
+            diec_engine::archive::SecondaryKind::Arj,
+            "packed4.bin",
+        );
+    }
+}

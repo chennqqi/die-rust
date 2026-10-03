@@ -329,9 +329,9 @@ GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
 | CAB | ✅ | ✅ list + extract（`cab` crate，Phase 18.B） |
 | ISO9660 | ✅ | ✅ list + extract（base spec；Joliet/RockRidge 名不解码，Phase 18.B） |
 | BZ2/XZ/LZMA | ✅ | ✅ 单流解压（`bzip2-rs`/`lzma-rs`，伪成员 `data`，Phase 18.C） |
-| ARJ | ✅ | ✅ list + extract stored（Phase 32，压缩方法门控） |
-| LHA/LZH | ✅ | ✅ list + extract `-lh0-`（Phase 32，lh4-7 门控） |
-| ACE | ✅ | ✅ list + extract stored（Phase 32，tech 1 门控） |
+| ARJ | ✅ | ✅ list + extract（stored 0/5/6 + 压缩 method 1-4，Phase 33） |
+| LHA/LZH | ✅ | ✅ list + extract `-lh0-`（Phase 32，lh4-7 门控 Phase 34） |
+| ACE | ✅ | ✅ list + extract（stored + tech 1 LZ+Huffman，Phase 33） |
 | CPIO | ✅ | ✅ list + extract（Phase 32，六变体） |
 | UDF/WIM | ✅ | ❌ gated（无合法样本，Phase 32） |
 

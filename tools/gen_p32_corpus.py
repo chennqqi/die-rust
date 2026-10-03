@@ -188,7 +188,441 @@ def gen_ace():
     w(f"{OUT}/test.ace", "test.ace", bytes(out))
 
 
+class BitWriter:
+    """MSB-first bit writer matching the ARJ decoder's fill_buf order."""
+
+    def __init__(self):
+        self.bits = 0
+        self.nbits = 0
+        self.out = bytearray()
+
+    def put(self, value, width):
+        """Append `width` bits of `value` (MSB first)."""
+        assert 0 <= width <= 24 and 0 <= value < (1 << max(width, 1))
+        self.bits = (self.bits << width) | value
+        self.nbits += width
+        while self.nbits >= 8:
+            self.nbits -= 8
+            self.out.append((self.bits >> self.nbits) & 0xFF)
+            self.bits &= (1 << self.nbits) - 1
+
+    def finish(self):
+        """Flush zero-padded tail; returns packed bytes."""
+        if self.nbits:
+            self.out.append((self.bits << (8 - self.nbits)) & 0xFF)
+            self.bits = 0
+            self.nbits = 0
+        return bytes(self.out)
+
+
+def arj_m1_encode(tokens):
+    """Encode a token list as an ARJ method-1 (LZSS+Huffman) stream.
+
+    `tokens`: [('lit', byte) | ('match', len)] — matches always use
+    dist=1 (decodeP returns 0 via the single-symbol pLen table).
+
+    Table layout (mirrors upstream decode order):
+      blockSize(16) | ptLen(NT=19,TBIT=5,special=3) | cLen(CBIT=9) |
+      ptLen(NP=17,PBIT=5,special=-1) | tokens
+
+    ptLen#1 assigns len1 to symbols {10,11} (complete tree, canonical
+    codes 0/1 by symbol order). cLen assigns len8 to symbols {0,1} and
+    len9 to symbols {2..509} (Kraft: 2/256 + 508/512 == 1); canonical
+    codes are sym index for len8 syms and sym+2 for len9 syms. A
+    match of length m is token 253+m, encoded as the 9-bit code m+255.
+    """
+    for kind, v in tokens:
+        if kind == "lit" and not 0 <= v <= 255:
+            raise ValueError("literal out of range")
+        if kind == "match" and not 3 <= v <= 258:
+            raise ValueError("match len out of range")
+    if not tokens or len(tokens) > 0xFFFF:
+        raise ValueError("bad token count")
+    # len9 token count must be 4 mod 8 so consumed bits end on a byte
+    # boundary (upstream requires exact input consumption).
+    len9 = sum(1 for k, v in tokens if k == "match" or v > 1)
+    if len9 % 8 != 4:
+        raise ValueError("len9 token count must be 4 mod 8")
+    w = BitWriter()
+    w.put(len(tokens), 16)
+    # ptLen #1: emit n=12 lengths, skip field fires after i==3.
+    w.put(12, 5)
+    for i in range(12):
+        w.put(1 if i in (10, 11) else 0, 3)
+        if i + 1 == 3:
+            w.put(0, 2)
+    # cLen: 510 entries via pt codes (sym10='0' -> len8, sym11='1' -> len9).
+    w.put(510, 9)
+    for i in range(510):
+        w.put(0 if i < 2 else 1, 1)
+    # ptLen #2: n=0 -> uniform single-symbol table, nC=0 (decodeP -> 0).
+    w.put(0, 5)
+    w.put(0, 5)
+    # tokens: literal 0/1 -> 8-bit canonical code = byte;
+    # literal b>=2 -> 9-bit code b+2; match m -> 9-bit code m+255.
+    for kind, v in tokens:
+        if kind == "lit":
+            if v < 2:
+                w.put(v, 8)
+            else:
+                w.put(v + 2, 9)
+        else:
+            w.put(v + 255, 9)
+    return w.finish()
+
+
+def gen_arj_compressed():
+    """ARJ with a real method-1 compressed member (oracle-decodable)."""
+    tokens = [("lit", 65), ("match", 10), ("lit", 66), ("match", 5)]
+    payload = arj_m1_encode(tokens)
+    expected = b"A" * 11 + b"B" * 6
+    data1 = b"ARJ stored member\n"
+    out = bytearray()
+    out += b"\x60\xea" + arj_basic(
+        30, 100, 50, 2, 0, 0, 0, dos_dt(), 0, 0, 0, "TESTARJ"
+    )
+    out += b"\x60\xea" + arj_basic(
+        30, 100, 50, 2, 0, 0, 0, dos_dt(), len(data1), len(data1),
+        binascii.crc32(data1), "dir\\hello.txt",
+    )
+    out += data1
+    out += b"\x60\xea" + arj_basic(
+        30, 100, 50, 2, 0, 1, 0, dos_dt(), len(payload), len(expected),
+        binascii.crc32(expected), "packed.bin",
+    )
+    out += payload
+    out += b"\x60\xea" + arj_basic(
+        30, 100, 50, 2, 0, 0, 3, dos_dt(), 0, 0, 0, "dir\\sub"
+    )
+    out += b"\x60\xea\x00\x00"
+    w(f"{OUT}/test-m1.arj", "test-m1.arj", bytes(out))
+
+
+
+
+class AceWriter:
+    """MSB-first bits packed into little-endian 32-bit words.
+
+    Mirrors XAceDecoder's readdat layout: the stream is consumed as
+    u32 LE words, MSB first within each word.
+    """
+
+    def __init__(self):
+        self.words = []
+        self.acc = 0
+        self.n = 0
+
+    def put(self, value, width):
+        """Append `width` bits of `value` (MSB first)."""
+        assert 0 <= width <= 32 and 0 <= value < (1 << max(width, 1))
+        self.acc = (self.acc << width) | value
+        self.n += width
+        while self.n >= 32:
+            self.n -= 32
+            self.words.append((self.acc >> self.n) & 0xFFFFFFFF)
+            self.acc &= (1 << self.n) - 1
+
+    def finish(self):
+        """Flush zero-padded tail word; returns packed bytes.
+
+        Upstream requires < 32 slack bits at stream end, so only the
+        final partial word is padded.
+        """
+        if self.n:
+            self.words.append((self.acc << (32 - self.n)) & 0xFFFFFFFF)
+        out = bytearray()
+        for x in self.words:
+            out += x.to_bytes(4, "little")
+        return bytes(out)
+
+
+def _ace_sort_range(freq, org, left, right):
+    """Verbatim mirror of XAceDecoder::sortRange (quicksort partition)."""
+    zl, zr = left, right
+    hyphen = freq[right]
+    while True:
+        while freq[zl] > hyphen:
+            zl += 1
+        while freq[zr] < hyphen:
+            zr -= 1
+        if zl <= zr:
+            freq[zl], freq[zr] = freq[zr], freq[zl]
+            org[zl], org[zr] = org[zr], org[zl]
+            zl += 1
+            zr -= 1
+        if zl >= zr:
+            break
+    if left < zr:
+        if left < zr - 1:
+            _ace_sort_range(freq, org, left, zr)
+        elif freq[left] < freq[zr]:
+            freq[left], freq[zr] = freq[zr], freq[left]
+            org[left], org[zr] = org[zr], org[left]
+    if right > zl:
+        if zl < right - 1:
+            _ace_sort_range(freq, org, zl, right)
+        elif freq[zl] < freq[right]:
+            freq[zl], freq[right] = freq[right], freq[zl]
+            org[zl], org[right] = org[right], org[zl]
+
+
+def _ace_makecode(maxwd, wd):
+    """Mirror of XAceDecoder::makeCode; returns slot->symbol table.
+
+    `wd` is modified in place like the upstream pWd array.
+    """
+    size1t = len(wd) - 1
+    freq = wd[:] + [0] * (284 - len(wd))
+    org = list(range(len(freq)))
+    if size1t > 0:
+        _ace_sort_range(freq, org, 0, size1t)
+    else:
+        org[0] = 0
+    freq[size1t + 1] = 0
+    size2t = 0
+    while freq[size2t]:
+        size2t += 1
+    if size2t < 2:
+        wd[org[0]] = 1
+        if size2t == 0:
+            size2t = 1
+    size2t -= 1
+    table = [0xFFFF] * (1 << maxwd)
+    c = 0
+    i = size2t + 1
+    while i != 0 and c < len(table):
+        i -= 1
+        width = freq[i]
+        if width > maxwd:
+            raise ValueError("width exceeds maxwd")
+        maxc = 1 << (maxwd - width)
+        if maxc > len(table) - c:
+            raise ValueError("overcomplete table")
+        for k in range(maxc):
+            table[c + k] = org[i]
+        c += maxc
+    return table
+
+
+def _ace_code(table, sym, wd, maxwd):
+    """Return (code value, width) whose MSB-first bits land on `sym`."""
+    w_ = wd[sym]
+    assert w_ > 0 and w_ <= maxwd
+    span = 1 << (maxwd - w_)
+    try:
+        i = table.index(sym)
+    except ValueError:
+        raise ValueError(f"symbol {sym} not in table")
+    lo = i - (i % span)
+    assert i == lo and all(t == sym for t in table[lo:lo + span]), \
+        f"code for {sym} not aligned"
+    return lo >> (maxwd - w_), w_
+
+
+def _emit_wd(bw, target, uplim, meta_wd):
+    """Emit one read_wd table for `target` widths (index 0..num_el).
+
+    `meta_wd`: widths for meta symbols 0..uplim (uplim+1 entries); the
+    run symbol is `uplim` itself. lolim is fixed at 0, so all non-zero
+    target widths must be < uplim.
+    """
+    num_el = len(target) - 1
+    # Pre-delta raw widths: r[0]=target[0], r[i]=(target[i]-target[i-1])%uplim.
+    raws = [target[0]] + [
+        (target[i] - target[i - 1]) % uplim for i in range(1, num_el + 1)
+    ]
+    meta_table = _ace_makecode(7, meta_wd)
+    bw.put(num_el, 9)
+    bw.put(0, 4)  # lolim
+    bw.put(uplim, 4)
+    for i in range(uplim + 1):
+        bw.put(meta_wd[i], 3)
+    run_code, run_w = _ace_code(meta_table, uplim, meta_wd, 7)
+    sym_codes = {
+        s: _ace_code(meta_table, s, meta_wd, 7) for s in range(uplim)
+    }
+    j = 0
+    while j <= num_el:
+        if raws[j] == 0:
+            run = 0
+            while j + run <= num_el and raws[j + run] == 0:
+                run += 1
+            if run >= 4:
+                left = run
+                while left >= 4:
+                    chunk = min(left, 19)
+                    bw.put(run_code, run_w)
+                    bw.put(chunk - 4, 4)
+                    left -= chunk
+                    j += chunk
+                continue
+        v = raws[j]
+        assert v < uplim, "raw width must be < uplim"
+        code, w_ = sym_codes[v]
+        bw.put(code, w_)
+        j += 1
+
+
+def ace_m1_encode(literals, matches=()):
+    """Encode a token list as an ACE tech-1 (LZ+Huffman) stream.
+
+    `literals`/`matches`: ("lit", sym) / ("match", dist_prefix_bits,
+    dc, lg) — main widths are fixed: each literal sym gets width 1 or 2
+    via caller-supplied `lit_widths` in `matches[0]`... simplified:
+    caller passes explicit token list in `literals`.
+    """
+    raise NotImplementedError
+
+
+
+def arj_m4_encode(tokens):
+    """Encode tokens as an ARJ method-4 (fastest) stream.
+
+    tokens: ("lit", byte) | ("match", len, dist).
+
+    decodeLen token v: `n` leading '1' bits + '0' (n<7) + n-bit suffix
+    (v - (2**n - 1)); n minimal with v <= 2**(n+1) - 2. token==0 is a
+    literal flag followed by the raw byte; else match_len = token + 2.
+    decodePtr pos v: same scheme with widths 9..13; pos = dist - 1.
+    """
+    bw = BitWriter()
+
+    def put_len(v):
+        n = 0
+        while n < 7 and v > (1 << (n + 1)) - 2:
+            n += 1
+        for _ in range(n):
+            bw.put(1, 1)
+        if n < 7:
+            bw.put(0, 1)
+        bw.put(v - ((1 << n) - 1), n)
+
+    def put_ptr(v):
+        n = 9
+        while n < 13 and v > (1 << (n + 1)) - 513:
+            n += 1
+        for _ in range(n - 9):
+            bw.put(1, 1)
+        if n < 13:
+            bw.put(0, 1)
+        bw.put(v - ((1 << n) - 512), n)
+
+    for kind, *args in tokens:
+        if kind == "lit":
+            bw.put(0, 1)
+            bw.put(args[0], 8)
+        else:
+            ln, dist = args
+            if not 3 <= ln <= 256 or not 1 <= dist <= 15872:
+                raise ValueError("match out of range")
+            put_len(ln - 2)
+            put_ptr(dist - 1)
+    return bw.finish()
+
+
+def gen_arj_m4():
+    """ARJ with a real method-4 (fastest) compressed member."""
+    tokens = [("lit", 65), ("match", 10, 1), ("lit", 66), ("match", 5, 2)]
+    payload = arj_m4_encode(tokens)
+    # 'A' + 'A'x10 + 'B' + copy(dist2,len5) = "AAAAAAAAAAAB" + "ABABA"
+    expected = b"AAAAAAAAAAAB" + b"ABABA"
+    data1 = b"ARJ stored member\n"
+    out = bytearray()
+    out += b"\x60\xea" + arj_basic(
+        30, 100, 50, 2, 0, 0, 0, dos_dt(), 0, 0, 0, "TESTARJ"
+    )
+    out += b"\x60\xea" + arj_basic(
+        30, 100, 50, 2, 0, 0, 0, dos_dt(), len(data1), len(data1),
+        binascii.crc32(data1), "stored.txt",
+    )
+    out += data1
+    out += b"\x60\xea" + arj_basic(
+        30, 100, 50, 2, 0, 4, 0, dos_dt(), len(payload), len(expected),
+        binascii.crc32(expected), "packed4.bin",
+    )
+    out += payload
+    out += b"\x60\xea\x00\x00"
+    w(f"{OUT}/test-m4.arj", "test-m4.arj", bytes(out))
+
+
+def gen_ace_compressed():
+    """ACE 1.x with a real tech-1 compressed member (oracle-decodable).
+
+    Stream layout (mirroring decoder consumption):
+      readWd#1 (main):  num_el=262, uplim=3, meta=[2,2,2,2],
+                        widths 65->1, 66->2, 262->2 (Kraft=1)
+      readWd#2 (length): num_el=8, uplim=0, meta=[0], width 8->1
+      blocksize(15) | symbols
+
+    Symbols: A='1'(1b)  B/C codes derived via the mirrored makeCode.
+    Content: lit A, lit B, lit A, match(sym262: dc=2, dist='0'->3),
+    lg sym8 (len=8+2=10), lit B, lit B -> 15 bytes
+    "ABA" + "ABAABAABAA" + "BB".
+    """
+    meta_wd = [2, 2, 2, 2]
+    bw = AceWriter()
+    # Main table: widths for symbols 0..262.
+    main_wd = [0] * 263
+    main_wd[65] = 1
+    main_wd[66] = 2
+    main_wd[262] = 2
+    _emit_wd(bw, main_wd, 3, meta_wd)
+    main_table = _ace_makecode(11, main_wd)
+    # Length table: single symbol 8, width 1.
+    lg_wd = [0] * 9
+    lg_wd[8] = 1
+    lg_target = lg_wd[:]
+    _emit_wd(bw, lg_target, 3, meta_wd)
+    # num_el=8 so the decoder reads widths for 0..8; target has 9 entries.
+    lg_table = _ace_makecode(11, lg_wd)
+    bw.put(6, 15)  # blocksize: 6 symbols
+    expected = b"ABA" + b"ABAABAABAA" + b"BB"
+    code, w_ = _ace_code(main_table, 65, main_wd, 11)
+    bw.put(code, w_)  # lit 'A'
+    code, w_ = _ace_code(main_table, 66, main_wd, 11)
+    bw.put(code, w_)  # lit 'B'
+    code, w_ = _ace_code(main_table, 65, main_wd, 11)
+    bw.put(code, w_)  # lit 'A'
+    code, w_ = _ace_code(main_table, 262, main_wd, 11)
+    bw.put(code, w_)  # new-dist ref, dc=2
+    bw.put(0, 1)      # dist prefix '0' -> dist=2 -> +1 -> 3
+    code, w_ = _ace_code(lg_table, 8, lg_wd, 11)
+    bw.put(code, w_)  # len = 8 + i(2) = 10
+    code, w_ = _ace_code(main_table, 66, main_wd, 11)
+    bw.put(code, w_)  # lit 'B'
+    bw.put(code, w_)  # lit 'B'
+    payload = bw.finish()
+
+    main_body = b"**ACE**" + bytes([10, 20, 2, 0]) + struct.pack(
+        "<IHHI", dos_dt(), 0, 0, 0
+    ) + bytes([0])
+    data1 = b"ACE stored member\n"
+    file_hdr = (
+        struct.pack("<IIII", len(data1), len(data1), dos_dt(), 0x20)
+        + struct.pack("<I", binascii.crc32(data1) ^ 0xFFFFFFFF)
+        + bytes([0, 0])
+        + struct.pack("<HH", 0, 0)
+        + struct.pack("<H", len(b"stored.txt"))
+        + b"stored.txt"
+    )
+    comp_hdr = (
+        struct.pack("<IIII", len(payload), len(expected), dos_dt(), 0x20)
+        + struct.pack("<I", binascii.crc32(expected) ^ 0xFFFFFFFF)
+        + bytes([1, 0])  # tech_type=1, tech_parameter=0 (1 KiB dict)
+        + struct.pack("<HH", 0, 0)
+        + struct.pack("<H", len(b"packed.bin"))
+        + b"packed.bin"
+    )
+    out = ace_block(0, 0, main_body)
+    out += ace_block(1, 0x0001, file_hdr) + data1
+    out += ace_block(1, 0x0001, comp_hdr) + payload
+    w(f"{OUT}/test-m1.ace", "test-m1.ace", bytes(out))
+
+
 if __name__ == "__main__":
     gen_arj()
+    gen_arj_compressed()
+    gen_arj_m4()
     gen_lha()
     gen_ace()
+    gen_ace_compressed()

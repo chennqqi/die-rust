@@ -188,6 +188,7 @@ pub fn list(d: &[u8]) -> Option<Vec<SecondaryRecord>> {
             modified: format_dos(e.dos_dt),
             data_offset: (off + e.header) as u64,
             method: u32::from(e.method),
+            window_size: 0,
         });
         off = off
             .checked_add(e.header)?

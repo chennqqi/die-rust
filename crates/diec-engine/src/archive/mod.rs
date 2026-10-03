@@ -7,7 +7,9 @@
 //! recursive scanning (`archive-gap-closure.md`).
 
 mod ace;
+mod ace_decode;
 mod arj;
+mod arj_decode;
 mod cpio;
 mod lha;
 
@@ -67,6 +69,9 @@ pub struct SecondaryRecord {
     pub(crate) data_offset: u64,
     /// Compression method identifier (format-specific).
     pub(crate) method: u32,
+    /// Decoder window size in bytes (format-specific; 0 when the format
+    /// carries none). ACE: `1 << ((tech_parameter & 15) + 10)`.
+    pub(crate) window_size: u64,
 }
 
 /// Enumerate members of a supported secondary archive format.
@@ -125,8 +130,31 @@ pub fn extract_secondary(data: &[u8], kind: SecondaryKind, name: &str) -> Vec<u8
         _ => false,
     };
     if stored {
-        data[off..end].to_vec()
-    } else {
-        Vec::new()
+        return data[off..end].to_vec();
     }
+    // Compressed members: decode when the ported decoder covers the
+    // method; anything else yields empty (fail-closed, like upstream).
+    if kind == SecondaryKind::Arj {
+        let packed = &data[off..end];
+        return match rec.method {
+            // HANDLE_METHOD_ARJ (1-3) / ARJ_FASTEST (4) map to the raw
+            // ARJ method byte stored in the header. `method` currently
+            // carries the raw ARJ method for this format.
+            1..=3 => {
+                arj_decode::decompress_arj(packed, rec.size as usize, false).unwrap_or_default()
+            }
+            4 => arj_decode::decompress_arj(packed, rec.size as usize, true).unwrap_or_default(),
+            _ => Vec::new(),
+        };
+    }
+    if kind == SecondaryKind::Ace {
+        let packed = &data[off..end];
+        // HANDLE_METHOD_ACE (61) == tech type 1 (LZ+Huffman). The
+        // decoder window comes from `TECH.PARM`'s low nibble.
+        if rec.method == 61 {
+            return ace_decode::decompress_ace(packed, rec.size as usize, rec.window_size)
+                .unwrap_or_default();
+        }
+    }
+    Vec::new()
 }

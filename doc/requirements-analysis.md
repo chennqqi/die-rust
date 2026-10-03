@@ -655,3 +655,5 @@ enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回�
 - SSDeep 上游在 XHashWidget（pin 291e3ef6 未检出）——可按
   SHA 提取 oracle，否则参考实现+ADR 修订。
 - 粒度按 ≤3-4k 上游行/phase 拆 8 个 phase（33-40）。
+
+- 2026-10-03 Phase 33 续：ACE 解码器（uac_dcpr.c）核心为 DWORD LE MSB-first 位读取器 + 非稳定 quicksort 驱动的 makeCode 直接查找表 + meta-Huffman delta 宽度编码 + LZ77 环缓冲（old_dist[4]）；码表派生对同宽符号排序敏感，生成器必须逐字镜像 sortRange/makeCode 才能产出确定性合法流。TECH.PARM 低半字节 + 10 = 字典位宽，经 SecondaryRecord.window_size 透传。ARJ method-4 为 decodeLen/decodePtr 的 unary(前导1计数)+定宽后缀格式，无 blockSize 头；生成器按 token→(n 个1,0?,n 位后缀) 反编码。

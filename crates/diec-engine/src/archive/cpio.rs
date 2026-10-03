@@ -302,6 +302,7 @@ pub fn list(d: &[u8]) -> Option<Vec<SecondaryRecord>> {
             modified: None,
             data_offset: info.data_off as u64,
             method: 0,
+            window_size: 0,
         });
         off = info.next;
     }

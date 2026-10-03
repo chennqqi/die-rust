@@ -1374,3 +1374,5 @@ stored 提取 parity（`diec-engine/src/archive/`），UDF/WIM 因
 复审后 Phase 33-40 立项：ARJ/ACE/LHA 压缩解码器、UDF/WIM、
 SSDeep、非 x86 反汇编、GUI/i18n 收尾；InstallSimple（无上游
 XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
+
+- 2026-10-03：Phase 33 继续——ARJ+ACE 压缩解码器手写移植；ACE tech-1 与 ARJ method-4 补fixture/decoder/差分。
