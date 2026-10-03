@@ -1,0 +1,8 @@
+1000	9d	nop 
+1001	81	rts 
+1002	2001	bra $1005
+1004	a642	lda #66
+1006	ff	stx , x
+1007	ff	stx , x
+1008	ff	stx , x
+1009	00	fcb $00

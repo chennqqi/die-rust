@@ -1,0 +1,10 @@
+1000	00	stop 
+1001	6001	push1 01
+1003	6002	push1 02
+1005	01	add 
+1006	6000	push1 00
+1008	52	mstore 
+1009	6000	push1 00
+100b	f3	return 
+100c	ff	suicide 
+100d	00	stop 

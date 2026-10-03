@@ -17,7 +17,9 @@ typedef struct {
     cs_mode mode;
 } dm_entry;
 
-/* Mirror of XCapstone::openHandle branches (subset: MIPS/PPC/RISCV + x86/arm anchors). */
+/* Mirror of XCapstone::openHandle branches — the full DM table except
+ * the x86/arm variants routed to other Rust backends (DM_8086/X86/ARM
+ * LE/AARCH64 LE yaxpeax paths are covered by their own parity tests). */
 static const dm_entry DM_TABLE[] = {
     {"mips32le",  CS_ARCH_MIPS,   (cs_mode)(CS_MODE_MIPS32 | CS_MODE_LITTLE_ENDIAN)},
     {"mips32be",  CS_ARCH_MIPS,   (cs_mode)(CS_MODE_MIPS32 | CS_MODE_BIG_ENDIAN)},
@@ -30,6 +32,39 @@ static const dm_entry DM_TABLE[] = {
     {"riscv32",   CS_ARCH_RISCV,  (cs_mode)(CS_MODE_RISCV32)},
     {"riscv64",   CS_ARCH_RISCV,  (cs_mode)(CS_MODE_RISCV64)},
     {"riscvc",    CS_ARCH_RISCV,  (cs_mode)(CS_MODE_RISCVC)},
+    {"armbe",     CS_ARCH_ARM,    (cs_mode)(CS_MODE_ARM | CS_MODE_BIG_ENDIAN)},
+    {"aarch64le", CS_ARCH_ARM64,  (cs_mode)(CS_MODE_ARM | CS_MODE_LITTLE_ENDIAN)},
+    {"aarch64be", CS_ARCH_ARM64,  (cs_mode)(CS_MODE_ARM | CS_MODE_BIG_ENDIAN)},
+    {"cortexm",   CS_ARCH_ARM,    (cs_mode)(CS_MODE_ARM | CS_MODE_THUMB | CS_MODE_MCLASS)},
+    {"thumble",   CS_ARCH_ARM,    (cs_mode)(CS_MODE_ARM | CS_MODE_THUMB | CS_MODE_LITTLE_ENDIAN)},
+    {"thumbbe",   CS_ARCH_ARM,    (cs_mode)(CS_MODE_ARM | CS_MODE_THUMB | CS_MODE_BIG_ENDIAN)},
+    {"sparc",     CS_ARCH_SPARC,  (cs_mode)(CS_MODE_BIG_ENDIAN)},
+    {"sparcv9",   CS_ARCH_SPARC,  (cs_mode)(CS_MODE_BIG_ENDIAN | CS_MODE_V9)},
+    {"s390x",     CS_ARCH_SYSZ,   (cs_mode)(CS_MODE_BIG_ENDIAN)},
+    {"xcore",     CS_ARCH_XCORE,  (cs_mode)(CS_MODE_BIG_ENDIAN)},
+    {"m68k",      CS_ARCH_M68K,   (cs_mode)(CS_MODE_BIG_ENDIAN)},
+    {"m68k00",    CS_ARCH_M68K,   (cs_mode)(CS_MODE_M68K_000)},
+    {"m68k10",    CS_ARCH_M68K,   (cs_mode)(CS_MODE_M68K_010)},
+    {"m68k20",    CS_ARCH_M68K,   (cs_mode)(CS_MODE_M68K_020)},
+    {"m68k30",    CS_ARCH_M68K,   (cs_mode)(CS_MODE_M68K_030)},
+    {"m68k40",    CS_ARCH_M68K,   (cs_mode)(CS_MODE_M68K_040)},
+    {"m68k60",    CS_ARCH_M68K,   (cs_mode)(CS_MODE_M68K_060)},
+    {"tms320c64x",CS_ARCH_TMS320C64X, (cs_mode)(CS_MODE_BIG_ENDIAN)},
+    {"m6800",     CS_ARCH_M680X,  (cs_mode)(CS_MODE_M680X_6800)},
+    {"m6801",     CS_ARCH_M680X,  (cs_mode)(CS_MODE_M680X_6801)},
+    {"m6805",     CS_ARCH_M680X,  (cs_mode)(CS_MODE_M680X_6805)},
+    {"m6808",     CS_ARCH_M680X,  (cs_mode)(CS_MODE_M680X_6808)},
+    {"m6809",     CS_ARCH_M680X,  (cs_mode)(CS_MODE_M680X_6809)},
+    {"m6811",     CS_ARCH_M680X,  (cs_mode)(CS_MODE_M680X_6811)},
+    {"cpu12",     CS_ARCH_M680X,  (cs_mode)(CS_MODE_M680X_CPU12)},
+    {"hd6301",    CS_ARCH_M680X,  (cs_mode)(CS_MODE_M680X_6301)},
+    {"hd6309",    CS_ARCH_M680X,  (cs_mode)(CS_MODE_M680X_6309)},
+    {"hcs08",     CS_ARCH_M680X,  (cs_mode)(CS_MODE_M680X_HCS08)},
+    {"evm",       CS_ARCH_EVM,    (cs_mode)(0)},
+    {"mos65xx",   CS_ARCH_MOS65XX,(cs_mode)(0)},
+    {"wasm",      CS_ARCH_WASM,   (cs_mode)(0)},
+    {"bpfle",     CS_ARCH_BPF,    (cs_mode)(CS_MODE_BPF_CLASSIC | CS_MODE_LITTLE_ENDIAN)},
+    {"bpfbe",     CS_ARCH_BPF,    (cs_mode)(CS_MODE_BPF_CLASSIC | CS_MODE_BIG_ENDIAN)},
     {NULL, 0, 0}
 };
 

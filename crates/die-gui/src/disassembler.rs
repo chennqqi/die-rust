@@ -23,7 +23,7 @@ pub enum Syntax {
 }
 
 /// Disassembly architecture.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Arch {
     /// x86 32-bit.
@@ -56,46 +56,97 @@ pub enum Arch {
     Riscv64,
     /// RISC-V compressed instructions (upstream `DM_RISKVC`).
     Riscvc,
+    /// ARM big-endian (upstream `DM_ARM_BE`).
+    ArmBe,
+    /// AArch64 little-endian (upstream `DM_AARCH64_LE`).
+    AArch64Le,
+    /// AArch64 big-endian (upstream `DM_AARCH64_BE`).
+    AArch64Be,
+    /// ARM Cortex-M (upstream `DM_CORTEXM`, ARM|THUMB|MCLASS).
+    CortexM,
+    /// ARM Thumb little-endian (upstream `DM_THUMB_LE`).
+    ThumbLe,
+    /// ARM Thumb big-endian (upstream `DM_THUMB_BE`).
+    ThumbBe,
+    /// SPARC (upstream `DM_SPARC`).
+    Sparc,
+    /// SPARC V9 (upstream `DM_SPARCV9`).
+    SparcV9,
+    /// SystemZ / s390x (upstream `DM_S390X`).
+    S390x,
+    /// XCORE (upstream `DM_XCORE`).
+    Xcore,
+    /// M68K generic 680x0 (upstream `DM_M68K`).
+    M68k,
+    /// M68K 68000 (upstream `DM_M68K00`).
+    M68k00,
+    /// M68K 68010 (upstream `DM_M68K10`).
+    M68k10,
+    /// M68K 68020 (upstream `DM_M68K20`).
+    M68k20,
+    /// M68K 68030 (upstream `DM_M68K30`).
+    M68k30,
+    /// M68K 68040 (upstream `DM_M68K40`).
+    M68k40,
+    /// M68K 68060 (upstream `DM_M68K60`).
+    M68k60,
+    /// TMS320C64X (upstream `DM_TMS320C64X`).
+    Tms320c64x,
+    /// M6800 (upstream `DM_M6800`).
+    M6800,
+    /// M6801 (upstream `DM_M6801`).
+    M6801,
+    /// M6805 (upstream `DM_M6805`).
+    M6805,
+    /// M6808 (upstream `DM_M6808`).
+    M6808,
+    /// M6809 (upstream `DM_M6809`).
+    M6809,
+    /// M6811 (upstream `DM_M6811`).
+    M6811,
+    /// CPU12 (upstream `DM_CPU12`).
+    Cpu12,
+    /// HD6301 (upstream `DM_HD6301`).
+    Hd6301,
+    /// HD6309 (upstream `DM_HD6309`).
+    Hd6309,
+    /// HCS08 (upstream `DM_HCS08`).
+    Hcs08,
+    /// Ethereum VM bytecode (upstream `DM_EVM`).
+    Evm,
+    /// MOS65XX family (upstream `DM_MOS65XX`).
+    Mos65xx,
+    /// WebAssembly bytecode (upstream `DM_WASM`).
+    Wasm,
+    /// eBPF little-endian (upstream `DM_BPF_LE`).
+    BpfLe,
+    /// eBPF big-endian (upstream `DM_BPF_BE`).
+    BpfBe,
 }
 
 impl Arch {
     /// Get the bitness for this architecture.
+    ///
+    /// Mirrors upstream `XBinary::getModeFromDisasmMode`: MODE_64 only
+    /// for DM_X86_64 / DM_AARCH64_* / DM_MIPS64_*; every other DM —
+    /// including PPC64 and RISCV64 — yields MODE_32 (upstream quirk
+    /// preserved verbatim). Only consumed by the x86 path today.
     fn bitness(&self) -> u32 {
         match self {
-            Arch::X86
-            | Arch::Arm
-            | Arch::Mips32le
-            | Arch::Mips32be
-            | Arch::Ppc32le
-            | Arch::Ppc32be
-            | Arch::Riscv32
-            | Arch::Riscvc => 32,
             Arch::X64
             | Arch::Arm64
+            | Arch::AArch64Le
+            | Arch::AArch64Be
             | Arch::Mips64le
-            | Arch::Mips64be
-            | Arch::Ppc64le
-            | Arch::Ppc64be
-            | Arch::Riscv64 => 64,
+            | Arch::Mips64be => 64,
+            _ => 32,
         }
     }
 
     /// Whether this architecture is decoded through the capstone backend.
+    /// Everything except the four yaxpeax/iced-x86 variants is capstone.
     fn is_capstone(&self) -> bool {
-        matches!(
-            self,
-            Arch::Mips32le
-                | Arch::Mips32be
-                | Arch::Mips64le
-                | Arch::Mips64be
-                | Arch::Ppc32le
-                | Arch::Ppc32be
-                | Arch::Ppc64le
-                | Arch::Ppc64be
-                | Arch::Riscv32
-                | Arch::Riscv64
-                | Arch::Riscvc
-        )
+        !matches!(self, Arch::X86 | Arch::X64 | Arch::Arm | Arch::Arm64)
     }
 }
 
@@ -396,76 +447,120 @@ fn disassemble_arm64(data: &[u8], base_address: u64) -> Result<DisassemblyResult
     })
 }
 
-/// Disassemble MIPS/PowerPC/RISC-V code via capstone — the same engine
-/// upstream XCapstone wraps. Arch/mode/endian triples mirror
-/// `XCapstone::openHandle` (DM_MIPS_*, DM_PPC_*, DM_RISKV*).
+/// Disassemble code via capstone — the same engine upstream
+/// `XCapstone::openHandle` wraps. Every `(Arch, Mode, ExtraMode,
+/// Endian)` triple below mirrors the `cs_open` call for the matching
+/// `DM_*` case in upstream `xcapstone.cpp`, bit for bit.
+///
+/// `new_raw` is used throughout so the cs_mode bitmask is explicit:
+/// `Mode::Default` is cs_mode(0), `Endian` contributes
+/// `CS_MODE_LITTLE_ENDIAN`(0) or `CS_MODE_BIG_ENDIAN`(1<<31), and
+/// `ExtraMode` contributes the remaining mode bits.
 fn disassemble_capstone(
     data: &[u8],
     base_address: u64,
     arch: Arch,
 ) -> Result<DisassemblyResult, String> {
-    use capstone::arch::{mips, ppc, riscv};
-    use capstone::prelude::*;
+    use capstone::{Arch as CsArch, Capstone, Endian, ExtraMode, Mode};
+    use std::iter::empty;
 
+    // DM_WASM is handled by disassemble_wasm: `capstone::Arch` has no
+    // WASM variant even though capstone-sys and upstream's vendored
+    // capstone 5.0 support CS_ARCH_WASM.
+    if arch == Arch::Wasm {
+        return disassemble_wasm(data, base_address);
+    }
+
+    let no_extra = empty::<ExtraMode>();
     let cs = match arch {
-        Arch::Mips32le => Capstone::new()
-            .mips()
-            .mode(mips::ArchMode::Mips32)
-            .endian(capstone::Endian::Little)
-            .build(),
-        Arch::Mips32be => Capstone::new()
-            .mips()
-            .mode(mips::ArchMode::Mips32)
-            .endian(capstone::Endian::Big)
-            .build(),
-        Arch::Mips64le => Capstone::new()
-            .mips()
-            .mode(mips::ArchMode::Mips64)
-            .endian(capstone::Endian::Little)
-            .build(),
-        Arch::Mips64be => Capstone::new()
-            .mips()
-            .mode(mips::ArchMode::Mips64)
-            .endian(capstone::Endian::Big)
-            .build(),
-        Arch::Ppc32le => Capstone::new()
-            .ppc()
-            .mode(ppc::ArchMode::Mode32)
-            .endian(capstone::Endian::Little)
-            .build(),
-        Arch::Ppc32be => Capstone::new()
-            .ppc()
-            .mode(ppc::ArchMode::Mode32)
-            .endian(capstone::Endian::Big)
-            .build(),
-        Arch::Ppc64le => Capstone::new()
-            .ppc()
-            .mode(ppc::ArchMode::Mode64)
-            .endian(capstone::Endian::Little)
-            .build(),
-        Arch::Ppc64be => Capstone::new()
-            .ppc()
-            .mode(ppc::ArchMode::Mode64)
-            .endian(capstone::Endian::Big)
-            .build(),
-        Arch::Riscv32 => Capstone::new()
-            .riscv()
-            .mode(riscv::ArchMode::RiscV32)
-            .build(),
-        Arch::Riscv64 => Capstone::new()
-            .riscv()
-            .mode(riscv::ArchMode::RiscV64)
-            .build(),
-        // Upstream calls cs_open(CS_ARCH_RISCV, CS_MODE_RISCVC) — the
-        // compressed flag alone with no 32/64 mode bits. `Mode::Arm`
-        // maps to cs_mode(0) under the hood, so new_raw + ExtraMode
-        // reproduces that bitmask exactly.
-        Arch::Riscvc => Capstone::new_raw(
-            capstone::Arch::RISCV,
-            capstone::Mode::Arm,
-            [capstone::ExtraMode::RiscVC].into_iter(),
+        Arch::ArmBe => Capstone::new_raw(CsArch::ARM, Mode::Arm, no_extra, Some(Endian::Big)),
+        Arch::AArch64Le => {
+            Capstone::new_raw(CsArch::ARM64, Mode::Arm, no_extra, Some(Endian::Little))
+        }
+        Arch::AArch64Be => Capstone::new_raw(CsArch::ARM64, Mode::Arm, no_extra, Some(Endian::Big)),
+        // DM_CORTEXM: cs_mode(ARM | THUMB | MCLASS) — THUMB and MCLASS
+        // are both ExtraMode bits.
+        Arch::CortexM => Capstone::new_raw(
+            CsArch::ARM,
+            Mode::Thumb,
+            [ExtraMode::MClass].into_iter(),
             None,
         ),
+        Arch::ThumbLe => {
+            Capstone::new_raw(CsArch::ARM, Mode::Thumb, no_extra, Some(Endian::Little))
+        }
+        Arch::ThumbBe => Capstone::new_raw(CsArch::ARM, Mode::Thumb, no_extra, Some(Endian::Big)),
+        Arch::Mips32le => {
+            Capstone::new_raw(CsArch::MIPS, Mode::Mips32, no_extra, Some(Endian::Little))
+        }
+        Arch::Mips32be => {
+            Capstone::new_raw(CsArch::MIPS, Mode::Mips32, no_extra, Some(Endian::Big))
+        }
+        Arch::Mips64le => {
+            Capstone::new_raw(CsArch::MIPS, Mode::Mips64, no_extra, Some(Endian::Little))
+        }
+        Arch::Mips64be => {
+            Capstone::new_raw(CsArch::MIPS, Mode::Mips64, no_extra, Some(Endian::Big))
+        }
+        Arch::Ppc32le => {
+            Capstone::new_raw(CsArch::PPC, Mode::Mode32, no_extra, Some(Endian::Little))
+        }
+        Arch::Ppc32be => Capstone::new_raw(CsArch::PPC, Mode::Mode32, no_extra, Some(Endian::Big)),
+        Arch::Ppc64le => {
+            Capstone::new_raw(CsArch::PPC, Mode::Mode64, no_extra, Some(Endian::Little))
+        }
+        Arch::Ppc64be => Capstone::new_raw(CsArch::PPC, Mode::Mode64, no_extra, Some(Endian::Big)),
+        Arch::Sparc => Capstone::new_raw(CsArch::SPARC, Mode::Default, no_extra, Some(Endian::Big)),
+        Arch::SparcV9 => Capstone::new_raw(CsArch::SPARC, Mode::V9, no_extra, Some(Endian::Big)),
+        Arch::S390x => Capstone::new_raw(CsArch::SYSZ, Mode::Default, no_extra, Some(Endian::Big)),
+        Arch::Xcore => Capstone::new_raw(CsArch::XCORE, Mode::Default, no_extra, Some(Endian::Big)),
+        Arch::M68k => Capstone::new_raw(CsArch::M68K, Mode::Default, no_extra, Some(Endian::Big)),
+        // DM_M68K00..60 carry only the M68K_0n0 mode bits — no
+        // endian flag upstream.
+        Arch::M68k00 => Capstone::new_raw(CsArch::M68K, Mode::M68k000, no_extra, None),
+        Arch::M68k10 => Capstone::new_raw(CsArch::M68K, Mode::M68k010, no_extra, None),
+        Arch::M68k20 => Capstone::new_raw(CsArch::M68K, Mode::M68k020, no_extra, None),
+        Arch::M68k30 => Capstone::new_raw(CsArch::M68K, Mode::M68k030, no_extra, None),
+        Arch::M68k40 => Capstone::new_raw(CsArch::M68K, Mode::M68k040, no_extra, None),
+        // CS_MODE_M68K_060 (1<<6) has no Mode variant in capstone 0.14;
+        // Mode::Mips32R6 carries the same bit value.
+        Arch::M68k60 => Capstone::new_raw(CsArch::M68K, Mode::Mips32R6, no_extra, None),
+        Arch::Tms320c64x => Capstone::new_raw(
+            CsArch::TMS320C64X,
+            Mode::Default,
+            no_extra,
+            Some(Endian::Big),
+        ),
+        Arch::M6800 => Capstone::new_raw(CsArch::M680X, Mode::M680x6800, no_extra, None),
+        Arch::M6801 => Capstone::new_raw(CsArch::M680X, Mode::M680x6801, no_extra, None),
+        Arch::M6805 => Capstone::new_raw(CsArch::M680X, Mode::M680x6805, no_extra, None),
+        Arch::M6808 => Capstone::new_raw(CsArch::M680X, Mode::M680x6808, no_extra, None),
+        Arch::M6809 => Capstone::new_raw(CsArch::M680X, Mode::M680x6809, no_extra, None),
+        Arch::M6811 => Capstone::new_raw(CsArch::M680X, Mode::M680x6811, no_extra, None),
+        Arch::Cpu12 => Capstone::new_raw(CsArch::M680X, Mode::M680xCpu12, no_extra, None),
+        Arch::Hd6301 => Capstone::new_raw(CsArch::M680X, Mode::M680x6301, no_extra, None),
+        Arch::Hd6309 => Capstone::new_raw(CsArch::M680X, Mode::M680x6309, no_extra, None),
+        Arch::Hcs08 => Capstone::new_raw(CsArch::M680X, Mode::M680xHcs08, no_extra, None),
+        // DM_EVM / DM_MOS65XX: cs_open(arch, cs_mode(0)).
+        Arch::Evm => Capstone::new_raw(CsArch::EVM, Mode::Default, no_extra, None),
+        Arch::Mos65xx => Capstone::new_raw(CsArch::MOS65XX, Mode::Default, no_extra, None),
+        Arch::Riscv32 => {
+            Capstone::new_raw(CsArch::RISCV, Mode::RiscV32, no_extra, Some(Endian::Little))
+        }
+        Arch::Riscv64 => {
+            Capstone::new_raw(CsArch::RISCV, Mode::RiscV64, no_extra, Some(Endian::Little))
+        }
+        // DM_RISKVC: cs_open(CS_ARCH_RISCV, CS_MODE_RISCVC) — the
+        // compressed flag alone with no 32/64 mode bits.
+        Arch::Riscvc => Capstone::new_raw(
+            CsArch::RISCV,
+            Mode::Default,
+            [ExtraMode::RiscVC].into_iter(),
+            None,
+        ),
+        // DM_BPF_*: CS_MODE_BPF_CLASSIC | endian.
+        Arch::BpfLe => Capstone::new_raw(CsArch::BPF, Mode::Cbpf, no_extra, Some(Endian::Little)),
+        Arch::BpfBe => Capstone::new_raw(CsArch::BPF, Mode::Cbpf, no_extra, Some(Endian::Big)),
         _ => return Err("not a capstone architecture".to_string()),
     }
     .map_err(|e| e.to_string())?;
@@ -497,6 +592,92 @@ fn disassemble_capstone(
             }
         })
         .collect();
+    let count = instructions.len();
+    Ok(DisassemblyResult {
+        start_address: base_address,
+        instruction_count: count,
+        instructions,
+    })
+}
+
+/// Disassemble WebAssembly bytecode (upstream `DM_WASM`:
+/// `cs_open(CS_ARCH_WASM, cs_mode(0))`).
+///
+/// `capstone::Arch` has no WASM variant even though capstone-sys and
+/// upstream's vendored capstone 5.0 both support `CS_ARCH_WASM`, so
+/// this drives the FFI layer directly and converts results through
+/// `Insn::from_raw` — the same output glue as the safe path.
+///
+/// Safety invariants: `cs_open` on `CS_ERR_OK` writes a valid handle;
+/// `cs_disasm` returns a capstone-owned instruction array valid until
+/// `cs_free`; the handle is released with `cs_close` exactly once on
+/// every exit path. No pointer escapes this function.
+#[allow(unsafe_code)]
+fn disassemble_wasm(data: &[u8], base_address: u64) -> Result<DisassemblyResult, String> {
+    use capstone::Insn;
+    use capstone_sys::{cs_arch, cs_close, cs_disasm, cs_err, cs_free, cs_insn, cs_mode, cs_open};
+    use std::ptr;
+
+    let mut handle: usize = 0;
+    // SAFETY: `cs_open` writes the handle on success; args are valid enums.
+    let err = unsafe { cs_open(cs_arch::CS_ARCH_WASM, cs_mode(0), &mut handle) };
+    if err != cs_err::CS_ERR_OK {
+        return Err(format!("cs_open CS_ARCH_WASM failed: {err:?}"));
+    }
+
+    let mut insns_ptr: *mut cs_insn = ptr::null_mut();
+    // SAFETY: `handle` is a live handle; `data` outlives the call;
+    // `insns_ptr` is written by cs_disasm.
+    let count = unsafe {
+        cs_disasm(
+            handle,
+            data.as_ptr(),
+            data.len(),
+            base_address,
+            0,
+            &mut insns_ptr,
+        )
+    };
+
+    let mut instructions = Vec::with_capacity(count);
+    if count > 0 && !insns_ptr.is_null() {
+        // SAFETY: `insns_ptr` points to `count` contiguous cs_insn
+        // entries owned by capstone until cs_free below.
+        let raw: &[cs_insn] = unsafe { std::slice::from_raw_parts(insns_ptr, count) };
+        for insn in raw {
+            // SAFETY: each entry is a valid cs_insn for the open handle.
+            let view = unsafe { Insn::from_raw(insn) };
+            let text = match view.op_str() {
+                Some(ops) if !ops.is_empty() => {
+                    format!("{} {}", view.mnemonic().unwrap_or(""), ops)
+                }
+                _ => view.mnemonic().unwrap_or("").to_string(),
+            };
+            instructions.push(Instruction {
+                address: format!("{:x}", view.address()),
+                bytes: view
+                    .bytes()
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<Vec<_>>()
+                    .join(""),
+                mnemonic: text,
+                label: None,
+                comment: None,
+                jump_target: None,
+            });
+        }
+        // SAFETY: releases the array cs_disasm allocated; entries are
+        // no longer accessed after this call.
+        unsafe { cs_free(insns_ptr, count) };
+    }
+
+    // SAFETY: handle was opened above; called exactly once.
+    unsafe {
+        let mut h = handle;
+        cs_close(&mut h);
+    }
+
     let count = instructions.len();
     Ok(DisassemblyResult {
         start_address: base_address,
@@ -631,6 +812,39 @@ mod tests {
             ("riscv32", Arch::Riscv32),
             ("riscv64", Arch::Riscv64),
             ("riscvc", Arch::Riscvc),
+            ("armbe", Arch::ArmBe),
+            ("aarch64le", Arch::AArch64Le),
+            ("aarch64be", Arch::AArch64Be),
+            ("cortexm", Arch::CortexM),
+            ("thumble", Arch::ThumbLe),
+            ("thumbbe", Arch::ThumbBe),
+            ("sparc", Arch::Sparc),
+            ("sparcv9", Arch::SparcV9),
+            ("s390x", Arch::S390x),
+            ("xcore", Arch::Xcore),
+            ("m68k", Arch::M68k),
+            ("m68k00", Arch::M68k00),
+            ("m68k10", Arch::M68k10),
+            ("m68k20", Arch::M68k20),
+            ("m68k30", Arch::M68k30),
+            ("m68k40", Arch::M68k40),
+            ("m68k60", Arch::M68k60),
+            ("tms320c64x", Arch::Tms320c64x),
+            ("m6800", Arch::M6800),
+            ("m6801", Arch::M6801),
+            ("m6805", Arch::M6805),
+            ("m6808", Arch::M6808),
+            ("m6809", Arch::M6809),
+            ("m6811", Arch::M6811),
+            ("cpu12", Arch::Cpu12),
+            ("hd6301", Arch::Hd6301),
+            ("hd6309", Arch::Hd6309),
+            ("hcs08", Arch::Hcs08),
+            ("evm", Arch::Evm),
+            ("mos65xx", Arch::Mos65xx),
+            ("wasm", Arch::Wasm),
+            ("bpfle", Arch::BpfLe),
+            ("bpfbe", Arch::BpfBe),
         ];
         let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/disasm");
         for (dm, arch) in cases {
@@ -667,6 +881,22 @@ mod tests {
             Arch::Riscv32,
             Arch::Riscv64,
             Arch::Riscvc,
+            Arch::ArmBe,
+            Arch::AArch64Le,
+            Arch::CortexM,
+            Arch::ThumbBe,
+            Arch::SparcV9,
+            Arch::S390x,
+            Arch::Xcore,
+            Arch::M68k60,
+            Arch::Tms320c64x,
+            Arch::M6809,
+            Arch::Cpu12,
+            Arch::Evm,
+            Arch::Mos65xx,
+            Arch::Wasm,
+            Arch::BpfLe,
+            Arch::BpfBe,
         ] {
             let _ = disassemble_bytes(&garbage, 0x1000, arch, Syntax::Intel);
             let _ = disassemble_bytes(&[], 0x1000, arch, Syntax::Intel);

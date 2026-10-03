@@ -1392,3 +1392,4 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
 - 2026-10-05：追加收尾补齐批 Phase 41-44——WIM 压缩流、MSDOS host API stub、剩余 capstone DM 模式、MSVC/D demangler 语义。
 - 2026-10-09：Phase 41 WIM XPRESS/LZX 压缩流提取——移植上游 xxpressdecoder/xlzxdecoder WIM 变体，chunk 表重组+metadata 同样解压+SHA-1 digest 校验，合成 fixture 经上游 oracle 验证字节 parity。
 - 2026-10-11：Phase 42 MSDOS host API 补全——overlay/EP/NE-LE-LX-PE/DOS stub/Rich/地址互转/16 位反汇编全量实现；tools/msdos-oracle (QJSEngine) × 12 fixture × 45 key 差分；QJSEngine 不能覆写 QObject 方法的 8 key 按 vendored _init 公式期望；上游 AddressToOffset 缺 return 记 upstream-bugs。
+- 2026-10-12：Phase 43 剩余 capstone DM 模式——33 个新 Arch 变体逐位镜像 XCapstone::openHandle，WASM 走 capstone-sys FFI，44 模式 corpus 差分全过。

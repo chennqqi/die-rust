@@ -38,7 +38,40 @@ type Arch =
   | "ppc64be"
   | "riscv32"
   | "riscv64"
-  | "riscvc";
+  | "riscvc"
+  | "armbe"
+  | "aarch64le"
+  | "aarch64be"
+  | "cortexm"
+  | "thumble"
+  | "thumbbe"
+  | "sparc"
+  | "sparcv9"
+  | "s390x"
+  | "xcore"
+  | "m68k"
+  | "m68k00"
+  | "m68k10"
+  | "m68k20"
+  | "m68k30"
+  | "m68k40"
+  | "m68k60"
+  | "tms320c64x"
+  | "m6800"
+  | "m6801"
+  | "m6805"
+  | "m6808"
+  | "m6809"
+  | "m6811"
+  | "cpu12"
+  | "hd6301"
+  | "hd6309"
+  | "hcs08"
+  | "evm"
+  | "mos65xx"
+  | "wasm"
+  | "bpfle"
+  | "bpfbe";
 
 export function Disassembler({
   path,
@@ -151,9 +184,42 @@ export function Disassembler({
           <option value="ppc32be">PPC32 BE</option>
           <option value="ppc64le">PPC64 LE</option>
           <option value="ppc64be">PPC64 BE</option>
-          <option value="riscv32">RISC-V 32</option>
-          <option value="riscv64">RISC-V 64</option>
-          <option value="riscvc">RISC-V C</option>
+          <option value="riscv32">RISKV32</option>
+          <option value="riscv64">RISKV64</option>
+          <option value="riscvc">RISKVC</option>
+          <option value="armbe">ARM BE</option>
+          <option value="aarch64le">AArch64</option>
+          <option value="aarch64be">AArch64 BE</option>
+          <option value="cortexm">CORTEXM</option>
+          <option value="thumble">THUMB</option>
+          <option value="thumbbe">THUMB BE</option>
+          <option value="sparc">Sparc</option>
+          <option value="sparcv9">Sparc V9</option>
+          <option value="s390x">S390X</option>
+          <option value="xcore">XCORE</option>
+          <option value="m68k">M68K</option>
+          <option value="m68k00">M68K00</option>
+          <option value="m68k10">M68K10</option>
+          <option value="m68k20">M68K20</option>
+          <option value="m68k30">M68K30</option>
+          <option value="m68k40">M68K40</option>
+          <option value="m68k60">M68K60</option>
+          <option value="tms320c64x">TMS320C64X</option>
+          <option value="m6800">M6800</option>
+          <option value="m6801">M6801</option>
+          <option value="m6805">M6805</option>
+          <option value="m6808">M6808</option>
+          <option value="m6809">M6809</option>
+          <option value="m6811">M6811</option>
+          <option value="cpu12">CPU12</option>
+          <option value="hd6301">HD6301</option>
+          <option value="hd6309">HD6309</option>
+          <option value="hcs08">HCS08</option>
+          <option value="evm">EVM</option>
+          <option value="mos65xx">MOS65XX</option>
+          <option value="wasm">WASM</option>
+          <option value="bpfle">BPF LE</option>
+          <option value="bpfbe">BPF BE</option>
         </select>
 
         {/* Syntax selector (x86/x64 only) */}

@@ -1,0 +1,6 @@
+1000	01	nop 
+1001	39	rts 
+1002	2001	bra $1005
+1004	a642	ldaa 66, x
+1006	ffffff	stx $ffff
+1009	00	test 

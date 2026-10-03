@@ -1,0 +1,6 @@
+1000	12	nop 
+1001	39	rts 
+1002	2001	bra $1005
+1004	a642	lda 2, u
+1006	ffffff	stu $ffff
+1009	00	fcb $00

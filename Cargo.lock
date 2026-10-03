@@ -1460,6 +1460,7 @@ dependencies = [
  "blake2",
  "blake3",
  "capstone",
+ "capstone-sys",
  "cpp_demangle",
  "crc",
  "crc32fast",

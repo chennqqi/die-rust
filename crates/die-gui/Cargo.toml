@@ -59,7 +59,10 @@ whirlpool = "0.11.0"
 ripemd = "0.2.0"
 tiger = "0.3.0"
 gost94 = "0.11.0"
-capstone = { version = "0.14.0", default-features = false, features = ["arch_mips", "arch_powerpc", "arch_riscv", "std", "full"] }
+capstone = { version = "0.14.0", default-features = false, features = ["arch_arm", "arch_arm64", "arch_bpf", "arch_evm", "arch_m680x", "arch_m68k", "arch_mips", "arch_mos65xx", "arch_powerpc", "arch_riscv", "arch_sparc", "arch_sysz", "arch_tms320c64x", "arch_wasm", "arch_x86", "arch_xcore", "std", "full"] }
+# WASM (DM_WASM): `capstone::Arch` has no WASM variant, so that one
+# mode is driven through capstone-sys directly (see disassembler.rs).
+capstone-sys = { version = "0.18.0", default-features = false, features = ["arch_wasm", "full"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

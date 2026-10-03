@@ -2405,11 +2405,18 @@ oracle 失败而非能力缺失。全部剩余项重排：
   执行 `_init` 覆写（QObject 只读属性）的 8 key 改用 vendored
   `_init` 公式期望值。上游 bug：`AddressToOffset` 别名缺
   `return` 恒 undefined 已记入 upstream-bugs.md。
-- **Phase 43：剩余 capstone DM 模式暴露**（小，机械）
-  `Arch` 补 SPARC/SPARCV9/SYSZ/XCORE/M68K(00-60)/M680X 全家/
-  TMS320C64X/EVM/WASM/MOS65XX/BPF LE+BE/THUMB LE+BE/CORTEXM/
-  ARM BE/AARCH64 BE 等 ~30 模式，逐位镜像 `XCapstone::openHandle`
-  DM 表；capstone-oracle 快照 + 前端下拉。
+- **Phase 43：剩余 capstone DM 模式暴露**（✅ 完成）
+  `Arch` 补 33 个变体（ARM BE、AArch64 LE/BE、CORTEXM、THUMB
+  LE/BE、SPARC、SPARCV9、SYSZ、XCORE、M68K 及 000-060 六子模式、
+  TMS320C64X、M680X 全家 10 变体、EVM、MOS65XX、WASM、BPF
+  LE/BE），全部经 `Capstone::new_raw` 逐位镜像
+  `XCapstone::openHandle` DM 表。DM_WASM 因 `capstone::Arch` 无
+  WASM 变体走 capstone-sys 原始路径（crate 级 forbid→deny、单
+  函数 allow + 安全不变量注释）；CS_MODE_M68K_060 无 Mode 变体
+  借 `Mode::Mips32R6`（同为 1<<6）承载。`bitness()` 镜像上游
+  `getModeFromDisasmMode` 的 MODE_32 默认 quirk。capstone-oracle
+  扩至 44 模式、corpus/disasm 新增 33 fixture 快照逐指令 parity，
+  前端下拉同步 33 项（上游 disasmIdToString 标签）。
 - **Phase 44：MSVC/D demangler 语义补齐**（中-大，评估后定粒度）
   上游 `XCppfilt`（GNU cp-demangle/d-demangle/rust-demangle）+
   `XDemangle`。当前 `msvc-demangler` crate 标注"精简实现"。

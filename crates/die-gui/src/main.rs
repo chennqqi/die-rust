@@ -6,7 +6,10 @@
 
 // Hide the console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-#![forbid(unsafe_code)]
+// `deny` (not `forbid`) so the single DM_WASM capstone-sys FFI path in
+// disassembler.rs can opt in via #[allow(unsafe_code)] — documented
+// safety invariants live on that function, per AGENTS.md.
+#![deny(unsafe_code)]
 
 mod annotations;
 mod commands;

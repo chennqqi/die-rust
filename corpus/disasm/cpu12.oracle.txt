@@ -1,0 +1,5 @@
+1000	a7	nop 
+1001	200a	bra $100d
+1003	3d	rts 
+1004	ffffff	lds $ffff
+1007	00	bgnd 

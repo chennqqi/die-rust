@@ -1,0 +1,6 @@
+1000	01	nop 
+1001	4100	i32.const 0x0
+1003	0b	end 
+1004	1a	drop 
+1005	2000	get_local 0x0
+1007	6b	i32.sub 

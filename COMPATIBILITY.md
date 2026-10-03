@@ -427,11 +427,15 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
   XHashWidget@`291e3ef6`）无 SSDeep，clean-room 实现规避 libfuzzy
   GPL-2.0，`ppdeep` 向量 oracle；TLSH 已由 `tlsh2` 提供（Phase 29）。
 - ADR 0040：BZ2/XZ/LZMA 纯 Rust 解码（本 Phase 已实现）。
-- ADR 0041 v3：MIPS/PPC/RISC-V 反汇编**已实现**——`capstone` 0.14
+- ADR 0041 v4：capstone 反汇编**全 DM 覆盖**——`capstone` 0.14
   bundled 构建（上游自身即 capstone 5.0，native 例外成立）；
-  oracle 为上游 vendor `libcapstone-unix-x86_64.a`，11 模式
-  77 指令逐字节 parity。剩余 SPARC/M68K 等 DM 模式可经由同一
-  capstone 后端按需扩展（见 ADR 0041 尾部）。
+  oracle 为上游 vendor `libcapstone-unix-x86_64.a`，44 模式
+  （MIPS×4/PPC×4/RISCV×3 + ARM BE、AArch64 LE/BE、CORTEXM、
+  THUMB LE/BE、SPARC/SPARCV9、SYSZ、XCORE、M68K×7、TMS320C64X、
+  M680X×10、EVM、MOS65XX、WASM、BPF LE/BE）逐指令 parity。
+  DM_WASM 走 capstone-sys FFI（`capstone::Arch` 无 WASM 变体，
+  单函数 unsafe 含安全不变量注释）；CS_MODE_M68K_060 借
+  `Mode::Mips32R6`（同 1<<6）承载。
 
 ## Phase 19/20: InfoDB & Static Unpack（2026-10-07）
 
