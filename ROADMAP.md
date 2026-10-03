@@ -2047,3 +2047,74 @@ nrv 单测），前端 `npm run build` 通过。
 
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。
+
+## Phase 26-31：遗留 deferred 项实施计划（2026-10-09 规划）
+
+Phase 25 后的全部未做项均来自 ADR deferred 决议。本节按
+"性质分组 × 单 phase ≤ ~4k 行上游源码"原则拆分，按价值排序。
+每项含独立验收门（上游输出为 oracle + 回归测试 + 差分），
+任一 phase 可在 gate 处中止并回填 ADR。
+
+### Phase 26：静态脱壳·PE 压缩壳组一 — TODO
+
+范围：FSG（xfsg 1154）、MEW（xmew 1004）、Petite（xpetite 1190），
+上游合计约 3.3k 行。三者与 Phase 20 UPX 同构——
+自定义位流解压 + PE 重建，可复用 `unpack::` 的 PE 重建基件。
+
+- 26.A 逐壳位流解码器移植（各含重叠回拷/越界约束）
+- 26.B PE 重建接入 + CLI `--unpack`/GUI `unpack_file` 分派
+- 验收：每壳 ≥1 个真实打包样本，以上游 DIE-engine
+  `XStaticUnpacker` 输出为 oracle 做节级字节差分；
+  畸形输入负向测试无 panic。
+- **Gate**：样本获取。老壳无在线打包器，语料须按 AGENTS
+  "可重复生成器/哈希清单/隔离语料"规则处理，不直接提交
+  来源不明样本；找不到合法样本的壳记录后跳过。
+
+### Phase 27：静态脱壳·PE 压缩壳组二 — TODO
+
+范围：ASPack（1068）、NsPack（1435）、yoda（672），约 3.2k 行。
+结构同 Phase 26，验收与 gate 相同。
+
+### Phase 28：静态脱壳·容器/脚本提取组 — TODO
+
+范围：AutoIt（1119）、EnigmaVB（894）、BoxedApp（810）、
+InstallSimple（857），约 3.7k 行。这组非 PE 解压而是嵌入式
+容器/编译脚本提取，语义接近 `archive_unpack`（成员枚举 +
+提取），不复用 PE 重建。
+
+- 28.A 成员枚举 + 提取 API
+- 28.B CLI/GUI 接入（复用归档视图而非 UPX 面板）
+- 验收：上游 `XStaticUnpacker` 枚举/提取输出差分。
+
+### Phase 29：TLSH + 小众哈希 — TODO（小 phase）
+
+- 29.A **TLSH**（ADR 0039 deferred 项）：先评估 `tlsh` crate
+  移植版成熟度；不达标则自实现 bucketing/quartile/diff
+  （算法公开，~400 行）。验收：上游 DIE 哈希对话框输出 +
+  公开 test vector 差分。SSDeep 维持 ADR 0039 rejected 不做。
+- 29.B **小众哈希接线**：GOST/Tiger/Whirlpool/RIPEMD-160 经
+  RustCrypto 生态 crate（均已成熟）接入现有哈希工具，
+  纯 wiring 无算法实现风险。
+- 验收：GUI/CLI 哈希输出与上游对齐；RFC 官方向量测试。
+
+### Phase 30：反汇编架构扩展 — GATED（ADR 0041 复审）
+
+范围：MIPS/PPC/RISC-V。Gate：ADR 0041 复审必须先决定路径——
+`capstone` crate（native 依赖，唯一全架构覆盖，违反纯 Rust
+偏好需 ADR 记录权衡）vs `yaxpeax-mips/ppc/rx`（纯 Rust 但
+覆盖不齐）vs 维持 deferred。先确认真实需求（MIPS/PPC 固件
+样本占比），再编码。产出 ADR 0041 修订 + 实现或维持决议。
+
+### Phase 31：GUI NFD 视图/提取器 — TODO（7C deferred 项）
+
+范围：GUI 侧 NFD 结果展示面板与归档提取器扩展。纯展示层，
+检测语义已全对齐，无引擎改动风险。验收：界面功能对照上游
+DIE GUI 对应面板。
+
+### 不立项项
+
+- **tauri 自动更新**（ADR 0019）：分发/签名/更新服务器属产品
+  决策，非代码缺口，不立项。
+- **SSDeep**：ADR 0039 明确 rejected，上游实现本身有偏差，
+  不值得复制。
+- **多语言 i18n**：ADR 0038 持续增量项，无独立 phase。

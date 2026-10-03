@@ -1331,3 +1331,4 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 
 - 2026-10-08: 新开 Phase 24——手写 Rust 解码器补齐 `compression_detect` 的 ancient 分支（RNC/TPWM/UNIX pack/Freeze），要求移植上游验证语义而非仅 magic 匹配。
 - 2026-10-08: 继续收尾遗留任务——COMPATIBILITY 状态清扫、compareEntryPoint RVA 语义核对、APK META-INF 残留项核对。
+- 2026-10-09: 为剩余 ADR deferred 项制定分 phase 实施计划，要求 phase 粒度合理（不过大不过小）。
