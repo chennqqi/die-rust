@@ -674,3 +674,7 @@ enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回�
 ## 2026-10-05 Phase 40（收尾）
 
 分析：i18n 用 node eval 真实解析 resources 对象比对——ru/de/fr 各缺 239 键（此前扫描器漏报 zh-CN 引号键名），补齐后 5×269 键全等；ADR 0038 的"增量覆盖、不批量转换 .ts"结论维持。归档视图发现真实缺口：UDF/WIM 在 Phase 36/37 只接了 list_secondary/extract_secondary，`list_secondary_members` 的 kind 映射漏掉两个新变体导致 GUI 归档页静默跳过——补映射并加 corpus 回归。XStyles 为 Qt 专属体系，作为永久平台差异记录；InstallSimple（XEmulator 不在 pin）与 tauri updater（ADR 0019 产品决策）维持不立项。
+
+## 2026-10-05 Phase 41-44 立项分析
+
+四项剩余差距的可行性核查：(1) WIM 压缩流——上游有完整 xlzxdecoder(954)+xxpressdecoder(388)，LZX BLOCK_UNCOMPRESSED=3 块可简易编码做 oracle fixture，XPRESS 编码器可手写，立项中型；(2) MSDOS stubs——compareEP/compareOverlay 等继承 Binary_Script 基类，只需实现 XMSDOS::getEntryPointOffset/getOverlayOffset 语义 + capstone x86-16 getDisasmNextAddress，立项中型；(3) 剩余 DM 模式——capstone 后端已具备，~30 模式纯接线+快照，立项小；(4) demangler——上游 XCppfilt(GNU cp-demangle/d-demangle/rust-demangle)，当前 msvc-demangler 标注精简实现，先跑 oracle 差异评估再定移植粒度。不立项维持：i18n 其余 17 语言（ADR 0038 增量）、RNC old 变体（语料缺口非代码）、InstallSimple/XStyles/更新器。

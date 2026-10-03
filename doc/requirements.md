@@ -1389,3 +1389,4 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
 ## 2026-10-05 Phase 40（GUI/i18n 收尾）
 
 需求：扫全部 locale 键位补齐缺失翻译；确认 GUI 归档视图覆盖二级格式；XStyles 记录为永久平台差异；InstallSimple/Tauri updater 维持不立项。
+- 2026-10-05：追加收尾补齐批 Phase 41-44——WIM 压缩流、MSDOS host API stub、剩余 capstone DM 模式、MSVC/D demangler 语义。

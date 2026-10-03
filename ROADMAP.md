@@ -2363,5 +2363,35 @@ oracle 失败而非能力缺失。全部剩余项重排：
   `ArchiveKind::Udf/Wim` 映射 + 回归测试。XStyles 永久平台
   差异、InstallSimple/Tauri 更新器不立项均文档化。
 
+### 收尾补齐批（Phase 41-44，消除剩余可立项差距）
+
+- **Phase 41：WIM 压缩流提取**（中型）
+  移植 `xlzxdecoder.cpp`（954 行）+ `xxpressdecoder.cpp`（388
+  行）→ `wim_decode.rs`；WIM 分块重组（chunk table + 64KiB
+  窗口）。语料：手写 XPRESS 编码器 + LZX `BLOCK_UNCOMPRESSED`(3)
+  编码器（合法流走上游解码器），`test-xpress.wim`/`test-lzx.wim`
+  fixture，oracle `unpacked:true` 后提取字节 parity。消除
+  "WIM 压缩流 list 但提取产空"缺口。
+- **Phase 42：MSDOS host API 补全**（中型）
+  消除 `MSDOS.compareEP/compareOverlay/getEntryPointOffset/
+  getOverlayOffset/getNEOffset/getBaseOffset/getOperationSystem*
+  /addressToOffset/OffsetToVA/VAToOffset/getDisasmNextAddress`
+  stub（现返 false/0/-1）。语义全部来自 `Binary_Script` 基类 +
+  `XMSDOS::getEntryPointOffset`（CS:IP + header paragraphs →
+  文件偏移）+ `XBinary::getOverlayOffset`；`getDisasmNextAddress`
+  用已入 workspace 的 capstone x86-16。oracle：上游 MSDOS_Script
+  harness + 合成/真实 MZ 语料差分（MSDOS 规则在 db 中存在）。
+- **Phase 43：剩余 capstone DM 模式暴露**（小，机械）
+  `Arch` 补 SPARC/SPARCV9/SYSZ/XCORE/M68K(00-60)/M680X 全家/
+  TMS320C64X/EVM/WASM/MOS65XX/BPF LE+BE/THUMB LE+BE/CORTEXM/
+  ARM BE/AARCH64 BE 等 ~30 模式，逐位镜像 `XCapstone::openHandle`
+  DM 表；capstone-oracle 快照 + 前端下拉。
+- **Phase 44：MSVC/D demangler 语义补齐**（中-大，评估后定粒度）
+  上游 `XCppfilt`（GNU cp-demangle/d-demangle/rust-demangle）+
+  `XDemangle`。当前 `msvc-demangler` crate 标注"精简实现"。
+  方案 A：移植 cp-demangle MSVC 子集关键语义；方案 B：换更完整
+  crate。先差异评估（上游 oracle 跑 mangled 语料对比），按缺口
+  大小决定移植范围。
+
 每 phase 验收同前：上游 oracle 差分 + 负向 + fmt/clippy/test
 全绿 + NFD 差分 0 差异。
