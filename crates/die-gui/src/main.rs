@@ -118,6 +118,7 @@ fn main() {
             commands::list_archive,
             commands::extract_archive_member,
             commands::detect_upx,
+            commands::detect_packer,
             commands::unpack_file,
             commands::list_hash_algorithms,
             commands::compute_hash,

@@ -32,7 +32,7 @@ adler2 = "2.0"
 crc = "3.4"
 cab = "0.6.0"
 bzip2-rs = "0.1.2"
-lzma-rs = "0.3.0"
+lzma-rs = { version = "0.3.0", features = ["raw_decoder"] }
 # Raw DEFLATE streams for the UPX unpacker (Phase 20).
 flate2 = "1.1"
 

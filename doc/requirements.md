@@ -1333,3 +1333,6 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 - 2026-10-08: 继续收尾遗留任务——COMPATIBILITY 状态清扫、compareEntryPoint RVA 语义核对、APK META-INF 残留项核对。
 - 2026-10-09: 为剩余 ADR deferred 项制定分 phase 实施计划，要求 phase 粒度合理（不过大不过小）。
 - 2026-10-09: 核对是否还有未规划的遗留任务（审计 deferred 清单完整性）。
+
+## 2026-10-03 Phase 26 完成
+- 移植 XStaticUnpacker FSG/MEW/Petite 三个 PE 压缩壳脱壳器（纯 Rust，复用 unpack:: PE 重建基件）；统一分派 detect_packed/unpack_any；CLI --unpack 与 GUI detect_packer/unpack_file 接入。合成语料经独立 Qt oracle 逐字节差分通过；顺带修正 nEntryPointSection 的 VA 空间语义（oracle 差分发现）。继续顺序执行 Phase 27-31。

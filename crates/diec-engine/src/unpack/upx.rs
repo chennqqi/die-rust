@@ -134,7 +134,7 @@ pub enum UnpackError {
 impl core::fmt::Display for UnpackError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::NotPacked => f.write_str("not UPX packed"),
+            Self::NotPacked => f.write_str("not packed with a supported packer"),
             Self::Unsupported(s) => write!(f, "unsupported: {s}"),
             Self::Malformed(s) => write!(f, "malformed input: {s}"),
             Self::Decompress(s) => write!(f, "decompression failed: {s}"),
@@ -539,26 +539,27 @@ fn apply_pe_filter(
 
 /// Section header view used for both packed and output images.
 #[derive(Clone, Copy)]
-struct SectionHead {
-    virtual_size: u32,
-    virtual_address: u32,
-    raw_size: u32,
-    raw_ptr: u32,
+pub(crate) struct SectionHead {
+    pub(crate) virtual_size: u32,
+    pub(crate) virtual_address: u32,
+    pub(crate) raw_size: u32,
+    pub(crate) raw_ptr: u32,
 }
 
 /// Minimal PE view over the packed file; only what `_unpackPE` consumes.
-struct PackedPe<'a> {
+pub(crate) struct PackedPe<'a> {
     data: &'a [u8],
     pe_offset: usize,
     is64: bool,
     image_base: u64,
+    entry_rva: u32,
     sections: Vec<SectionHead>,
     /// (VirtualAddress, Size) for each of the 16 directories.
     dirs: [(u32, u32); 16],
 }
 
 impl<'a> PackedPe<'a> {
-    fn parse(data: &'a [u8]) -> Result<Self, UnpackError> {
+    pub(crate) fn parse(data: &'a [u8]) -> Result<Self, UnpackError> {
         if !is_pe(data) {
             return Err(UnpackError::Malformed("not a PE file"));
         }
@@ -591,6 +592,7 @@ impl<'a> PackedPe<'a> {
         } else {
             read_u32(data, opt + 28).unwrap_or(0) as u64
         };
+        let entry_rva = read_u32(data, opt + 16).unwrap_or(0);
         let dir_base = opt + if is64 { 112 } else { 96 };
         let num_dirs = read_u32(data, opt + if is64 { 108 } else { 92 })
             .unwrap_or(0)
@@ -620,13 +622,44 @@ impl<'a> PackedPe<'a> {
             pe_offset,
             is64,
             image_base,
+            entry_rva,
             sections,
             dirs,
         })
     }
 
+    /// `XPE::getOptionalHeader_AddressOfEntryPoint` (RVA).
+    pub(crate) fn entry_rva(&self) -> u32 {
+        self.entry_rva
+    }
+
+    /// `XPE::getOptionalHeader_ImageBase`.
+    pub(crate) fn image_base(&self) -> u64 {
+        self.image_base
+    }
+
+    /// `XPE::is64` — PE32+ optional-header magic.
+    pub(crate) fn is64(&self) -> bool {
+        self.is64
+    }
+
+    /// `XPE::getSectionHeaders` view used by static unpackers.
+    pub(crate) fn sections(&self) -> &[SectionHead] {
+        &self.sections
+    }
+
+    /// Raw file bytes of the packed image.
+    pub(crate) fn data(&self) -> &'a [u8] {
+        self.data
+    }
+
+    /// `XPE::getOptionalHeader_DataDirectory` — (VirtualAddress, Size).
+    pub(crate) fn data_directory(&self, index: usize) -> Option<(u32, u32)> {
+        self.dirs.get(index).copied()
+    }
+
     /// Maps an RVA to a file offset within the packed image.
-    fn rva_to_offset(&self, rva: u32) -> Option<usize> {
+    pub(crate) fn rva_to_offset(&self, rva: u32) -> Option<usize> {
         for s in &self.sections {
             let span = s.virtual_size.max(s.raw_size);
             if rva >= s.virtual_address && rva < s.virtual_address.saturating_add(span) {

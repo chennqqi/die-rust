@@ -56,7 +56,7 @@ fn print_usage() {
     eprintln!("  --messages                Display scan messages and warnings");
     eprintln!("  --entropy                 Show entropy information");
     eprintln!(
-        "  --unpack                  Statically unpack UPX-packed files (writes <file>.unpacked)"
+        "  --unpack                  Statically unpack packed files (UPX/FSG/MEW/Petite; writes <file>.unpacked)"
     );
     eprintln!("  --info                    Show file info");
     eprintln!("  --struct, -S <value>      Show structure info (e.g., Hash#MD5, Info, Entropy)");
@@ -348,8 +348,8 @@ fn main() -> ExitCode {
                     continue;
                 }
             };
-            let Some(info) = diec_engine::detect_upx(&data) else {
-                eprintln!("{file}: not UPX packed");
+            let Some(info) = diec_engine::detect_packed(&data) else {
+                eprintln!("{file}: not packed with a supported packer");
                 failed = true;
                 continue;
             };
@@ -362,10 +362,10 @@ fn main() -> ExitCode {
                         continue;
                     }
                     println!(
-                        "{file}: unpacked -> {out_path} ({} bytes, method {}, level {})",
+                        "{file}: unpacked -> {out_path} ({} bytes, {} {})",
                         out.len(),
-                        info.method_name(),
-                        info.level
+                        info.name,
+                        info.version
                     );
                 }
                 Err(e) => {

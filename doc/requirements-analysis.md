@@ -596,3 +596,6 @@ save/restore 机制。通过 DIE-engine 调试追踪确认：Qt Script 中 `var 
 - 所有 workspace 测试通过，clippy 无警告
 - 2026-10-08：定位并修复最后 3 类差异（getLanguage C/C++ 映射、ZIP
   EOCD verified 后缀边界、COFF 字符串表节名→DWARF），差分收敛至 0。
+
+## 2026-10-03 Phase 26 分析
+- 三个壳同构（自定义位流解码 + PE rebuild），aPLib 原位解压需共享缓冲区 API 规避借用冲突；MEW 合成流终止字节 0x18（非 0x10）；Petite 为 op-table 驱动 + _doubledl 哨兵位流。所有样本用可重复生成器构造并先经上游 oracle 验证才入库。意外收获：oracle 差分暴露 nEntryPointSection 应为 VA 空间反向查找而非文件偏移，修正后 86 文件 0 差异。

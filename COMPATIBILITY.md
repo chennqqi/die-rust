@@ -426,7 +426,12 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 | DEFLATE | raw deflate | ✅ | |
 | PE filter | `_applyFilter` 小端 call/jmp | ✅ 0x06/0x26/0x36/0x46/0x49 + CTO | |
 | PE 重建 | `_unpackPE` | ✅ headers/节/imports/relocs/exports/resources/overlay | `upx -d` 节级字节差分通过 |
-| 其他壳 | ASPack/PECompact/… | ❌ deferred | ADR 0036 |
+| FSG 1.0-1.3/1.31/1.33/2.0/加密 1.1-1.2 | `XFSG` | ✅ detect + aPLib 位流 + PE 重建 | oracle 字节差分（合成 1.0 单节/双节）|
+| MEW 10 / 11 SE | `XMEW` | ✅ 块表链 + aPLib + 裸 LZMA1 + BCJ + PE 重建 | oracle 字节差分（合成 10/11）|
+| Petite 2.x / level 1 | `XPETITE` | ✅ op-table + `_doubledl` 位流 + XOR 字面量 + OEP 恢复 + PE 重建 | oracle 字节差分（合成 v2）|
+| 统一分派 | `XStaticUnpacker::tryUnpack` 候选序 | ✅ `detect_packed`/`unpack_any`；CLI `--unpack` + GUI `detect_packer`/`unpack_file` | |
+| `nEntryPointSection` | `XPE::getEntryPointSection`（VA + 反向 memory-map 查找） | ✅ 修正为 VA 空间 + 重叠取末节（原文件偏移语义偏差） | `protector: Generic [Last section entry point]` 差分发现 |
+| 其他壳 | ASPack/NsPack/yoda/AutoIt/… | ❌ deferred → Phase 27/28 | ADR 0036；XInstallSimple 需 USE_XEMULATOR |
 
 ## Phase 21: NFD/SpecAbstract 第二引擎（2026-10-07）
 

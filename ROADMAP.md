@@ -2055,7 +2055,7 @@ Phase 25 后的全部未做项均来自 ADR deferred 决议。本节按
 每项含独立验收门（上游输出为 oracle + 回归测试 + 差分），
 任一 phase 可在 gate 处中止并回填 ADR。
 
-### Phase 26：静态脱壳·PE 压缩壳组一 — TODO
+### Phase 26：静态脱壳·PE 压缩壳组一 — DONE（2026-10-03）
 
 范围：FSG（xfsg 1154）、MEW（xmew 1004）、Petite（xpetite 1190），
 上游合计约 3.3k 行。三者与 Phase 20 UPX 同构——

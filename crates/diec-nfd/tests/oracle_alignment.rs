@@ -194,3 +194,15 @@ fn rnc_corrupt_inputs_rejected() {
     let out = scan(&bad, sniff_ft(&bad), oracle_opts());
     assert!(!out.iter().any(|r| r.record_name == "RNC"), "{out:?}");
 }
+
+/// Upstream `nEntryPointSection` resolves the EP virtual address against
+/// the section memory map in reverse order — overlapping VAs resolve to
+/// the LAST section (Phase 26 fix; previously file-offset extents were
+/// used, which resolves to the first section).
+#[test]
+fn ep_section_index_uses_va_space() {
+    let d = corpus("fsg-v100-two.unpacked.exe");
+    let info = diec_nfd::pe::collect(&d).expect("pe collect");
+    // Both sections start at VA 0x1000; EP RVA 0x1000 resolves to sec 1.
+    assert_eq!(info.entrypoint_section_index(), 1);
+}

@@ -545,24 +545,36 @@ interface UpxInfoDto {
   originalFileSize: number;
 }
 
-/** UPX detection banner + one-click static unpack (Phase 20). */
+/** Generic packer detection result (Phase 26). */
+interface PackedInfoDto {
+  kind: string;
+  name: string;
+  version: string;
+}
+
+/** Packer detection banner + one-click static unpack (Phase 20 UPX, Phase 26 generic). */
 function UpxUnpackSection({ path }: { path: string }) {
   const { t } = useTranslation();
   const [upx, setUpx] = useState<UpxInfoDto | null>(null);
+  const [packed, setPacked] = useState<PackedInfoDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     setUpx(null);
+    setPacked(null);
     setResult(null);
     setErr(null);
+    invoke<PackedInfoDto | null>("detect_packer", { path })
+      .then(setPacked)
+      .catch(() => setPacked(null));
     invoke<UpxInfoDto | null>("detect_upx", { path })
       .then(setUpx)
       .catch(() => setUpx(null));
   }, [path]);
 
-  if (!upx) return null;
+  if (!packed) return null;
 
   const doUnpack = async () => {
     setBusy(true);
@@ -582,7 +594,9 @@ function UpxUnpackSection({ path }: { path: string }) {
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-1.5 text-fg-secondary">
           <Package size={13} />
-          <span className="font-medium">{t("upx.title", "UPX packed")}</span>
+          <span className="font-medium">
+            {packed.name} {packed.version} {t("upx.title", "packed")}
+          </span>
         </div>
         <button
           onClick={doUnpack}
@@ -592,13 +606,17 @@ function UpxUnpackSection({ path }: { path: string }) {
           {busy ? t("upx.unpacking", "Unpacking…") : t("upx.unpack", "Unpack")}
         </button>
       </div>
-      <div className="text-fg-muted mono">
-        {t("upx.method", "Method")}: {upx.methodName} · {t("upx.level", "Level")}: {upx.level}
-        {upx.filter !== 0 && <> · {t("upx.filter", "Filter")}: 0x{upx.filter.toString(16)}</>}
-      </div>
-      <div className="text-fg-muted mono">
-        {upx.compressedSize.toLocaleString()} → {upx.uncompressedSize.toLocaleString()} bytes
-      </div>
+      {upx && (
+        <>
+          <div className="text-fg-muted mono">
+            {t("upx.method", "Method")}: {upx.methodName} · {t("upx.level", "Level")}: {upx.level}
+            {upx.filter !== 0 && <> · {t("upx.filter", "Filter")}: 0x{upx.filter.toString(16)}</>}
+          </div>
+          <div className="text-fg-muted mono">
+            {upx.compressedSize.toLocaleString()} → {upx.uncompressedSize.toLocaleString()} bytes
+          </div>
+        </>
+      )}
       {result && <div className="text-accent-green mt-1 selectable">{t("upx.saved", "Saved")}: {result}</div>}
       {err && <div className="text-accent-red mt-1">{err}</div>}
     </div>

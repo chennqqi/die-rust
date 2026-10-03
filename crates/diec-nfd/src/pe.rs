@@ -70,6 +70,10 @@ pub struct PeInfo {
     pub os_version: u32,
     /// Image base (`getImageBase`).
     pub image_base: u64,
+    /// Optional-header `SectionAlignment` (memory-map virtual extents).
+    pub section_alignment: u32,
+    /// Optional-header `FileAlignment` (memory-map file extents).
+    pub file_alignment: u32,
     /// Section extents for deep scans.
     pub extents: Vec<SectionExtent>,
     /// Import-directory section index (`getImageDirectoryEntrySection`),
@@ -172,6 +176,10 @@ pub struct PeLayout {
     pub base_of_data: u32,
     /// Optional-header `MinorImageVersion` (WinUpack build probe).
     pub minor_image: u16,
+    /// Optional-header `SectionAlignment`.
+    pub section_alignment: u32,
+    /// Optional-header `FileAlignment`.
+    pub file_alignment: u32,
     dir_rva: [u32; 16],
     #[allow(dead_code)] // retained for future resource/debug scans.
     dir_size: [u32; 16],
@@ -264,6 +272,8 @@ fn parse_layout(d: &[u8]) -> Option<PeLayout> {
             rd_u32(d, opt_off + 24).unwrap_or(0)
         },
         minor_image: rd_u16(d, opt_off + 46).unwrap_or(0),
+        section_alignment: rd_u32(d, opt_off + 32).unwrap_or(0),
+        file_alignment: rd_u32(d, opt_off + 36).unwrap_or(0),
         dir_rva,
         dir_size,
     })
@@ -587,6 +597,8 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
     info.time_stamp = l.time_stamp;
     info.base_of_data = l.base_of_data;
     info.minor_image = l.minor_image;
+    info.section_alignment = l.section_alignment;
+    info.file_alignment = l.file_alignment;
 
     info.extents = l
         .sections
@@ -932,17 +944,30 @@ impl PeInfo {
     }
 
     /// Index of the section containing the entry point
-    /// (`nEntryPointSection`), -1 when outside all raw extents.
+    /// (`nEntryPointSection`). Upstream resolves the EP **virtual
+    /// address** against the memory map: `image_base + entry_rva` must
+    /// fall inside `[va, va + max(align_up(vsize, SectionAlignment),
+    /// raw file size))` of a section; records are scanned in reverse so
+    /// overlapping sections resolve to the last one (`getMemoryRecordByAddress`).
+    /// Returns -1 when `entry_rva == 0` or outside every extent.
     pub fn entrypoint_section_index(&self) -> i32 {
-        let ep = self.entry_point_offset;
-        if ep < 0 {
+        if self.entry_rva == 0 {
             return -1;
         }
-        self.extents
-            .iter()
-            .position(|e| ep as usize >= e.off && (ep as usize) < e.off + e.size)
-            .map(|i| i as i32)
-            .unwrap_or(-1)
+        let va = self.image_base.wrapping_add(u64::from(self.entry_rva));
+        for (i, e) in self.extents.iter().enumerate().rev() {
+            let lo = self.image_base.wrapping_add(u64::from(e.vaddr));
+            // File record: SizeOfRawData + (raw_ptr - align_down(raw_ptr, FileAlignment)).
+            let fa = u64::from(self.file_alignment).max(1);
+            let file_size = e.size as u64 + (e.off as u64).saturating_sub(e.off as u64 / fa * fa);
+            let sa = u64::from(self.section_alignment).max(1);
+            let virt_size = u64::from(e.vsize).div_ceil(sa) * sa;
+            let hi = lo.wrapping_add(file_size.max(virt_size));
+            if va >= lo && va < hi {
+                return i as i32;
+            }
+        }
+        -1
     }
 
     /// File offset/size of the section containing the entry point,

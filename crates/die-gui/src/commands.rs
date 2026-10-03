@@ -1671,8 +1671,36 @@ pub async fn detect_upx(path: String) -> Result<Option<UpxInfoDto>, GuiError> {
     .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
 }
 
-/// Statically unpacks a UPX-packed file, writing `<file>.unpacked` unless an
-/// explicit `output_path` is given. Returns the output path.
+/// Generic packer detection result across all supported static unpackers.
+#[derive(serde::Serialize)]
+pub struct PackedInfoDto {
+    /// Packer family id (`"upx"`, `"fsg"`, `"mew"`, `"petite"`).
+    pub kind: String,
+    /// Packer family name, e.g. `"FSG"`.
+    pub name: String,
+    /// Version string reported by the packer's detector.
+    pub version: String,
+}
+
+/// Detects any statically-unpackable packer (upstream `XStaticUnpacker`
+/// parity). Returns the first matching candidate.
+#[tauri::command]
+pub async fn detect_packer(path: String) -> Result<Option<PackedInfoDto>, GuiError> {
+    tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&path).map_err(|e| GuiError::new("READ_ERROR", e.to_string()))?;
+        Ok(diec_engine::detect_packed(&data).map(|info| PackedInfoDto {
+            kind: format!("{:?}", info.kind).to_lowercase(),
+            name: info.name.to_string(),
+            version: info.version,
+        }))
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?
+}
+
+/// Statically unpacks a packed file (UPX/FSG/MEW/Petite), writing
+/// `<file>.unpacked` unless an explicit `output_path` is given. Returns
+/// the output path.
 #[tauri::command]
 pub async fn unpack_file(path: String, output_path: Option<String>) -> Result<String, GuiError> {
     tokio::task::spawn_blocking(move || {
