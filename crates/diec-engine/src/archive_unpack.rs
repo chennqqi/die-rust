@@ -749,6 +749,14 @@ pub enum ArchiveKind {
     EnigmaVb,
     /// BoxedApp packer container (PE-carried).
     BoxedApp,
+    /// ARJ archive (Phase 32).
+    Arj,
+    /// LHA/LZH archive (Phase 32).
+    Lha,
+    /// CPIO archive (Phase 32).
+    Cpio,
+    /// ACE archive (Phase 32).
+    Ace,
 }
 
 impl ArchiveKind {
@@ -766,6 +774,10 @@ impl ArchiveKind {
             Self::AutoIt => "AUTOIT",
             Self::EnigmaVb => "ENIGMAVB",
             Self::BoxedApp => "BOXEDAPP",
+            Self::Arj => "ARJ",
+            Self::Lha => "LHA",
+            Self::Cpio => "CPIO",
+            Self::Ace => "ACE",
         }
     }
 }
@@ -803,6 +815,12 @@ pub fn list_archive_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemb
         list_cab_members(data).map(|m| (ArchiveKind::Cab, m))
     } else if is_iso9660(data) {
         list_iso9660_members(data).map(|m| (ArchiveKind::Iso9660, m))
+    } else if let Some(m) = list_secondary_members(data) {
+        // Phase 32 secondary formats (ARJ/LHA/CPIO/…): upstream
+        // `XFormats` enumerates them but the nested-scan unpack gate
+        // stays closed (ZIP/7Z/RAR/CAB/ISO9660 only), so these are
+        // list/extract-only here, never part of `is_archive`.
+        Some(m)
     } else if let Some(m) = list_container_members(data) {
         // Packer/protector containers (upstream XStaticUnpacker record
         // enumeration). These are NOT part of `is_archive`/`extract_archive`:
@@ -817,6 +835,30 @@ pub fn list_archive_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemb
     } else {
         list_stream_members(data)
     }
+}
+
+/// List members of a Phase 32 secondary archive (ARJ/LHA/CPIO).
+fn list_secondary_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
+    let (kind, records) = crate::archive::list_secondary(data)?;
+    let kind = match kind {
+        crate::archive::SecondaryKind::Arj => ArchiveKind::Arj,
+        crate::archive::SecondaryKind::Lha => ArchiveKind::Lha,
+        crate::archive::SecondaryKind::Cpio => ArchiveKind::Cpio,
+        crate::archive::SecondaryKind::Ace => ArchiveKind::Ace,
+        _ => return None,
+    };
+    let members = records
+        .into_iter()
+        .take(MAX_MEMBER_NAMES)
+        .map(|r| ArchiveMemberInfo {
+            name: r.name,
+            size: r.size,
+            packed_size: r.packed_size,
+            is_directory: r.is_directory,
+            modified: r.modified,
+        })
+        .collect();
+    Some((kind, members))
 }
 
 /// List members of a packer/protector container (AutoIt/EnigmaVB/BoxedApp).
@@ -1022,6 +1064,10 @@ pub fn extract_member(data: &[u8], name: &str) -> Vec<u8> {
         extract_member_cab(data, name)
     } else if is_iso9660(data) {
         extract_member_iso9660(data, name)
+    } else if let Some((kind, _records)) = crate::archive::list_secondary(data) {
+        // Secondary formats: stored members extract byte-exactly;
+        // compressed members return empty until the decoder ships.
+        crate::archive::extract_secondary(data, kind, name)
     } else if let Some((_kind, records)) = container_records(data) {
         // Packer/protector containers: exact-name member lookup
         // (upstream `XStaticUnpacker` record extraction).

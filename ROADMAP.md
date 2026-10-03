@@ -2186,7 +2186,7 @@ Edit/Undo 按钮、切换文件时 discard）；容器归档
 list/extract 已于 Phase 28 接入 `list_archive_members`/
 `extract_member` 与 GUI 复用。
 
-### Phase 32：归档格式补齐（list 优先）— TODO
+### Phase 32：归档格式补齐（list 优先）— ✅ DONE（2026-10-03）
 
 范围：COMPATIBILITY `ARJ/SFX/其它 ❌ deferred` 行。上游
 `XFormats::createClass` 可解析 ARJ/LHA(LZH)/ACE/CPIO/UDF/WIM
@@ -2194,14 +2194,38 @@ list/extract 已于 Phase 28 接入 `list_archive_members`/
 ZIP/7Z/RAR/CAB/ISO9660 五类（`archive-gap-closure.md` 已证），
 这批格式**只需 list/extract parity，不进嵌套扫描**。
 
-- 32.A list 先行：ARJ/CPIO/UDF/WIM/LHA 目录枚举（均只读遍历，
-  各自数百行）
-- 32.B extract 按解码器可得性分级：store/无压缩直接提取；
-  LHA lh5-7 与 ARJ method-4 需 LZSS/LZH 位流移植（量级同
-  ancient 单解码器）；ACE（unacev2）/WIM 压缩流视成本 gate
-- 验收：上游 `list_archive` 输出差分；提取项与上游 extract
-  输出字节差分；嵌套扫描行为不变（仍只五类）
-- **Gate**：无法获得合法样本的格式记录后跳过。
+交付（`crates/diec-engine/src/archive/`）：
+
+- **ARJ**（`arj.rs`）：块链枚举、DOS 时间戳、反斜杠→`/` 名字
+  规范化；`is_directory` 恒 false（上游不设 `ISFOLDER`）；
+  stored（method 0/5/6）字节提取 parity。
+- **LHA/LZH**（`lha.rs`）：level-0/1 头（含 ext-header 链、
+  common CRC、0x42 大文件扩展校验）、`-lh0-`/`-lhd-` stored
+  提取；压缩方法（lh4-7）返回空（上游 ACE/ARJ/LHA 压缩成员
+  同样解不出）。
+- **ACE**（`ace.rs`）：`_readBlock`/`_collectBlocks` 完整移植
+  （16 位头 CRC、main/file/recovery 块、split/solid/AV/comment
+  flag 一致性、recovery 唯一且末尾）；`HANDLE_METHOD_*` 编号
+  与上游枚举对齐（STORE=1/ACE=61/UNKNOWN=0）；stored 提取
+  parity。
+- **CPIO**（`cpio.rs`）：六变体（newc/crc/odc/AFIO/二进制
+  LE+BE）、TRAILER!!! 必需、CRC 校验、对齐语义、记录上限
+  `0x100000`、无 mtime（上游不报）。
+- **UDF/WIM**：⚠ gated——上游 `isValid` 要求校验过的 AVDP
+  链（UDF）与查找表+XML 元数据（WIM），本机无生成工具且合成
+  成本远超单 phase 粒度，按 32 计划"无法获得合法样本记录后
+  跳过"；`SecondaryKind::{Udf,Wim}` 枚举保留，探测未接线。
+
+Oracle：`tools/nfd-oracle/list_main.cpp`（复用 pinned 上游
+XARJ/XLHA/XACE/XCPIO/XUDF/XWIM，枚举记录 + `unpackCurrent`
+逐记录提取），快照 `corpus/*.list.json` + `corpus/extract/`。
+`tools/gen_p32_corpus.py` 生成 ARJ/LHA(l0/l1)/ACE 合成样本，
+CPIO 样本用系统 `cpio`/`odc/crc/newc/bin` 四变体。
+
+差分测试 `tests/secondary_archives.rs`（9 项）：记录级
+name/size/packed/dir/mtime + 提取字节 parity；上游提取失败的
+压缩成员断言我们也产空（同一 fail-closed 契约）。NFD 差分
+148 文件 0 差异（含新语料）。嵌套扫描门不变。
 
 ### 不立项项
 

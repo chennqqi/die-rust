@@ -632,3 +632,16 @@ enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回�
 命名冲突与共享目录 remove_dir_all 竞态，改为原子序号独立子目录。
 上游 XHexView 编辑即时落盘可逆，会话层在命令侧补齐同等语义。
 109 文件 NFD 差分 0 差异确认重构无回归。
+
+## 2026-10-03 Phase 32 分析
+- 逐一考古上游 xarj/xlha/xace/xcpio 的 _readEntry/_collectBlocks/
+  infoCurrent，移植枚举语义而非仅签名探测（ACE 需完整块链校验：
+  16 位头 CRC、recovery 唯一且末尾、flag 一致性）。
+- 上游 unpackCurrent 对记录做 RESULTCRC 校验：ARJ=CRC32(标准)、
+  LHA=CRC16/ARC 数据校验、ACE=CRC32 无 final xor、CPIO 无校验。
+  合成样本必须填真 CRC 否则上游也解不出（假 CRC 曾致
+  unpacked:false 误判）。
+- LHA 记录无 mtime、ARJ dir 记录不设 ISFOLDER——均按上游
+  infoCurrent 实际属性集对齐，非按格式规范想象。
+- UDF/WIM 按 gate 跳过：上游 isValid 要求 AVDP 链/查找表+XML，
+  无系统工具可生成合法样本。

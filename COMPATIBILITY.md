@@ -268,8 +268,9 @@ scanning:
 
 - **Supported formats**: ZIP, 7Z, RAR, CAB, ISO9660 — the same five
   archive types upstream `scanProcess` unpacks for nested scanning
-  (`archive-gap-closure.md` proof); ARJ/LHA/ACE/CPIO/UDF/WIM are
-  list/extract-only upstream and deferred here (Phase 32).
+  (`archive-gap-closure.md` proof); ARJ/LHA/ACE/CPIO are
+  list/extract-only upstream and matched here (Phase 32), with
+  UDF/WIM gated on sample availability.
 - **Safety bounds** (ADR 0030, stricter than upstream):
   - Single-member limit: 128 MiB
   - Total decompressed limit: 512 MiB
@@ -285,10 +286,13 @@ scanning:
    (ratio > 100:1) or very large members (> 128 MiB) are skipped. This is
    an intentional safety improvement (ADR 0030).
 
-2. **Secondary archive formats**: ARJ/LHA/ACE/CPIO/UDF/WIM etc. are
-   parsable upstream (`XFormats::createClass`) but excluded from the
-   nested-scan gate; diec-rust lists/extracts the five nested-scan
-   formats and defers the rest to Phase 32.
+2. **Secondary archive formats**: ARJ/LHA/ACE/CPIO are parsable
+   upstream (`XFormats::createClass`) but excluded from the
+   nested-scan gate; diec-rust enumerates/extracts them through
+   `list_archive_members`/`extract_member` only (stored members
+   byte-identical, compressed members empty — upstream decoders
+   are likewise unavailable). UDF/WIM are gated pending a valid
+   corpus (Phase 32 note in ROADMAP).
 
 3. **`--recursive` backward compatibility**: `--recursive` is retained as
    an alias for `--recursive-dir` to avoid breaking existing scripts.
@@ -325,7 +329,11 @@ GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
 | CAB | ✅ | ✅ list + extract（`cab` crate，Phase 18.B） |
 | ISO9660 | ✅ | ✅ list + extract（base spec；Joliet/RockRidge 名不解码，Phase 18.B） |
 | BZ2/XZ/LZMA | ✅ | ✅ 单流解压（`bzip2-rs`/`lzma-rs`，伪成员 `data`，Phase 18.C） |
-| ARJ/SFX/其它 | ✅ | ❌ deferred |
+| ARJ | ✅ | ✅ list + extract stored（Phase 32，压缩方法门控） |
+| LHA/LZH | ✅ | ✅ list + extract `-lh0-`（Phase 32，lh4-7 门控） |
+| ACE | ✅ | ✅ list + extract stored（Phase 32，tech 1 门控） |
+| CPIO | ✅ | ✅ list + extract（Phase 32，六变体） |
+| UDF/WIM | ✅ | ❌ gated（无合法样本，Phase 32） |
 
 ### Hash 算法矩阵（17.C）
 

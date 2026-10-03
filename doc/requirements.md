@@ -1362,3 +1362,9 @@ ADR 附复审证据表。继续 Phase 31。
 `diec_engine::nfd_scan` 公共 API + `nfd_scan` 命令）+ hex 编辑
 会话层（hex_edit.rs：每路径撤销栈 256 条/1MiB、Edit/Undo 按钮、
 切换文件 discard）；容器归档 list/extract 已在 Phase 28 完成接入。
+
+## 2026-10-03 Phase 32：二级归档补齐
+执行 ROADMAP Phase 32：ARJ/LHA(LZH)/ACE/CPIO 归档枚举与
+stored 提取 parity（`diec-engine/src/archive/`），UDF/WIM 因
+无合法样本按 phase gate 记录跳过；一律 list/extract-only，
+不进嵌套扫描；上游 list-oracle 差分 + 提取字节 parity。
