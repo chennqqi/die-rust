@@ -1351,6 +1351,9 @@ fn pe_scan(
         entrypoint,
         misc,
     );
+    // `handle_PolyMorph` sits here in the upstream chain — its body is
+    // entirely Q_UNUSED + a `// ExeSax` comment at the pinned commit, a
+    // no-op; nothing to port.
     crate::pe_handlers::microsoft(
         data,
         &pe,

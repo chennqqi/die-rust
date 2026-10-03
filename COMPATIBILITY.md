@@ -400,9 +400,10 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 
 ### Deviation/Deferral ADR（治理分类见 ADR 0042）
 
-- ADR 0035：NFD/SpecAbstract 引擎 — Accepted (partial, Phase 21)；
-  残余 `handle_PolyMorph` + ZIP 族 member handlers 已排
-  **Phase 46**
+- ADR 0035：NFD/SpecAbstract 引擎 — Accepted (full)：Phase 46 补齐
+  `handle_Microsoftoffice`/`handle_OpenOffice`；其余残余 handler
+  （PolyMorph/Metainfos/JAR/IPA/FixDetects-ZIP/AnslymPacker）经审计
+  为上游注释占位 no-op 或死代码，属 parity
 - ADR 0036：XStaticUnpacker 静态脱壳 — 全部非模拟器模块已落地
   （Phase 20/26/27/28）；仅 InstallSimple + ASPack/Petite 模拟器
   分支 **Blocked**（XEmulator 不在 pin 基线）

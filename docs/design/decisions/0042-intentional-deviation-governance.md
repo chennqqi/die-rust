@@ -52,10 +52,13 @@ explicit unblocking condition.
 
 - **Phase 45**: i18n terminology-anchored bulk drafts + validation
   tooling (item 3).
-- **Phase 46**: NFD residual handlers — `handle_PolyMorph` and the
-  ZIP-family member handlers `handle_Metainfos` /
-  `handle_Microsoftoffice` / `handle_OpenOffice` / `handle_JAR` /
-  `handle_IPA` (item 8).
+- **Phase 46**: NFD residual handlers (item 8) — **DONE 2026-10-12**:
+  audit showed only `handle_Microsoftoffice`/`handle_OpenOffice` emit
+  records (ported); `handle_PolyMorph`, `handle_Metainfos`,
+  `handle_JAR`, `handle_IPA` and ZIP `handle_FixDetects` are
+  comment-only no-ops upstream; `handle_AnslymPacker` is commented-out
+  dead code. Oracle-verified over 10 synthetic ZIP fixtures; NFD
+  differential 332 files / 0 diffs.
 - **Phase 47**: RNC old-variant / encrypted-stream corpus generator
   or hash-manifest sample acquisition (item 6).
 

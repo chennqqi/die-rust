@@ -2471,14 +2471,20 @@ Windows-only 实为 parity（上游 `registerContext` 同样
   `{{var}}`, %-specifiers, stale draft marks). `SUPPORTED_LANGUAGES`
   exportado, dropdown dinâmico, `document.dir` via `i18n.dir` para
   RTL (ar/he/fa).
-- **Phase 46：NFD/SpecAbstract 收尾**（小型，ADR 0035 partial → full）
-  盘点后残余仅两处真实缺口（`handle_AnslymPacker` 上游注释死
-  代码，属 parity 不补）：`handle_PolyMorph`（`nfd_pe.cpp:8283`
-  调用点存活）+ ZIP 族 member handler `handle_Metainfos`/
-  `handle_Microsoftoffice`/`handle_OpenOffice`/`handle_JAR`/
-  `handle_IPA`（`promote.rs` 标注 "Phase 23.C pending"）。
-  oracle = SpecAbstract harness；验收同前 + engine=nfd/die 双路
-  差分。
+- **Phase 46：NFD/SpecAbstract 收尾** — ✅ DONE（2026-10-12，小型）
+  盘点后残余仅两处真实缺口：审计发现 `handle_PolyMorph` 上游
+  函数体全是 `Q_UNUSED`（仅 `// ExeSax` 注释）、`handle_Metainfos`/
+  `handle_JAR`/`handle_IPA`/`handle_FixDetects`(ZIP) 也是
+  注释占位 no-op——仅 `handle_Microsoftoffice` 与 `handle_OpenOffice`
+  产记录。`promote.rs::zip_scan` 移植两者：`docProps/app.xml`
+  （0<unc≤0x4000 → `<Application>` 选 WORD/EXCEL/VISIO 记录、
+  SheetJS→EXCEL+info、`<AppVersion>`→version）与 `meta.xml`
+  含 `:opendocument:` → OPENDOCUMENT 记录（FT_BINARY/FORMAT/
+  mapResultFormats）。PolyMorph no-op 在 PE 链注释中标注。
+  语料 `gen_p46_corpus.py` 10 fixture（docx/xlsx/sheetjs/unknown-app/
+  no-app/超16KiB门/空成员/stored/odt/odt 无标记），上游 oracle
+  逐条记录一致；`oracle_alignment.rs` +3 测试；NFD 差分 332 文件
+  0 差异。
 - **Phase 47：RNC old 变体/加密流语料**（小型，语料工程）
   `tools/` 内写 RNC1 old-variant + 加密 key 流生成器，镜像
   `ancient.rs` 解码器语义产出上游 oracle 可接受流；或经哈希

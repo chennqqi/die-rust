@@ -781,16 +781,79 @@ fn container_header(d: &[u8], res: &mut ResultMaps) -> bool {
     true
 }
 
-/// `NFD_ZIP::getInfo` container leg — the valid-archive path emits the
-/// member-metadata record (`handle_Container`); invalid archives fall
-/// back to the strict central-directory walk (`handle_ContainerHeader`).
-/// The Metainfos/Office/OpenOffice/JAR/IPA member handlers are
-/// scheduled for Phase 46 (ADR 0042 #8).
+/// `NFD_ZIP::getInfo` container leg — the valid-archive path runs the
+/// member handlers (`handle_Microsoftoffice`/`handle_OpenOffice` emit
+/// format records; `handle_Metainfos`/`handle_JAR`/`handle_IPA`/
+/// `handle_FixDetects` are comment-only no-ops upstream at the pinned
+/// commit) before `handle_Container` emits the member-metadata record;
+/// invalid archives fall back to the strict central-directory walk
+/// (`handle_ContainerHeader`).
 pub(crate) fn zip_scan(d: &[u8], res: &mut ResultMaps) {
+    let members = crate::parse::zip_members(d);
+    if !members.is_empty() {
+        zip_microsoft_office(d, &members, res);
+        zip_open_office(d, &members, res);
+    }
     if let Some(records) = zip_records(d) {
         zip_container(&records, res);
     } else {
         container_header(d, res);
+    }
+}
+
+/// `handle_Microsoftoffice` — a `docProps/app.xml` member with
+/// `0 < nUncompressedSize <= 0x4000` decompresses; `<Application>`
+/// selects the Office flavor record (Word/Excel/Visio, SheetJS maps to
+/// Excel with `sInfo`), `<AppVersion>` carries the version. Upstream
+/// also promotes `id.fileType` to `FT_DOCUMENT` — not observable in
+/// our record-only output.
+fn zip_microsoft_office(d: &[u8], members: &[crate::parse::ZipMember], res: &mut ResultMaps) {
+    let Some(m) = members.iter().find(|m| m.name == "docProps/app.xml") else {
+        return;
+    };
+    if m.unc_size == 0 || m.unc_size > 0x4000 {
+        return;
+    }
+    let Some(data) = crate::parse::zip_member_data(d, m, 0x4000) else {
+        return;
+    };
+    let text = String::from_utf8_lossy(&data);
+    let app = crate::scans::reg_exp("<Application>(.*?)</Application>", &text, 1);
+    let (name, info) = match app.as_str() {
+        "Microsoft Office Word" => (n::RECORD_NAME_MICROSOFTOFFICEWORD, ""),
+        "Microsoft Excel" => (n::RECORD_NAME_MICROSOFTEXCEL, ""),
+        "Microsoft Visio" => (n::RECORD_NAME_MICROSOFTVISIO, ""),
+        "SheetJS" => (n::RECORD_NAME_MICROSOFTEXCEL, "SheetJS"),
+        _ => (n::RECORD_NAME_MICROSOFTOFFICE, ""),
+    };
+    let mut ss = scans_struct(ft::FT_BINARY, rt::RECORD_TYPE_FORMAT, name, "", info);
+    ss.version = crate::scans::reg_exp("<AppVersion>(.*?)</AppVersion>", &text, 1);
+    res.formats.insert(ss.name, ss);
+}
+
+/// `handle_OpenOffice` — a `meta.xml` member with
+/// `0 < nUncompressedSize <= 0x4000` whose decompressed text contains
+/// `:opendocument:` emits the OpenDocument format record.
+fn zip_open_office(d: &[u8], members: &[crate::parse::ZipMember], res: &mut ResultMaps) {
+    let Some(m) = members.iter().find(|m| m.name == "meta.xml") else {
+        return;
+    };
+    if m.unc_size == 0 || m.unc_size > 0x4000 {
+        return;
+    }
+    let Some(data) = crate::parse::zip_member_data(d, m, 0x4000) else {
+        return;
+    };
+    let text = String::from_utf8_lossy(&data);
+    if text.contains(":opendocument:") {
+        let ss = scans_struct(
+            ft::FT_BINARY,
+            rt::RECORD_TYPE_FORMAT,
+            n::RECORD_NAME_OPENDOCUMENT,
+            "",
+            "",
+        );
+        res.formats.insert(ss.name, ss);
     }
 }
 

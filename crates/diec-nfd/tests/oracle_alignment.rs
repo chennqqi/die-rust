@@ -224,3 +224,91 @@ fn section_name_detects_are_case_sensitive() {
     assert!(info.section_names.iter().any(|n| n == ".enigma1"));
     assert!(!info.section_names.iter().any(|n| n == ".ENIGMA1"));
 }
+
+/// Phase 46 — `handle_Microsoftoffice`: a `docProps/app.xml` member
+/// (0 < unc_size <= 0x4000) emits the Office flavor format record from
+/// `<Application>`; `<AppVersion>` carries the version. Oracle-verified
+/// over synthetic zips (tools/gen_p46_corpus.py).
+#[test]
+fn zip_app_xml_emits_office_format_records() {
+    // Microsoft Office Word -> WORD record with AppVersion.
+    let out = run("office-docx.zip");
+    assert!(
+        out.iter().any(|r| r.record_type == "Format"
+            && r.record_name == "Microsoft Office Word"
+            && r.version == "16.0000"),
+        "{out:?}"
+    );
+    // Microsoft Excel -> EXCEL record.
+    let out = run("office-xlsx.zip");
+    assert!(
+        out.iter().any(|r| r.record_type == "Format"
+            && r.record_name == "Microsoft Excel"
+            && r.version == "12.0"),
+        "{out:?}"
+    );
+    // SheetJS -> EXCEL record with sInfo "SheetJS" (empty version).
+    let out = run("office-sheetjs.zip");
+    assert!(
+        out.iter().any(|r| r.record_type == "Format"
+            && r.record_name == "Microsoft Excel"
+            && r.version.is_empty()
+            && r.info == "SheetJS"),
+        "{out:?}"
+    );
+    // Unknown Application -> bare MICROSOFTOFFICE with AppVersion.
+    let out = run("office-plain.zip");
+    assert!(
+        out.iter().any(|r| r.record_type == "Format"
+            && r.record_name == "Microsoft Office"
+            && r.version == "9.9"),
+        "{out:?}"
+    );
+    // Missing <Application> still emits MICROSOFTOFFICE + AppVersion.
+    let out = run("office-noapp.zip");
+    assert!(
+        out.iter().any(|r| r.record_type == "Format"
+            && r.record_name == "Microsoft Office"
+            && r.version == "7.7"),
+        "{out:?}"
+    );
+    // Stored (method 0) members decompress the same.
+    let out = run("office-stored.zip");
+    assert!(
+        out.iter()
+            .any(|r| r.record_type == "Format" && r.record_name == "Microsoft Office Word"),
+        "{out:?}"
+    );
+}
+
+/// Phase 46 — upstream size gate: `nUncompressedSize` must be >0 and
+/// <=0x4000; outside the gate no Office record is emitted.
+#[test]
+fn zip_app_xml_size_gate_fail_closed() {
+    for name in ["office-big.zip", "office-empty.zip"] {
+        let out = run(name);
+        assert!(
+            !out.iter().any(|r| r.record_name.contains("Office")),
+            "{name}: {out:?}"
+        );
+        assert!(has(&out, "Format", "ZIP"), "{name}: {out:?}");
+    }
+}
+
+/// Phase 46 — `handle_OpenOffice`: `meta.xml` containing
+/// `:opendocument:` emits the OpenDocument format record.
+#[test]
+fn zip_meta_xml_emits_opendocument() {
+    let out = run("odt.zip");
+    assert!(
+        out.iter()
+            .any(|r| r.record_type == "Format" && r.record_name == "Open Document"),
+        "{out:?}"
+    );
+    let out = run("odt-plain.zip");
+    assert!(
+        !out.iter().any(|r| r.record_name == "Open Document"),
+        "{out:?}"
+    );
+    assert!(has(&out, "Format", "ZIP"), "{out:?}");
+}
