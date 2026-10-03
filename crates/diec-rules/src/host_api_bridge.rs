@@ -3418,8 +3418,12 @@ impl HostApiBridge {
                         return _peGetBatch().isNet;
                     };
                     // Upstream @2550d2d removed `isNET` (only `isNet`
-                    // remains) and no rule calls the uppercase form anymore;
-                    // the former alias was dropped for exact parity.
+                    // remains) and no upstream rule calls the uppercase
+                    // form. The alias is kept because five vendored
+                    // db_extra rules still call `PE.isNET()` — pending a
+                    // rules re-sync to the pinned ruleset (see
+                    // doc/requirements.md rules-sync gap entry).
+                    PE.isNET = PE.isNet;
                     // .NET methods: backed by pelite + native BSJB metadata parsing.
                     // isNetObjectPresent: search .NET ANSI strings (#Strings heap).
                     PE.isNetObjectPresent = function(s) {
@@ -5452,6 +5456,21 @@ impl HostApiBridge {
                 })?;
             }
 
+            // Native 16-bit disassembly for MSDOS.getDisasmNextAddress
+            // (upstream DM_8086 via the MSDOS memory map segment record).
+            let h_mzd = host.clone();
+            let mzd_fn = rquickjs::Function::new(ctx.clone(), move |va: f64| -> f64 {
+                msdos_disasm_next_address(&h_mzd, va as i64) as f64
+            })
+            .map_err(|e| RuleError::Backend {
+                detail: format!("__msdosDisasmNextAddress: {e}"),
+            })?;
+            binary
+                .set("__msdosDisasmNextAddress", mzd_fn)
+                .map_err(|e| RuleError::Backend {
+                    detail: format!("__msdosDisasmNextAddress set: {e}"),
+                })?;
+
             // Add format-specific stub methods for getFileFormatName/Version/Options.
             // These are used by the primary detection rules (_RAR.0.sg, _DEX2.0.sg,
             // _PYC.0.sg, etc.) to get format metadata. Until the format-specific
@@ -5504,82 +5523,199 @@ impl HostApiBridge {
                         obj.isHeuristicScan = function() { return false; };
                     }
 
-                    // MSDOS-specific stubs: MSDOS rules call these methods
-                    // (compareEP, compareOverlay, getOverlayOffset, etc.)
-                    // which require DOS/MSDOS-specific parsing. Stubs return
-                    // false/0/empty so rules execute without TypeError.
-                    // Full implementation is Phase 15.3 scope.
-                    MSDOS.compareEP = function(sig) { return false; };
-                    MSDOS.compareOverlay = function(sig) { return false; };
-                    MSDOS.getOverlayOffset = function() { return -1; };
+                    // ---- MSDOS host API (Phase 42) ----
+                    // Mirrors upstream MSDOS_Script (XScanEngine) semantics
+                    // against the XMSDOS memory map. Validated by
+                    // tools/msdos-oracle against the pinned upstream engine.
+                    var _B = Binary;
+                    var _mzImageSize = function() {
+                        var size = _B.getSize();
+                        var cp = _B.read_uint16_le(0x04);
+                        if (cp <= 0) return size;
+                        var cblp = _B.read_uint16_le(0x02);
+                        var r = cp * 0x200 - ((-cblp) & 0x1ff);
+                        if (r < 0 || r > size) r = size;
+                        return r;
+                    };
+                    var _mzHeaderSize = function() {
+                        var h = _B.read_uint16_le(0x08) * 16;
+                        var i = _mzImageSize();
+                        var s = _B.getSize();
+                        return h < i ? (h < s ? h : s) : (i < s ? i : s);
+                    };
+                    var _mzLfanew = function() { return _B.read_int32(0x3C); };
+                    var _mzNewSig = function() { return _B.read_uint16_le(_mzLfanew()); };
+                    var _mzDelta = function() { return _mzImageSize() - _mzHeaderSize(); };
+
+                    // getOverlayOffset(): upstream _calculateRawSize — the
+                    // image end (equals fileSize when no overlay present).
+                    MSDOS.getOverlayOffset = function() {
+                        var r = _mzImageSize();
+                        return (r > 0 && r <= _B.getSize()) ? r : -1;
+                    };
+                    MSDOS.getOverlaySize = function() {
+                        var off = MSDOS.getOverlayOffset();
+                        var size = _B.getSize();
+                        if (off < 0 || off > size) return 0;
+                        return size - off;
+                    };
+                    MSDOS.isOverlayPresent = function() {
+                        return MSDOS.getOverlaySize() > 0;
+                    };
+                    // compareOverlay: upstream XBinary::compareOverlay —
+                    // signature at overlay_offset + nOffset within overlay.
+                    MSDOS.compareOverlay = function(sig, nOffset) {
+                        nOffset = nOffset || 0;
+                        if (nOffset < 0) return false;
+                        var ovSize = MSDOS.getOverlaySize();
+                        var ovOff = MSDOS.getOverlayOffset();
+                        if (ovSize <= 0 || ovOff < 0 || nOffset >= ovSize) return false;
+                        return _B.__compare(sig, ovOff + nOffset);
+                    };
+                    // compareEP: upstream m_nEntryPointOffset is always -1
+                    // for FT_MSDOS (EP address < 0x100000 never maps to the
+                    // segment record at VA 0x10000000), so compareEntryPoint
+                    // always fails closed. Verified by msdos-oracle.
+                    MSDOS.compareEP = function(sig, nOffset) { return false; };
+                    // Native fallback only: db/MSDOS/_init overrides this
+                    // with the JS implementation. Upstream Binary_Script
+                    // returns -1 (see compareEP note).
                     MSDOS.getEntryPointOffset = function() { return -1; };
-                    MSDOS.getNEOffset = function() { return -1; };
-                    MSDOS.isNE = function() {
-                        // NE signature at e_lfanew: "NE" (0x4E 0x45)
-                        if (Binary.getSize() < 0x40) return false;
-                        var lfanew = Binary.read_uint32_le(0x3C);
-                        if (lfanew + 2 > Binary.getSize()) return false;
-                        return Binary.read_uint8(lfanew) === 0x4E && Binary.read_uint8(lfanew + 1) === 0x45;
+
+                    // Secondary-header probes: u16 at e_lfanew.
+                    MSDOS.isLE = function() { return _mzNewSig() === 0x454C; };
+                    MSDOS.isLX = function() { return _mzNewSig() === 0x584C; };
+                    MSDOS.isNE = function() { return _mzNewSig() === 0x454E; };
+                    MSDOS.isPE = function() { return _mzNewSig() === 0x4550; };
+
+                    // DOS stub fields are populated only when a secondary
+                    // header is present (upstream MSDOS_Script ctor gating).
+                    var _mzStubGated = function() {
+                        return MSDOS.isLE() || MSDOS.isLX() || MSDOS.isNE() || MSDOS.isPE();
                     };
-                    MSDOS.isLE = function() {
-                        // LE signature at e_lfanew: "LE" (0x4C 0x45)
-                        if (Binary.getSize() < 0x40) return false;
-                        var lfanew = Binary.read_uint32_le(0x3C);
-                        if (lfanew + 2 > Binary.getSize()) return false;
-                        return Binary.read_uint8(lfanew) === 0x4C && Binary.read_uint8(lfanew + 1) === 0x45;
+                    var _mzStubSize = function() {
+                        return Math.max(_mzLfanew() - 0x40, 0);
                     };
-                    MSDOS.isLX = function() {
-                        // LX signature at e_lfanew: "LX" (0x4C 0x58)
-                        if (Binary.getSize() < 0x40) return false;
-                        var lfanew = Binary.read_uint32_le(0x3C);
-                        if (lfanew + 2 > Binary.getSize()) return false;
-                        return Binary.read_uint8(lfanew) === 0x4C && Binary.read_uint8(lfanew + 1) === 0x58;
-                    };
-                    MSDOS.isPE = function() {
-                        // PE signature at e_lfanew: "PE\0\0" (0x50 0x45 0x00 0x00)
-                        if (Binary.getSize() < 0x40) return false;
-                        var lfanew = Binary.read_uint32_le(0x3C);
-                        if (lfanew + 4 > Binary.getSize()) return false;
-                        return Binary.read_uint8(lfanew) === 0x50 && Binary.read_uint8(lfanew + 1) === 0x45;
-                    };
-                    MSDOS.getBaseOffset = function() { return 0; };
-                    MSDOS.getOperationSystemName = function() { return ""; };
-                    MSDOS.getOperationSystemVersion = function() { return ""; };
-                    MSDOS.getOperationSystemOptions = function() { return ""; };
-                    MSDOS.getDisasmNextAddress = function(off) { return -1; };
-                    MSDOS.addressToOffset = function(addr) { return -1; };
-                    MSDOS.AddressToOffset = MSDOS.addressToOffset;
-                    MSDOS.OffsetToVA = function(off) { return -1; };
-                    MSDOS.VAToOffset = function(va) { return -1; };
-                    // DOS stub: between MZ header and PE/NE/LE header.
                     MSDOS.getDosStubOffset = function() {
-                        if (Binary.getSize() < 0x40) return -1;
-                        // DOS stub starts after MZ header (0x40) if e_lfanew > 0x40.
-                        var lfanew = Binary.read_uint32_le(0x3C);
-                        if (lfanew > 0x40) return 0x40;
-                        return -1;
+                        return (_mzStubGated() && _mzStubSize() > 0) ? 0x40 : 0;
                     };
                     MSDOS.getDosStubSize = function() {
-                        if (Binary.getSize() < 0x40) return 0;
-                        var lfanew = Binary.read_uint32_le(0x3C);
-                        if (lfanew > 0x40) return lfanew - 0x40;
-                        return 0;
+                        return _mzStubGated() ? _mzStubSize() : 0;
                     };
                     MSDOS.isDosStubPresent = function() {
-                        return MSDOS.getDosStubSize() > 0;
+                        return MSDOS.getDosStubSize() !== 0;
                     };
-                    MSDOS.isRichVersionPresent = function(version) {
-                        // Check if a specific Rich version exists.
-                        // Rich signature starts at "Rich" marker.
-                        if (Binary.getSize() < 0x80) return false;
-                        // Search for "Rich" signature in first 256 bytes.
-                        for (var i = 0x40; i < Math.min(0x200, Binary.getSize()) - 4; i++) {
-                            if (Binary.read_uint8(i) === 0x52 && Binary.read_uint8(i+1) === 0x69 &&
-                                Binary.read_uint8(i+2) === 0x63 && Binary.read_uint8(i+3) === 0x68) {
+
+                    // Rich signature: upstream isRichSignaturePresent scans
+                    // [0x1C, lfanew) (cap 0x400); record parsing uses
+                    // find_ansiString(0x40, stubSize, "Rich") and XOR key.
+                    var _mzRichList = function() {
+                        var list = [];
+                        if (!(MSDOS.isLE() || MSDOS.isPE())) return list;
+                        var stubOff = 0x40;
+                        var stubSize = _mzStubSize();
+                        if (stubSize <= 0) return list;
+                        var end = stubOff + stubSize;
+                        var richOff = -1;
+                        for (var p = stubOff; p + 4 <= end; p++) {
+                            if (_B.read_uint8(p) === 0x52 && _B.read_uint8(p + 1) === 0x69 &&
+                                _B.read_uint8(p + 2) === 0x63 && _B.read_uint8(p + 3) === 0x68) {
+                                richOff = p;
+                                break;
+                            }
+                        }
+                        if (richOff < 0) return list;
+                        var key = _B.read_uint32_le(richOff + 4);
+                        var cur = richOff - 4;
+                        var dansFound = -1;
+                        while (cur > stubOff) {
+                            if ((_B.read_uint32_le(cur) ^ key) === 0x536E6144) {
+                                dansFound = cur;
+                                break;
+                            }
+                            cur -= 4;
+                        }
+                        if (dansFound < 0) return list;
+                        for (var r = dansFound + 16; r < richOff; r += 8) {
+                            var v1 = _B.read_uint32_le(r) ^ key;
+                            var v2 = _B.read_uint32_le(r + 4) ^ key;
+                            list.push({ id: (v1 >>> 16) & 0xFFFF, version: v1 & 0xFFFF, count: v2 });
+                        }
+                        return list;
+                    };
+                    MSDOS.isRichSignaturePresent = function() {
+                        if (!(MSDOS.isLE() || MSDOS.isPE())) return false;
+                        var n = _mzLfanew() - 0x1C;
+                        if (n <= 0 || n > 0x400) return false;
+                        var end = Math.min(0x1C + n, _B.getSize());
+                        for (var p = 0x1C; p + 4 <= end; p++) {
+                            if (_B.read_uint8(p) === 0x52 && _B.read_uint8(p + 1) === 0x69 &&
+                                _B.read_uint8(p + 2) === 0x63 && _B.read_uint8(p + 3) === 0x68) {
                                 return true;
                             }
                         }
                         return false;
+                    };
+                    MSDOS.getNumberOfRichIDs = function() {
+                        return MSDOS.isRichSignaturePresent() ? _mzRichList().length : 0;
+                    };
+                    MSDOS.isRichVersionPresent = function(version) {
+                        if (!MSDOS.isRichSignaturePresent()) return false;
+                        var list = _mzRichList();
+                        for (var i = 0; i < list.length; i++) {
+                            if (list[i].version === version) return true;
+                        }
+                        return false;
+                    };
+                    MSDOS.getRichVersion = function(pos) {
+                        var list = _mzRichList();
+                        return (pos >= 0 && pos < list.length) ? list[pos].version : 0;
+                    };
+                    MSDOS.getRichID = function(pos) {
+                        var list = _mzRichList();
+                        return (pos >= 0 && pos < list.length) ? list[pos].id : 0;
+                    };
+                    MSDOS.getRichCount = function(pos) {
+                        var list = _mzRichList();
+                        return (pos >= 0 && pos < list.length) ? list[pos].count : 0;
+                    };
+
+                    // Format/OS info strings (upstream FILEFORMATINFO).
+                    MSDOS.getFileFormatName = function() { return "MSDOS"; };
+                    MSDOS.getFileFormatVersion = function() { return ""; };
+                    MSDOS.getFileFormatOptions = function() { return ""; };
+                    MSDOS.getOperationSystemName = function() { return "MS-DOS"; };
+                    MSDOS.getOperationSystemVersion = function() { return ""; };
+                    MSDOS.getOperationSystemOptions = function() { return "8086, 16-bit"; };
+
+                    // Memory-map address conversion (upstream native slots;
+                    // the _init addressToOffset(seg,off) is a different,
+                    // JS-defined API and is not shadowed here).
+                    MSDOS.VAToOffset = function(va) {
+                        if (va < 0) return -1;
+                        var delta = _mzDelta();
+                        if (delta <= 0) return -1;
+                        var rel = va - 0x10000000;
+                        if (rel < 0 || rel >= delta) return -1;
+                        return _mzHeaderSize() + rel;
+                    };
+                    MSDOS.OffsetToVA = function(off) {
+                        var hs = _mzHeaderSize();
+                        var delta = _mzDelta();
+                        if (delta <= 0 || off < hs || off - hs >= delta) return -1;
+                        return 0x10000000 + (off - hs);
+                    };
+                    // Module base address is 0 for MSDOS.
+                    MSDOS.RVAToOffset = function(rva) { return MSDOS.VAToOffset(rva); };
+                    MSDOS.OffsetToRVA = function(off) { return MSDOS.OffsetToVA(off); };
+                    MSDOS.getAddressOfEntryPoint = function() {
+                        var a = (_B.read_uint16_le(0x16) << 4) + _B.read_uint16_le(0x14);
+                        return a >= 0x100000 ? a - 0x100000 : a;
+                    };
+                    // 16-bit disassembly via native Capstone helper
+                    // (upstream XDisasmCore DM_8086).
+                    MSDOS.getDisasmNextAddress = function(va) {
+                        return _B.__msdosDisasmNextAddress(va);
                     };
 
                     // NE-specific methods (upstream NE_Script, new in
@@ -7067,6 +7203,8 @@ thread_local! {
     /// protector rule scanning (which may call getDisasmString 1000+ times).
     static CS_CACHE_32: RefCell<Option<capstone::Capstone>> = const { RefCell::new(None) };
     static CS_CACHE_64: RefCell<Option<capstone::Capstone>> = const { RefCell::new(None) };
+    /// Cached Capstone instance for 16-bit x86 (MSDOS DM_8086 mode).
+    static CS_CACHE_16: RefCell<Option<capstone::Capstone>> = const { RefCell::new(None) };
 }
 
 /// Get a cached Capstone instance for the given machine type.
@@ -7115,6 +7253,145 @@ fn return_capstone(machine: u16, cs: capstone::Capstone) {
     cache.with(|c| {
         *c.borrow_mut() = Some(cs);
     });
+}
+
+/// Get the cached 16-bit x86 Capstone instance (upstream DM_8086).
+fn get_capstone16() -> Result<capstone::Capstone, String> {
+    use capstone::Capstone;
+    use capstone::arch::BuildsCapstone;
+    CS_CACHE_16.with(|c| {
+        if c.borrow().is_none() {
+            let cs = Capstone::new()
+                .x86()
+                .mode(capstone::arch::x86::ArchMode::Mode16)
+                .detail(true)
+                .build()
+                .map_err(|e| format!("capstone16 init: {e}"))?;
+            *c.borrow_mut() = Some(cs);
+        }
+        Ok(c.borrow_mut().take().unwrap())
+    })
+}
+
+/// Return the 16-bit Capstone instance to the cache for reuse.
+fn return_capstone16(cs: capstone::Capstone) {
+    CS_CACHE_16.with(|c| {
+        *c.borrow_mut() = Some(cs);
+    });
+}
+
+/// Compute the upstream `XMSDOS::getImageSize` value.
+///
+/// `e_cp * 0x200 - ((-e_cblp) & 0x1ff)`, falling back to the file size
+/// when `e_cp` is zero or the result is negative/exceeds the file size.
+fn msdos_image_size(e_cp: u16, e_cblp: u16, file_size: u64) -> u64 {
+    if e_cp == 0 {
+        return file_size;
+    }
+    let result = e_cp as i64 * 0x200 - ((-(e_cblp as i64)) & 0x1ff);
+    if result < 0 || result as u64 > file_size {
+        return file_size;
+    }
+    result as u64
+}
+
+/// Compute the upstream `_safeHeaderSizeFromCparhdr` clamp:
+/// `min(e_cparhdr * 16, image_size, file_size)`.
+fn msdos_header_size(e_cparhdr: u16, image_size: u64, file_size: u64) -> u64 {
+    (e_cparhdr as u64 * 16).min(image_size).min(file_size)
+}
+
+/// Compute the upstream `XMSDOS::getImageSize`/`_safeHeaderSizeFromCparhdr`
+/// pair from the live host buffer. Returns `(image_size, header_size)`.
+fn msdos_map_sizes(host: &Arc<dyn HostApi + Send + Sync>) -> (u64, u64) {
+    let file_size = host.file_size();
+    let e_cp = host.read_u16_le(0x04).unwrap_or(0);
+    let e_cblp = host.read_u16_le(0x02).unwrap_or(0);
+    let e_cparhdr = host.read_u16_le(0x08).unwrap_or(0);
+    let image_size = msdos_image_size(e_cp, e_cblp, file_size);
+    let header_size = msdos_header_size(e_cparhdr, image_size, file_size);
+    (image_size, header_size)
+}
+
+/// Implement upstream `MSDOS.getDisasmNextAddress` for the FT_MSDOS memory
+/// map: a single segment record at VA 0x10000000 covering file offsets
+/// `[header_size, image_size)`. Returns the upstream `nNextAddress` —
+/// `address + size` for regular instructions, the branch target for
+/// relative branches, or 0 when the address is unmapped/undecodable.
+fn msdos_disasm_next_address(host: &Arc<dyn HostApi + Send + Sync>, va: i64) -> i64 {
+    if va < 0 {
+        return 0;
+    }
+    let va = va as u64;
+    let (image_size, header_size) = msdos_map_sizes(host);
+    let delta = image_size.saturating_sub(header_size);
+    if delta == 0 || va < 0x10000000 || va - 0x10000000 >= delta {
+        return 0;
+    }
+    let file_off = header_size + (va - 0x10000000);
+
+    // Upstream XDisasmCore reads up to m_nOpcodeSize (15) bytes.
+    let read_size = host.file_size().saturating_sub(file_off).min(15) as usize;
+    if read_size == 0 {
+        return 0;
+    }
+    let mut code = Vec::with_capacity(read_size);
+    for i in 0..read_size as u64 {
+        match host.read_u8(file_off + i) {
+            Ok(b) => code.push(b),
+            Err(_) => break,
+        }
+    }
+    if code.is_empty() {
+        return 0;
+    }
+
+    let cs = match get_capstone16() {
+        Ok(cs) => cs,
+        Err(_) => return 0,
+    };
+
+    // Compute inside a closure so `insns` (borrowing `cs`) drops before
+    // the Capstone instance is returned to the cache.
+    let result = (|| -> u64 {
+        let insns = match cs.disasm_count(&code, va, 1) {
+            Ok(i) => i,
+            Err(_) => return 0,
+        };
+        let Some(insn) = insns.iter().next() else {
+            return 0;
+        };
+
+        // Upstream Capstone_Bridge::_disasm: nNextAddress is the resolved
+        // branch target for relative branches, else address + size.
+        let mut next = insn.address() + insn.bytes().len() as u64;
+        if let Ok(detail) = cs.insn_detail(insn) {
+            const CS_GRP_BRANCH_RELATIVE: capstone::InsnGroupIdInt = 7;
+            let is_branch = detail
+                .groups()
+                .iter()
+                .any(|g| g.0 == CS_GRP_BRANCH_RELATIVE);
+            if is_branch {
+                use capstone::arch::DetailsArchInsn;
+                use capstone::arch::x86::{X86Operand, X86OperandType};
+                let arch = detail.arch_detail();
+                let operands: Vec<X86Operand> = arch
+                    .x86()
+                    .map(|x| x.operands().collect())
+                    .unwrap_or_default();
+                for op in operands {
+                    if let X86OperandType::Imm(target) = op.op_type {
+                        next = target as u64;
+                        break;
+                    }
+                }
+            }
+        }
+        next
+    })();
+
+    return_capstone16(cs);
+    result as i64
 }
 
 /// Disassemble a single instruction at the given virtual address (VA).
@@ -7755,5 +8032,214 @@ mod tests {
         let (_rt, ctx, _bridge) = make_runtime_with_host(vec![0x41]);
         let val: i32 = ctx.with(|c| c.eval("Binary.readByte(100);").unwrap());
         assert_eq!(val, -1);
+    }
+
+    mod msdos_oracle_tests {
+        //! MSDOS host API differential tests (Phase 42).
+        //!
+        //! Compares the diec-rust JS bridge results for every `MSDOS.*` host
+        //! API method against the pinned upstream DIE-engine output captured
+        //! by `tools/msdos-oracle` (corpus/p42-msdos-oracle.json). The
+        //! vendored upstream `db/MSDOS/_init` is evaluated first so that
+        //! JS-defined methods (getBaseOffset/addressToOffset/getNEOffset/
+        //! getEntryPointOffset) behave exactly as in rule execution.
+        //!
+        //! Oracle limitation: upstream `_init` dies on Qt6 QJSEngine
+        //! (`Cannot assign to read-only property "getSize"` — QObject method
+        //! properties are read-only there, whereas Qt Script allowed
+        //! reassignment). For keys the oracle could not evaluate
+        //! ("ERR:TypeError" entries), the expected value is computed from
+        //! the vendored `_init` formulas — which are upstream source.
+
+        use super::*;
+        use serde_json::Value;
+        use std::path::{Path, PathBuf};
+
+        /// Compute the expected value of a `db/MSDOS/_init`-defined method
+        /// from the fixture bytes, mirroring the vendored `_init` source:
+        ///   baseOff(n)      = (readWord(8) << 4) + n
+        ///   a2o(seg, off)   = baseOff((off + seg*16) & 0xFFFFF)
+        ///   epOff(n)        = a2o(readWord(0x16), readWord(0x14)) + n
+        ///   neOff(n)        = readDword(0x3C) + n
+        /// Returns `None` for keys that are not `_init`-defined.
+        fn p42_init_expected(data: &[u8], key: &str) -> Option<f64> {
+            let u16le = |o: usize| -> i64 {
+                data.get(o..o + 2)
+                    .map(|b| u16::from_le_bytes([b[0], b[1]]) as i64)
+                    .unwrap_or(0)
+            };
+            let u32le = |o: usize| -> i64 {
+                data.get(o..o + 4)
+                    .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as i64)
+                    .unwrap_or(0)
+            };
+            let base = u16le(0x08) << 4;
+            let a2o = |seg: i64, off: i64| -> i64 { base + ((off + seg * 16) & 0xFFFFF) };
+            let result = match key {
+                "baseOff" => base,
+                "baseOff24" => base + 0x18,
+                "a2o" => a2o(0x1234, 0x5678),
+                "a2o_one" => a2o(0x100, 0),
+                "epOff" => a2o(u16le(0x16), u16le(0x14)),
+                "epOff16" => a2o(u16le(0x16), u16le(0x14)) + 16,
+                "neOff" => u32le(0x3C),
+                "neOffN8" => u32le(0x3C) - 8,
+                _ => return None,
+            };
+            Some(result as f64)
+        }
+
+        /// Mirror of `tools/msdos-oracle/main.cpp::probeScript()`.
+        const P42_PROBE: &str = r#"
+(function() {
+    function t(f) { try { return f(); } catch (e) { return "ERR:" + e; } }
+    var r = {};
+    r.isLE = t(function() { return MSDOS.isLE(); });
+    r.isLX = t(function() { return MSDOS.isLX(); });
+    r.isNE = t(function() { return MSDOS.isNE(); });
+    r.isPE = t(function() { return MSDOS.isPE(); });
+    r.dosStubOff = t(function() { return MSDOS.getDosStubOffset(); });
+    r.dosStubSize = t(function() { return MSDOS.getDosStubSize(); });
+    r.isDosStub = t(function() { return MSDOS.isDosStubPresent(); });
+    r.ovOff = t(function() { return MSDOS.getOverlayOffset(); });
+    r.ovSize = t(function() { return MSDOS.getOverlaySize(); });
+    r.isOverlay = t(function() { return MSDOS.isOverlayPresent(); });
+    r.cmpEP_a = t(function() { return MSDOS.compareEP("EB"); });
+    r.cmpEP_b = t(function() { return MSDOS.compareEP("90"); });
+    r.cmpOV_a = t(function() { return MSDOS.compareOverlay("AA"); });
+    r.cmpOV_b = t(function() { return MSDOS.compareOverlay("42424242"); });
+    r.cmpOV_off = t(function() { return MSDOS.compareOverlay("4242", 2); });
+    r.osName = t(function() { return MSDOS.getOperationSystemName(); });
+    r.osVer = t(function() { return MSDOS.getOperationSystemVersion(); });
+    r.osOpt = t(function() { return MSDOS.getOperationSystemOptions(); });
+    r.ffName = t(function() { return MSDOS.getFileFormatName(); });
+    r.ffVer = t(function() { return MSDOS.getFileFormatVersion(); });
+    r.ffOpt = t(function() { return MSDOS.getFileFormatOptions(); });
+    r.richPresent = t(function() { return MSDOS.isRichSignaturePresent(); });
+    r.nRich = t(function() { return MSDOS.getNumberOfRichIDs(); });
+    r.richVerPresent = t(function() { return MSDOS.isRichVersionPresent(0x1234); });
+    r.richVer0 = t(function() { return MSDOS.getRichVersion(0); });
+    r.richID0 = t(function() { return MSDOS.getRichID(0); });
+    r.richCnt0 = t(function() { return MSDOS.getRichCount(0); });
+    r.epOff = t(function() { return MSDOS.getEntryPointOffset(); });
+    r.epOff16 = t(function() { return MSDOS.getEntryPointOffset(16); });
+    r.neOff = t(function() { return MSDOS.getNEOffset(); });
+    r.neOffN8 = t(function() { return MSDOS.getNEOffset(-8); });
+    r.baseOff = t(function() { return MSDOS.getBaseOffset(); });
+    r.baseOff24 = t(function() { return MSDOS.getBaseOffset(0x18); });
+    r.a2o = t(function() { return MSDOS.addressToOffset(0x1234, 0x5678); });
+    r.a2o_one = t(function() { return MSDOS.addressToOffset(0x100); });
+    r.va2o_seg = t(function() { return MSDOS.VAToOffset(0x10000000); });
+    r.va2o_seg16 = t(function() { return MSDOS.VAToOffset(0x10000010); });
+    r.va2o_low = t(function() { return MSDOS.VAToOffset(0x100); });
+    r.va2o_neg = t(function() { return MSDOS.VAToOffset(-1); });
+    r.rva2o = t(function() { return MSDOS.RVAToOffset(0x10000000); });
+    r.o2va_hdr = t(function() { return MSDOS.OffsetToVA(0x40); });
+    r.o2va_seg = t(function() { return MSDOS.OffsetToVA(0x100); });
+    r.o2va_zero = t(function() { return MSDOS.OffsetToVA(0); });
+    r.o2va_big = t(function() { return MSDOS.OffsetToVA(0xFFFFFF); });
+    r.o2va_neg = t(function() { return MSDOS.OffsetToVA(-1); });
+    r.o2rva = t(function() { return MSDOS.OffsetToRVA(0x100); });
+    r.disasm_seg = t(function() { return MSDOS.getDisasmNextAddress(0x10000000); });
+    r.disasm_seg2 = t(function() { return MSDOS.getDisasmNextAddress(0x10000002); });
+    r.disasm_jmp = t(function() { return MSDOS.getDisasmNextAddress(0x10000008); });
+    r.disasm_low = t(function() { return MSDOS.getDisasmNextAddress(0x100); });
+    r.disasm_neg = t(function() { return MSDOS.getDisasmNextAddress(-1); });
+    r.aoep = t(function() { return MSDOS.getAddressOfEntryPoint(); });
+    return JSON.stringify(r);
+})()
+"#;
+
+        /// Workspace root: crates/diec-rules -> crates -> root.
+        fn workspace_root() -> PathBuf {
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .ancestors()
+                .nth(2)
+                .expect("workspace root")
+                .to_path_buf()
+        }
+
+        /// Phase 42 oracle parity: every MSDOS.* host API method returns the
+        /// same value as the pinned upstream engine for all p42 fixtures.
+        #[test]
+        fn msdos_host_api_oracle_parity() {
+            let root = workspace_root();
+            let oracle_path = root.join("corpus/p42-msdos-oracle.json");
+            let init_path = root.join("crates/die-gui/db/MSDOS/_init");
+            if !oracle_path.exists() || !init_path.exists() {
+                eprintln!("skipping: p42 oracle snapshot or _init missing");
+                return;
+            }
+            let oracle: Value =
+                serde_json::from_str(&std::fs::read_to_string(&oracle_path).expect("oracle json"))
+                    .expect("parse oracle");
+            let init_src = std::fs::read_to_string(&init_path).expect("_init");
+
+            let mut compared = 0usize;
+            for entry in oracle.as_array().expect("oracle array") {
+                let fname = Path::new(entry["file"].as_str().expect("file"))
+                    .file_name()
+                    .expect("basename")
+                    .to_string_lossy()
+                    .into_owned();
+                let data = std::fs::read(root.join("corpus/p42").join(&fname)).expect("fixture");
+                let (_rt, ctx, _bridge) = make_runtime_with_host(data.clone());
+                ctx.with(|c| {
+                    // Evaluate the vendored upstream _init so JS-defined
+                    // MSDOS methods exist, exactly as in rule execution.
+                    c.eval::<(), _>(init_src.as_str())
+                        .unwrap_or_else(|e| panic!("_init failed for {fname}: {e}"));
+                    let out: String = c
+                        .eval(P42_PROBE)
+                        .unwrap_or_else(|e| panic!("probe failed for {fname}: {e}"));
+                    let ours: Value = serde_json::from_str(&out).expect("probe json");
+                    let expected = entry["r"].as_object().expect("r object");
+                    for (k, ev) in expected {
+                        if let Some(formula) = p42_init_expected(&data, k) {
+                            // _init-defined API: upstream's Qt6 oracle could
+                            // not evaluate it; expected = upstream _init
+                            // formula applied to the fixture.
+                            let got = ours[k].as_f64().unwrap_or_else(|| {
+                                panic!("{fname}/{k}: not a number: {}", ours[k])
+                            });
+                            assert_eq!(got, formula, "{fname}/{k} (_init formula)");
+                            compared += 1;
+                            continue;
+                        }
+                        // Native API: strict equality against upstream output.
+                        assert_ne!(
+                            ev.as_str().map(|s| s.starts_with("ERR:")),
+                            Some(true),
+                            "{fname}/{k}: oracle error {ev}"
+                        );
+                        assert_eq!(&ours[k], ev, "{fname}/{k}");
+                        compared += 1;
+                    }
+                });
+            }
+            assert!(compared > 100, "too few comparisons: {compared}");
+        }
+
+        /// Upstream `db/MSDOS/_init` defines `AddressToOffset` without a
+        /// `return` — it always yields `undefined` in upstream too
+        /// (documented upstream bug; the vendored file is byte-identical).
+        #[test]
+        fn msdos_address_to_offset_alias_is_upstream_undefined() {
+            let root = workspace_root();
+            let init_path = root.join("crates/die-gui/db/MSDOS/_init");
+            if !init_path.exists() {
+                eprintln!("skipping: _init missing");
+                return;
+            }
+            let init_src = std::fs::read_to_string(&init_path).expect("_init");
+            let data = std::fs::read(root.join("corpus/p42/p42-basic.exe")).expect("fixture");
+            let (_rt, ctx, _bridge) = make_runtime_with_host(data);
+            let ty: String = ctx.with(|c| {
+                c.eval::<(), _>(init_src.as_str()).expect("_init");
+                c.eval("typeof MSDOS.AddressToOffset(0x100, 0x200);")
+                    .expect("probe")
+            });
+            assert_eq!(ty, "undefined");
+        }
     }
 }

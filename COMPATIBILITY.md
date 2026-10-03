@@ -158,7 +158,7 @@ These are NOT engine bugs:
 | Mach-O | ✅ | Native goblin-backed |
 | Mach-O overlay | ✅ | getOverlayOffset/Size |
 | Mach-O.getImageBase | ✅ | Lowest LC_SEGMENT vmaddr |
-| MSDOS stubs | ⏳ | compareEP/compareOverlay/isNE return false (Phase 15.3c stub) |
+| MSDOS host API | ✅ | Phase 42: overlay (offset/size/present/compare via XMSDOS raw-size semantics), EP compare (native -1 → always false, upstream parity), NE/LE/LX/PE probes, DOS stub, Rich records (scan [0x1C, lfanew) cap 0x400; DanS/Rich XOR-key record walk), memory-map VA/RVA/offset conversion @ VA 0x10000000, getAddressOfEntryPoint (segment wrap −0x100000), getDisasmNextAddress (Capstone Mode16 + relative-branch target), _init-defined getBaseOffset/addressToOffset/getNEOffset/getEntryPointOffset — 45-key × 12-fixture oracle parity (`tools/msdos-oracle`, corpus/p42-msdos-oracle.json) |
 | PDF (version, header comment) | ✅ | |
 | PDF encryption | ✅ | isEncrypted/getEncryption/getPermissions, XPDF @ 8ef2a804 semantics |
 | PE.getDosStubOffset | ✅ | Upstream: unconditional `sizeof(IMAGE_DOS_HEADEREX)` = 0x40 |

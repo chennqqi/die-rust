@@ -1596,6 +1596,7 @@ dependencies = [
  "md-5",
  "pelite",
  "rquickjs",
+ "serde_json",
 ]
 
 [[package]]

@@ -2385,15 +2385,26 @@ oracle 失败而非能力缺失。全部剩余项重排：
   `test-lzx.wim` 各 5 记录（压缩 metadata + 多块/奇数尾块/
   stored 混合），oracle `unpacked:true` 全字节 parity + 双
   fixture 逐字节变异/截断 fail-closed。
-- **Phase 42：MSDOS host API 补全**（中型）
-  消除 `MSDOS.compareEP/compareOverlay/getEntryPointOffset/
-  getOverlayOffset/getNEOffset/getBaseOffset/getOperationSystem*
-  /addressToOffset/OffsetToVA/VAToOffset/getDisasmNextAddress`
-  stub（现返 false/0/-1）。语义全部来自 `Binary_Script` 基类 +
-  `XMSDOS::getEntryPointOffset`（CS:IP + header paragraphs →
-  文件偏移）+ `XBinary::getOverlayOffset`；`getDisasmNextAddress`
-  用已入 workspace 的 capstone x86-16。oracle：上游 MSDOS_Script
-  harness + 合成/真实 MZ 语料差分（MSDOS 规则在 db 中存在）。
+- **Phase 42：MSDOS host API 补全** — DONE（中型）
+  `host_api_bridge.rs` MSDOS 块全量实现：overlay
+  (`_calculateRawSize` 语义：image_size=e_cp*512−(−e_cblp &0x1ff)
+  截断/fallback、offset/size/present/compare）、compareEP
+  （native `m_nEntryPointOffset` 对 FT_MSDOS 恒 -1 → 恒 false，
+  oracle 证实）、NE/LE/LX/PE u16 探针、DOS stub（secondary
+  header 门控）、Rich（scan [0x1C, lfanew) cap 0x400 + DanS/Rich
+  XOR-key 记录遍历）、VA/RVA/offset 互转（memory map
+  0x10000000 段记录）、getAddressOfEntryPoint
+  （`getSegmentAddress` ≥0x100000 单次回绕）、
+  `__msdosDisasmNextAddress` 原生绑定（CS_CACHE_16 +
+  Mode16 + `CS_GRP_BRANCH_RELATIVE` 目标，失败返 0）。
+  `_init` 定义的 getBaseOffset/addressToOffset/getNEOffset/
+  getEntryPointOffset 由规则 `_init` 覆写生效（与上游
+  QtScript 覆写语义一致）。oracle：`tools/msdos-oracle`
+  (QJSEngine + MSDOS_Script) × `gen_p42_corpus.py` 12 fixture
+  × 45 key 快照 `corpus/p42-msdos-oracle.json`；QJSEngine 无法
+  执行 `_init` 覆写（QObject 只读属性）的 8 key 改用 vendored
+  `_init` 公式期望值。上游 bug：`AddressToOffset` 别名缺
+  `return` 恒 undefined 已记入 upstream-bugs.md。
 - **Phase 43：剩余 capstone DM 模式暴露**（小，机械）
   `Arch` 补 SPARC/SPARCV9/SYSZ/XCORE/M68K(00-60)/M680X 全家/
   TMS320C64X/EVM/WASM/MOS65XX/BPF LE+BE/THUMB LE+BE/CORTEXM/

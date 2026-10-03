@@ -250,3 +250,32 @@ in `diec-nfd::compression_detect::ancient` / `ancient.rs`
 
 Upstream source: `dep/XArchive/Algos/FreezeDecoder.*` describe path +
 `XAncientDecoder::describe` rawSize guard.
+
+## db/MSDOS/_init — AddressToOffset alias drops the return value (2026-10-11)
+
+`db/MSDOS/_init` defines the backward-compatibility alias as
+
+```js
+MSDOS.AddressToOffset = function () { MSDOS.addressToOffset.apply(this, arguments); }
+```
+
+with no `return`, so `MSDOS.AddressToOffset(...)` always evaluates to
+`undefined` upstream as well. Replicated verbatim (the vendored `_init`
+is byte-identical to upstream); the parity test asserts `typeof
+MSDOS.AddressToOffset(...) === "undefined"`. Do not "fix".
+
+Upstream source: `dep/Detect-It-Easy/db/MSDOS/_init` @ 8925358.
+
+## db/PE/_linkers.6.sg — malformed signature (odd nibble count) (2026-10-11)
+
+`_linkers.6.sg` calls `PE.compare` with a DOS-stub signature whose
+normalized form is a 265-nibble continuous hex run (the 13-nibble
+`0000000000000` merges with the adjacent `'PE'` literal after
+`convertSignature`). Upstream `_getSignatureBytes` rejects odd hex runs
+(`nResult & 1 → *pbValid = false`), so upstream records the same
+"Invalid signature" scan error — the rule's early-return branch is dead
+code upstream. Replicated verbatim: diec-rust emits the same diagnostic.
+Do not "fix" the vendored rule.
+
+Upstream source: `dep/Detect-It-Easy/db/PE/_linkers.6.sg` @ 8925358 +
+`dep/Formats/xbinary.cpp::_getSignatureBytes`.
