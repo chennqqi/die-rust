@@ -2158,13 +2158,14 @@ InstallSimple（857），约 3.7k 行。这组非 PE 解压而是嵌入式
   XHashWidget 扩展算法（含 TLSH）所在 submodule 未检出，TLSH
   以官方向量验证而非上游差分。
 
-### Phase 30：反汇编架构扩展 — GATED（ADR 0041 复审）
+### Phase 30：反汇编架构扩展 — DONE（复审 → 维持 deferred）
 
-范围：MIPS/PPC/RISC-V。Gate：ADR 0041 复审必须先决定路径——
-`capstone` crate（native 依赖，唯一全架构覆盖，违反纯 Rust
-偏好需 ADR 记录权衡）vs `yaxpeax-mips/ppc/rx`（纯 Rust 但
-覆盖不齐）vs 维持 deferred。先确认真实需求（MIPS/PPC 固件
-样本占比），再编码。产出 ADR 0041 修订 + 实现或维持决议。
+范围：MIPS/PPC/RISC-V。ADR 0041 已复审（2026-10-03）：
+两个触发条件均未满足——语料 0/109 个非 x86/ARM ELF 样本
+（零需求信号）；crate 生态与 2026-10-05 原始评估完全一致
+（`yaxpeax-mips` 仍 0.1.0、`yaxpeax-ppc` 不存在、
+`rvdasm`/`riscv-decode`/`capstone` 版本无变化）。维持
+deferred 决议，ADR 已附复审记录与证据表。
 
 ### Phase 31：GUI 补齐 — NFD 视图/提取器 + 完整 hex 编辑 — TODO
 

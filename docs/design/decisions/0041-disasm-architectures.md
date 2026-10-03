@@ -1,7 +1,7 @@
 # ADR 0041: Additional Disassembly Architectures — Deferred
 
 **Date**: 2026-10-05
-**Status**: Deferred
+**Status**: Deferred (re-evaluated 2026-10-03, Phase 30 — decision upheld)
 
 ## Context
 
@@ -41,3 +41,17 @@ Keep x86 + ARM only; defer additional architectures.
 - a maintainer decision to accept the `capstone` native dependency — the
   only path that achieves genuine upstream parity across all ~15
   architectures in one stroke.
+
+## 2026-10-03 re-evaluation (Phase 30)
+
+Both triggers checked; neither is met. **Decision upheld.**
+
+| Trigger | Evidence |
+|---------|----------|
+| Corpus demand | 0 of 109 corpus files are MIPS/PPC/RISC-V/SPARC; all 3 ELFs are x86/x86-64 |
+| Crate landscape | Unchanged since original ADR: `yaxpeax-mips` still 0.1.0 (dormant 2021), no `yaxpeax-ppc` crate exists, `rvdasm` 0.3.0/`riscv-decode` 0.2.3 unchanged, `capstone` 0.14.0 unchanged |
+| Build environment | C toolchain (gcc/clang) present — capstone is *feasible*, but feasibility alone does not justify a native dependency with zero demand signal |
+
+Partial pure-Rust coverage (MIPS via dormant yaxpeax + thin RISC-V,
+no PPC at all) would still produce three disjoint operand notations —
+the original rationale stands unchanged.

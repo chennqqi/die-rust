@@ -1351,3 +1351,8 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 顺序执行 26-31 中的 Phase 29：TLSH（tlsh2 纯 Rust crate）+ 小众哈希
 （Tiger/Tiger2/Whirlpool/RIPEMD 四变体/GOST94 三参数集）接入 GUI 哈希
 工具，官方 test vector 回归。继续 Phase 30。
+
+## 2026-10-03 Phase 30 收尾
+顺序执行 26-31 中的 Phase 30（GATED）：ADR 0041 复审——语料零
+MIPS/PPC/RISC-V 需求 + crate 生态零变化 → 维持 deferred 决议，
+ADR 附复审证据表。继续 Phase 31。
