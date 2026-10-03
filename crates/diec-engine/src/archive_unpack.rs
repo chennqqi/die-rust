@@ -743,6 +743,12 @@ pub enum ArchiveKind {
     Xz,
     /// LZMA-Alone (`.lzma`) single-stream compression.
     Lzma,
+    /// AutoIt compiled-script container (v2/EA05/EA06 records).
+    AutoIt,
+    /// Enigma Virtual Box container (PE-carried).
+    EnigmaVb,
+    /// BoxedApp packer container (PE-carried).
+    BoxedApp,
 }
 
 impl ArchiveKind {
@@ -757,6 +763,9 @@ impl ArchiveKind {
             Self::Bz2 => "BZ2",
             Self::Xz => "XZ",
             Self::Lzma => "LZMA",
+            Self::AutoIt => "AUTOIT",
+            Self::EnigmaVb => "ENIGMAVB",
+            Self::BoxedApp => "BOXEDAPP",
         }
     }
 }
@@ -794,9 +803,64 @@ pub fn list_archive_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemb
         list_cab_members(data).map(|m| (ArchiveKind::Cab, m))
     } else if is_iso9660(data) {
         list_iso9660_members(data).map(|m| (ArchiveKind::Iso9660, m))
+    } else if let Some(m) = list_container_members(data) {
+        // Packer/protector containers (upstream XStaticUnpacker record
+        // enumeration). These are NOT part of `is_archive`/`extract_archive`:
+        // upstream only probes them under the opt-in
+        // `FT_FLAG_STATICUNPACKERS` flag and never recurses into them during
+        // nested scans. They are listed here so the explicit browse/extract
+        // path (GUI archive view) matches upstream's archive widget.
+        //
+        // Probed before the weak BZ2/XZ/LZMA stream heuristics: a PE-carried
+        // container's MZ header can accidentally satisfy `is_lzma`.
+        Some(m)
     } else {
         list_stream_members(data)
     }
+}
+
+/// List members of a packer/protector container (AutoIt/EnigmaVB/BoxedApp).
+///
+/// Returns `None` when no container detector matches. Member records are
+/// produced by the Phase 28 static unpackers; `packed_size` is reported as
+/// 0 because these formats do not expose a meaningful per-member packed
+/// size through the record API.
+fn list_container_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
+    let (kind, records) = container_records(data)?;
+    let members = records
+        .iter()
+        .take(MAX_MEMBER_NAMES)
+        .map(|r| ArchiveMemberInfo {
+            name: r.name.clone(),
+            size: r.data.len() as u64,
+            packed_size: 0,
+            is_directory: false,
+            modified: None,
+        })
+        .collect();
+    Some((kind, members))
+}
+
+/// Run the container extractors and return the detected kind plus the
+/// full record list. Probe order mirrors the upstream `xformats.cpp`
+/// static-unpacker chain (AutoIt -> BoxedApp -> EnigmaVB).
+fn container_records(data: &[u8]) -> Option<(ArchiveKind, Vec<crate::unpack::ContainerRecord>)> {
+    if crate::unpack::detect_autoit(data).is_some()
+        && let Ok(records) = crate::unpack::extract_autoit(data, -1)
+    {
+        return Some((ArchiveKind::AutoIt, records));
+    }
+    if crate::unpack::detect_boxedapp(data).is_some()
+        && let Ok(records) = crate::unpack::extract_boxedapp(data)
+    {
+        return Some((ArchiveKind::BoxedApp, records));
+    }
+    if crate::unpack::detect_enigmavb(data).is_some()
+        && let Ok(records) = crate::unpack::extract_enigmavb(data)
+    {
+        return Some((ArchiveKind::EnigmaVb, records));
+    }
+    None
 }
 
 /// List a BZ2/XZ/LZMA stream as one pseudo-member named `data`.
@@ -958,6 +1022,14 @@ pub fn extract_member(data: &[u8], name: &str) -> Vec<u8> {
         extract_member_cab(data, name)
     } else if is_iso9660(data) {
         extract_member_iso9660(data, name)
+    } else if let Some((_kind, records)) = container_records(data) {
+        // Packer/protector containers: exact-name member lookup
+        // (upstream `XStaticUnpacker` record extraction).
+        records
+            .into_iter()
+            .find(|r| r.name == name)
+            .map(|r| r.data)
+            .unwrap_or_default()
     } else {
         // Single-stream formats expose exactly one pseudo-member, `data`.
         if name == "data" {
@@ -1572,5 +1644,55 @@ mod tests {
         assert!(decompress_stream(b"not a stream").is_none());
         // LZMA heuristic rejects out-of-range props byte.
         assert!(!is_lzma(&[0xE1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+    }
+
+    /// Corpus fixture loader (repo `corpus/` directory).
+    fn corpus(name: &str) -> Vec<u8> {
+        let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../corpus")
+            .join(name);
+        std::fs::read(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()))
+    }
+
+    /// Phase 28: packer/protector containers are browsable through the
+    /// explicit list/extract path (upstream archive-widget parity) but are
+    /// deliberately NOT part of `is_archive`/`extract_archive` — upstream
+    /// never recurses into them during nested scans.
+    #[test]
+    fn container_members_list_and_extract() {
+        let evb = corpus("enigmavb-minimal.exe");
+        let (kind, members) = list_archive_members(&evb).expect("enigmavb list");
+        assert_eq!(kind, ArchiveKind::EnigmaVb);
+        assert!(members.iter().any(|m| m.name == "readme.txt"));
+        assert!(members.iter().any(|m| m.name == "data.bin"));
+        assert!(!extract_member(&evb, "readme.txt").is_empty());
+        assert!(extract_member(&evb, "missing.bin").is_empty());
+
+        let bxp = corpus("boxedapp-minimal.exe");
+        let (kind, members) = list_archive_members(&bxp).expect("boxedapp list");
+        assert_eq!(kind, ArchiveKind::BoxedApp);
+        assert!(!members.is_empty());
+        let first = members[0].name.clone();
+        assert_eq!(extract_member(&bxp, &first).len() as u64, members[0].size);
+
+        let au = corpus("autoit-ea06.bin");
+        let (kind, members) = list_archive_members(&au).expect("autoit list");
+        assert_eq!(kind, ArchiveKind::AutoIt);
+        assert!(!members.is_empty());
+
+        // Nested-scan extraction must not emit container records (the
+        // container kinds are list/extract-path only). `is_archive` may
+        // still match through the pre-existing weak LZMA heuristic — that
+        // is unrelated to the container detectors.
+        let flags = ScanFlags::default();
+        for blob in [&evb, &bxp, &au] {
+            let members = extract_archive(blob, &flags);
+            assert!(
+                members
+                    .iter()
+                    .all(|m| m.name != "readme.txt" && m.name != "data.bin"),
+                "container record leaked into nested-scan path: {members:?}"
+            );
+        }
     }
 }

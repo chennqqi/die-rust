@@ -233,7 +233,10 @@ fn parse_layout(d: &[u8]) -> Option<PeLayout> {
         let so = sec_off + i * 40;
         let name_raw = d.get(so..so + 8)?;
         let end = name_raw.iter().position(|&b| b == 0).unwrap_or(8);
-        let mut name = String::from_utf8_lossy(&name_raw[..end]).to_uppercase();
+        // Upstream keeps the raw name (`SECTION_RECORD.sName`); every
+        // downstream compare (`isSectionNamePresent`, section-name scan
+        // records, `listSectionNames.at(i) == "..."`) is case-sensitive.
+        let mut name = String::from_utf8_lossy(&name_raw[..end]).into_owned();
         if let Some(idx) = name
             .strip_prefix('/')
             .and_then(|t| t.parse::<usize>().ok())
@@ -244,7 +247,7 @@ fn parse_layout(d: &[u8]) -> Option<PeLayout> {
         {
             let tail = &d[start..d.len().min(start + 256)];
             let tend = tail.iter().position(|&b| b == 0).unwrap_or(tail.len());
-            name = String::from_utf8_lossy(&tail[..tend]).to_uppercase();
+            name = String::from_utf8_lossy(&tail[..tend]).into_owned();
         }
         sections.push(Section {
             name,
@@ -935,12 +938,10 @@ impl PeInfo {
         }
     }
 
-    /// `XPE::isSectionNamePresent` — raw byte-name membership test
-    /// (case-insensitive: our parser uppercases section names).
+    /// `XPE::isSectionNamePresent` — case-sensitive name membership test
+    /// (`sName == sSectionName` in upstream xpe.cpp:2458).
     pub fn has_section_name(&self, name: &str) -> bool {
-        self.section_names
-            .iter()
-            .any(|n| n.eq_ignore_ascii_case(name))
+        self.section_names.iter().any(|n| n == name)
     }
 
     /// Index of the section containing the entry point

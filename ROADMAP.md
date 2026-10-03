@@ -2104,16 +2104,40 @@ Phase 25 后的全部未做项均来自 ADR deferred 决议。本节按
 - 验证：NFD 差分 94 文件 0 差异；fmt/clippy -D warnings 零警告；
   workspace 全量测试通过。
 
-### Phase 28：静态脱壳·容器/脚本提取组 — TODO
+### Phase 28：静态脱壳·容器/脚本提取组 — DONE
 
 范围：AutoIt（1119）、EnigmaVB（894）、BoxedApp（810）、
 InstallSimple（857），约 3.7k 行。这组非 PE 解压而是嵌入式
 容器/编译脚本提取，语义接近 `archive_unpack`（成员枚举 +
 提取），不复用 PE 重建。
 
-- 28.A 成员枚举 + 提取 API
-- 28.B CLI/GUI 接入（复用归档视图而非 UPX 面板）
-- 验收：上游 `XStaticUnpacker` 枚举/提取输出差分。
+- 28.A 成员枚举 + 提取 API — DONE
+  - `unpack/autoit.rs`：v2/EA05/EA06 三种容器，MT/LAME 加密器、
+    自定义位读取器、JB01/变体 inflate、多记录枚举（`extract_autoit`）
+  - `unpack/enigmavb.rs`：节载容器定位、目录树遍历（深度/节点/
+    名称/输出全界限）、aPLib 解压（`extract_enigmavb`）
+  - `unpack/boxedapp.rs`：`.bxpck` 节 + `.main` 标记认证、节点表
+    STORE/ZLIB 提取（`extract_boxedapp`）
+  - **InstallSimple — deferred（不可验证）**：上游整个
+    `xinstallsimple.cpp` 在 `#ifdef USE_XEMULATOR` 内，提取需要
+    `XEmulator` x86 沙盒执行 stub 解码器；XEmulator 不在上游
+    submodule 基线内，oracle 无法构建，移植无法差分验证。记录为
+    有意的兼容缺口，不伪造期望输出。
+- 28.B CLI/GUI 接入 — DONE：三个容器接入 `archive_unpack` 的
+  显式浏览/提取路径（`list_archive_members`/`extract_member`/
+  `ArchiveKind`），与上游归档 widget 行为一致；**刻意不**进入
+  `is_archive`/`extract_archive` 嵌套扫描门（上游仅在
+  `FT_FLAG_STATICUNPACKERS` 可选标志下探测，嵌套扫描不递归）。
+- 附带修复：**PE 节名大小写偏差**——解析器曾全局大写化节名，
+  导致节名 CRC 扫描表漏检所有小写/混合大小写条目
+  （`.enigma1`/`.enigma2`/`.bxpck` 等）且 TinyC 形状检查字面量
+  错误。已改为保留原始大小写 + 全部比较点按上游语义改区分
+  大小写 `==`（`isSectionNamePresent`/`getSectionRecordByName`/
+  `getNormalCodeSection`/`getConstDataSection`/TinyC/debug_data/
+  CPADinfo/buildid/!eprot/.TTP/.sedata/VProtect 逐一核对）。
+- 验收：静态脱壳测试 22/22（三容器多记录枚举逐字节对齐
+  oracle）；NFD 差分 **109 文件 0 差异**（含修复后的 EnigmaVB/
+  BoxedApp Protector 记录）；fmt/clippy/workspace 测试全绿。
 
 ### Phase 29：TLSH + 小众哈希 — TODO（小 phase）
 

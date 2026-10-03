@@ -45,8 +45,8 @@ pub fn normal_code_section(pe: &PeInfo) -> Option<&SectionExtent> {
 /// is not code (`0x60000020`) or uninitialized (`0x40000040`).
 pub fn normal_data_section(pe: &PeInfo) -> Option<&SectionExtent> {
     for (i, s) in pe.extents.iter().enumerate().skip(1) {
-        // Raw-name compare upstream; our parser uppercases names.
-        if (s.name.eq_ignore_ascii_case("DATA") || s.name.eq_ignore_ascii_case(".data"))
+        // Case-sensitive raw-name compare (upstream xpe.cpp:13819).
+        if (s.name == "DATA" || s.name == ".data")
             && (s.flags & 0xFF00_00FF) == 0xC000_0040
             && s.size != 0
             && pe.import_section != i as i32
@@ -337,11 +337,8 @@ pub fn import_heuristics(pe: &PeInfo, ftpe: u16, imports: &mut DetectMap) {
 /// `handle_DebugData` — `.stab`/`.stabstr` → Stabs record; `.debug_info`
 /// → DWARF version (u16 at +4, 0..=7 → "v.0").
 pub fn debug_data(data: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut ResultMaps) {
-    let has = |want: &str| {
-        pe.section_names
-            .iter()
-            .any(|s| s.eq_ignore_ascii_case(want))
-    };
+    // Upstream `isStringInListPresent` is a case-sensitive compare.
+    let has = |want: &str| pe.section_names.iter().any(|s| s == want);
     if has(".stab") && has(".stabstr") {
         emit(
             misc,
@@ -352,10 +349,7 @@ pub fn debug_data(data: &[u8], pe: &PeInfo, ftpe: u16, misc: &mut ResultMaps) {
             "",
         );
     }
-    if let Some(dbg) = pe
-        .extents
-        .iter()
-        .find(|s| s.name.eq_ignore_ascii_case(".debug_info"))
+    if let Some(dbg) = pe.extents.iter().find(|s| s.name == ".debug_info")
         && dbg.size > 8
         && let Some(v) = crate::parse::rd_u32(data, dbg.off + 4).map(|x| x as u16)
         && v <= 7
@@ -707,13 +701,11 @@ fn find_u32_le(d: &[u8], off: usize, size: usize, val: u32) -> Option<usize> {
 /// `getConstDataSection` — first `.rdata` section (index ≥1) with
 /// masked characteristics `0x40000040` and non-zero raw size.
 fn const_data_section(pe: &PeInfo) -> Option<&SectionExtent> {
-    // Upstream compares the raw name against ".rdata"; our parser
-    // uppercases names, so compare case-insensitively.
-    pe.extents.iter().skip(1).find(|s| {
-        s.name.eq_ignore_ascii_case(".rdata")
-            && (s.flags & 0xFF00_00FF) == 0x4000_0040
-            && s.size != 0
-    })
+    // Case-sensitive raw-name compare (upstream xpe.cpp:13867).
+    pe.extents
+        .iter()
+        .skip(1)
+        .find(|s| s.name == ".rdata" && (s.flags & 0xFF00_00FF) == 0x4000_0040 && s.size != 0)
 }
 
 /// First ANSI string at a section offset (`read_ansiString` at the
@@ -898,10 +890,7 @@ pub fn gcc(
         }
         // .stabstr GCC path markers when no compiler identified yet.
         if compiler.is_none()
-            && let Some(sr) = pe
-                .extents
-                .iter()
-                .find(|s| s.name.eq_ignore_ascii_case(".stabstr"))
+            && let Some(sr) = pe.extents.iter().find(|s| s.name == ".stabstr")
         {
             let sz = sr.size.min(1 << 22);
             if crate::parse::find_ansi(data, sr.off, sz, b"/gcc/mingw32/").is_some() {
@@ -1752,26 +1741,28 @@ pub fn tools(
         let names: Vec<&str> = pe.extents.iter().map(|s| s.name.as_str()).collect();
         let nsec = names.len();
         let (mut detected, mut debug) = (false, false);
+        // Upstream compares raw section names case-sensitively
+        // (nfd_pe.cpp:6705-6722).
         if pe.is64 {
             if (nsec == 3 || nsec == 5)
-                && names.first() == Some(&".TEXT")
-                && names.get(1) == Some(&".DATA")
-                && names.get(2) == Some(&".PDATA")
+                && names.first() == Some(&".text")
+                && names.get(1) == Some(&".data")
+                && names.get(2) == Some(&".pdata")
             {
                 if nsec == 3 {
                     detected = true;
-                } else if names.get(3) == Some(&".STAB") && names.get(4) == Some(&".STABSTR") {
+                } else if names.get(3) == Some(&".stab") && names.get(4) == Some(&".stabstr") {
                     debug = true;
                     detected = true;
                 }
             }
         } else if (nsec == 2 || nsec == 4)
-            && names.first() == Some(&".TEXT")
-            && names.get(1) == Some(&".DATA")
+            && names.first() == Some(&".text")
+            && names.get(1) == Some(&".data")
         {
             if nsec == 2 {
                 detected = true;
-            } else if names.get(2) == Some(&".STAB") && names.get(3) == Some(&".STABSTR") {
+            } else if names.get(2) == Some(&".stab") && names.get(3) == Some(&".stabstr") {
                 debug = true;
                 detected = true;
             }
@@ -1790,10 +1781,7 @@ pub fn tools(
 
     // Chromium Crashpad: CPADinfo section, signature 0x43506164.
     if section_names.contains_key(&n::RECORD_NAME_CHROMIUMCRASHPAD)
-        && let Some(sec) = pe
-            .extents
-            .iter()
-            .find(|s| s.name.eq_ignore_ascii_case("CPADinfo"))
+        && let Some(sec) = pe.extents.iter().find(|s| s.name == "CPADinfo")
         && crate::parse::rd_u32(data, sec.off) == Some(0x4350_6164)
     {
         let v = crate::parse::rd_u32(data, sec.off + 8).unwrap_or(0);
@@ -1893,10 +1881,7 @@ pub fn tools(
     }
 
     // LLD linker: ".buildid" section or "LLD PDB." in const data.
-    let b_lld = pe
-        .extents
-        .iter()
-        .any(|s| s.name.eq_ignore_ascii_case(".buildid"))
+    let b_lld = pe.extents.iter().any(|s| s.name == ".buildid")
         || cd_rng
             .is_some_and(|(off, sz)| crate::parse::find_ansi(data, off, sz, b"LLD PDB.").is_some());
     if b_lld {
@@ -4392,7 +4377,7 @@ pub fn protection(
             // !eprot section-name + trailer magic.
             if section_names.contains_key(&n::RECORD_NAME_EPROT)
                 && ep_idx > 0
-                && ep_sect_name.eq_ignore_ascii_case("!eprot")
+                && ep_sect_name == "!eprot"
                 && let Some((off, size)) = os_ep
                 && size >= 4
                 && crate::parse::rd_u32(d, off + size - 4) == Some(0x7878_7878)
@@ -4785,11 +4770,7 @@ pub fn safeengine(d: &[u8], pe: &PeInfo, ftpe: u16, entrypoint: &DetectMap, misc
         return;
     }
     let idx = pe.entrypoint_section_index();
-    if idx <= 0
-        || !pe.extents[idx as usize]
-            .name
-            .eq_ignore_ascii_case(".sedata")
-    {
+    if idx <= 0 || pe.extents[idx as usize].name != ".sedata" {
         return;
     }
     let mut ver = "2.XX".to_string();
@@ -4820,11 +4801,7 @@ pub fn vprotect(d: &[u8], pe: &PeInfo, deep: bool, ftpe: u16, misc: &mut ResultM
         return;
     }
     let idx = pe.entrypoint_section_index();
-    if idx <= 0
-        || !pe.extents[idx as usize]
-            .name
-            .eq_ignore_ascii_case("VProtect")
-    {
+    if idx <= 0 || pe.extents[idx as usize].name != "VProtect" {
         return;
     }
     let Some((off, size)) = pe.entrypoint_section_extent(d) else {
@@ -4866,7 +4843,7 @@ pub fn ttprotect(pe: &PeInfo, ftpe: u16, misc: &mut ResultMaps) {
         return;
     }
     let idx = pe.entrypoint_section_index();
-    if idx <= 0 || !pe.extents[idx as usize].name.eq_ignore_ascii_case(".TTP") {
+    if idx <= 0 || pe.extents[idx as usize].name != ".TTP" {
         return;
     }
     put(

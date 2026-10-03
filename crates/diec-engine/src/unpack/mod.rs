@@ -14,6 +14,9 @@
 
 mod aplib;
 mod aspack;
+mod autoit;
+mod boxedapp;
+mod enigmavb;
 mod fsg;
 mod mew;
 mod nrv;
@@ -25,6 +28,9 @@ mod yoda;
 pub(crate) use upx::PackedPe;
 
 pub use aspack::{AspackInfo, detect_aspack, unpack_aspack};
+pub use autoit::{AutoItInfo, AutoItVersion, ContainerRecord, detect_autoit, extract_autoit};
+pub use boxedapp::{BoxedAppInfo, detect_boxedapp, extract_boxedapp};
+pub use enigmavb::{EnigmaVbInfo, detect_enigmavb, extract_enigmavb};
 pub use fsg::{FsgInfo, detect_fsg, unpack_fsg};
 pub use mew::{MewInfo, detect_mew, unpack_mew};
 pub use nrv::{BitWidth, NrvAlgorithm, NrvError, nrv_decompress};

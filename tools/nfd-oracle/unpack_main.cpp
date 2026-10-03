@@ -47,23 +47,48 @@ static QJsonObject tryUnpack(XBinary *pUnpacker, const QString &name, const QStr
         return report;
     }
 
-    XBinary::ARCHIVERECORD rec = pUnpacker->infoCurrent(&state);
-    QString info = rec.mapProperties.value(XBinary::FPART_PROP_INFO).toString();
-    report["info"] = info;
-
-    QFile out(outPath);
-    if (out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        if (pUnpacker->unpackCurrent(&state, &out)) {
-            out.close();
-            report["unpacked"] = true;
-            report["out_path"] = outPath;
-            report["out_size"] = QFileInfo(outPath).size();
-        } else {
-            out.close();
-            out.remove();
-            report["unpacked"] = false;
+    // Archive unpackers expose N records: walk them all so the oracle
+    // covers the full member list, not just the first entry.
+    QString firstInfo;
+    QJsonArray members;
+    for (int idx = 0;; idx++) {
+        if (idx > 0 && !pUnpacker->moveToNext(&state)) break;
+        XBinary::ARCHIVERECORD rec = pUnpacker->infoCurrent(&state);
+        if (idx == 0) {
+            firstInfo = rec.mapProperties.value(XBinary::FPART_PROP_INFO).toString();
         }
+        QString memberName = rec.mapProperties.value(XBinary::FPART_PROP_ORIGINALNAME).toString();
+        if (memberName.isEmpty()) memberName = QString("record_%1").arg(idx);
+        QString memberPath = (idx == 0 && members.isEmpty() && state.nNumberOfRecords <= 1)
+                                 ? outPath
+                                 : outPath + "." + memberName;
+
+        QJsonObject member;
+        member["name"] = memberName;
+        QFile out(memberPath);
+        if (out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            if (pUnpacker->unpackCurrent(&state, &out)) {
+                out.close();
+                member["unpacked"] = true;
+                member["out_path"] = memberPath;
+                member["out_size"] = QFileInfo(memberPath).size();
+            } else {
+                out.close();
+                out.remove();
+                member["unpacked"] = false;
+            }
+        }
+        members.append(member);
+        if (state.nNumberOfRecords > 0 && idx >= state.nNumberOfRecords - 1) break;
+        if (idx > 100000) break;  // safety bound
     }
+    report["members"] = members;
+    report["unpacked"] = !members.isEmpty();
+    if (members.size() == 1) {
+        report["out_path"] = members.first().toObject().value("out_path");
+        report["out_size"] = members.first().toObject().value("out_size");
+    }
+    report["info"] = firstInfo;
     pUnpacker->finishUnpack(&state);
     return report;
 }

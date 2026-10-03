@@ -1340,3 +1340,9 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 ## 2026-10-03 Phase 27 收尾
 顺序执行 26-31 中的 Phase 27：NsPack 静态脱壳移植（LZMA 变体 range coder）、
 统一分派注册、合成语料 + oracle 字节差分、畸形输入负向测试、文档更新。
+
+## 2026-10-03 Phase 28 收尾
+顺序执行 26-31 中的 Phase 28：AutoIt/EnigmaVB/BoxedApp 容器提取移植、
+容器接入归档显式浏览/提取路径（不入嵌套扫描门）、InstallSimple 因
+上游 USE_XEMULATOR 不可构建而 defer。顺带修复 PE 节名全局大写化偏差
+（区分大小写比较导致 .enigma1/.bxpck 等表条目漏检）。继续 Phase 29。

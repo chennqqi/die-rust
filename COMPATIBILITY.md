@@ -434,7 +434,12 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 | yoda 1.3 (yC) | `XYODA` | ✅ 双层字节码 VM + 节名 DWORD 跳过表 + OEP 恢复 + PE 重建 | oracle 字节差分（合成 1.3）|
 | ASPack 2.12 | `XASPACK` | ✅ 布局表行匹配 + 动态 Huffman-LZ + PE 重建 | oracle 字节差分（合成 2.12）；模拟器分支未覆盖（无对应布局行）|
 | NsPack 1.4/2.x/3.x | `XNSPACK` | ✅ LZMA 变体 range coder + 双 stub 布局 + marker-gated/naive E8-E9 逆滤波 + 导入重建 + `.clam01`/`.idata`/`.ghost` PE 重建 | oracle 字节差分（合成 naive + gated/imports 两变体）；dsize 加 256MiB 硬上限（对齐 XASPACK 前置，fail-closed）|
-| 其他壳 | AutoIt/EnigmaVB/BoxedApp/InstallSimple | ❌ deferred → Phase 28 | ADR 0036；XInstallSimple 需 USE_XEMULATOR |
+| AutoIt v2/EA05/EA06 | `XAUTOIT` | ✅ v2 流加密 + MT(EA05) + LAME(EA06) + 位读取器 + JB01/变体 inflate + 多记录枚举 | oracle 记录名+大小逐字节差分（3 格式）|
+| EnigmaVB | `XEnigmaVB` | ✅ 节载容器 + 目录树（深度≤1024/节点≤100000）+ aPLib + 输出界限 | oracle 记录差分（stored+compressed 合成）|
+| BoxedApp | `XBoxedApp` | ✅ `.bxpck` 节 + `.main` 认证 + 节点表 STORE/ZLIB | oracle 记录差分（合成）|
+| InstallSimple | `XInstallSimple` | ❌ deferred（不可验证） | 上游整体 `#ifdef USE_XEMULATOR`，XEmulator 不在 submodule 基线，无 oracle 可建 |
+| 容器归档浏览 | 归档 widget `getRecords` | ✅ `list_archive_members`/`extract_member`/`ArchiveKind`（AutoIt/EnigmaVB/BoxedApp） | 刻意不入 `is_archive` 嵌套扫描门（上游 `FT_FLAG_STATICUNPACKERS` opt-in）|
+| PE 节名大小写 | `SECTION_RECORD.sName` 原始大小写 | ✅ 修复全局大写化偏差；全部比较点按上游区分大小写 | `.enigma1`/`.bxpck` 等表条目此前漏检 |
 
 ## Phase 21: NFD/SpecAbstract 第二引擎（2026-10-07）
 

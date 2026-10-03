@@ -206,3 +206,21 @@ fn ep_section_index_uses_va_space() {
     // Both sections start at VA 0x1000; EP RVA 0x1000 resolves to sec 1.
     assert_eq!(info.entrypoint_section_index(), 1);
 }
+
+/// Section names keep their raw case (upstream `SECTION_RECORD.sName`)
+/// so section-name scan records match case-sensitively: `.enigma1` →
+/// Enigma Virtual Box, `.bxpck` → BoxedApp Packer (Phase 28 fix;
+/// previously the parser uppercased names and the CRC scan missed).
+#[test]
+fn section_name_detects_are_case_sensitive() {
+    let out = run("enigmavb-minimal.exe");
+    assert!(has(&out, "Protector", "Enigma Virtual Box"), "{out:?}");
+    let out = run("boxedapp-minimal.exe");
+    assert!(has(&out, "Protector", "BoxedApp Packer"), "{out:?}");
+
+    // Raw-case names are preserved for downstream compares.
+    let d = corpus("enigmavb-minimal.exe");
+    let info = diec_nfd::pe::collect(&d).expect("pe collect");
+    assert!(info.section_names.iter().any(|n| n == ".enigma1"));
+    assert!(!info.section_names.iter().any(|n| n == ".ENIGMA1"));
+}

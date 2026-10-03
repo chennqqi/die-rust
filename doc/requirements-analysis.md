@@ -610,3 +610,10 @@ save/restore 机制。通过 DIE-engine 调试追踪确认：Qt Script 中 `var 
 - _reconstructImports 描述符流(marker=记录长自校验)+DLL 名池 KERNEL32.DLL 锚定，
   合成 .idata + IAT 回填；stub 头双布局(1.4 dword/3.x qword 字段距)。
 - 偏差：dsize 256MiB 硬上限（上游 -1 无限），对齐 XASPACK 同款守卫语义。
+
+## 2026-10-03 Phase 28 分析
+容器提取器属 XStaticUnpacker 记录枚举语义（非 PE 重建），集成点为
+archive_unpack 的显式 list/extract 路径；上游 FT_FLAG_STATICUNPACKERS
+opt-in 且嵌套扫描不递归容器，故 is_archive/extract_archive 保持闭集。
+节名大写化是潜伏偏差：此前语料无小写敏感表条目故差分未暴露，新增
+enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回归。

@@ -9,9 +9,10 @@
 use std::path::PathBuf;
 
 use diec_engine::unpack::{
-    PackerKind, detect_aspack, detect_fsg, detect_mew, detect_nspack, detect_packed, detect_petite,
-    detect_yoda, unpack_any, unpack_aspack, unpack_fsg, unpack_mew, unpack_nspack, unpack_petite,
-    unpack_yoda,
+    PackerKind, detect_aspack, detect_autoit, detect_boxedapp, detect_enigmavb, detect_fsg,
+    detect_mew, detect_nspack, detect_packed, detect_petite, detect_yoda, extract_autoit,
+    extract_boxedapp, extract_enigmavb, unpack_any, unpack_aspack, unpack_fsg, unpack_mew,
+    unpack_nspack, unpack_petite, unpack_yoda,
 };
 
 fn corpus(name: &str) -> PathBuf {
@@ -206,4 +207,155 @@ fn nspack_rejects_malformed() {
     let n = bad3.len();
     bad3[n - 20] ^= 0xFF;
     let _ = unpack_nspack(&bad3, 0x400);
+}
+
+// ---------------------------------------------------------------------------
+// AutoIt container extraction (v2 / EA05 / EA06) — multi-record oracle diff.
+// Fixtures: tools/gen_autoit_corpus.py; oracle member files under
+// corpus/autoit-*.records/ are outputs of the upstream XAUTOIT oracle.
+// ---------------------------------------------------------------------------
+
+fn autoit_diff(fixture: &str, records_dir: &str, version: &str) {
+    let packed = load(fixture);
+    let info = detect_autoit(&packed).expect("autoit detection");
+    assert_eq!(info.version.version_string(), version, "{fixture}");
+    let ours = extract_autoit(&packed, -1).expect("autoit extract");
+    let mut oracle_names: Vec<String> = std::fs::read_dir(corpus(records_dir))
+        .expect(records_dir)
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    oracle_names.sort();
+    let mut our_names: Vec<String> = ours.iter().map(|r| r.name.clone()).collect();
+    our_names.sort();
+    assert_eq!(our_names, oracle_names, "{fixture} record names");
+    for rec in &ours {
+        let oracle = load(&format!("{records_dir}/{}", rec.name));
+        assert_eq!(rec.data, oracle, "{fixture}:{}", rec.name);
+    }
+}
+
+#[test]
+fn autoit_v2_matches_oracle() {
+    autoit_diff("autoit-v2.bin", "autoit-v2.records", "v2");
+}
+
+#[test]
+fn autoit_ea05_matches_oracle() {
+    autoit_diff("autoit-ea05.bin", "autoit-ea05.records", "EA05");
+}
+
+#[test]
+fn autoit_ea06_matches_oracle() {
+    autoit_diff("autoit-ea06.bin", "autoit-ea06.records", "EA06");
+}
+
+#[test]
+fn autoit_rejects_malformed() {
+    for fixture in ["autoit-v2.bin", "autoit-ea05.bin", "autoit-ea06.bin"] {
+        let packed = load(fixture);
+        // Truncations must fail closed (no records / no panic).
+        for cut in [16usize, 32, 64, 128] {
+            let t = &packed[..cut.min(packed.len())];
+            let _ = extract_autoit(t, -1);
+        }
+        // Flip bytes across the whole file: detect may still fire (v2
+        // signature scan) but extraction must never panic.
+        for off in [0usize, 20, 60, 120, 200] {
+            if off >= packed.len() {
+                continue;
+            }
+            let mut bad = packed.clone();
+            bad[off] ^= 0xFF;
+            let _ = extract_autoit(&bad, -1);
+        }
+    }
+    assert!(detect_autoit(b"not an autoit file").is_none());
+}
+
+// ---------------------------------------------------------------------------
+// EnigmaVB container — oracle member files under corpus/enigmavb.records/.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn enigmavb_minimal_matches_oracle() {
+    let packed = load("enigmavb-minimal.exe");
+    let info = detect_enigmavb(&packed).expect("enigmavb detection");
+    assert_eq!(info.sversion, "package v5");
+    let ours = extract_enigmavb(&packed).expect("enigmavb extract");
+    let mut names: Vec<&str> = ours.iter().map(|r| r.name.as_str()).collect();
+    names.sort();
+    assert_eq!(names, ["data.bin", "readme.txt"]);
+    for rec in &ours {
+        let oracle = load(&format!("enigmavb.records/{}", rec.name));
+        assert_eq!(rec.data, oracle, "enigmavb:{}", rec.name);
+    }
+}
+
+#[test]
+fn enigmavb_rejects_malformed() {
+    let packed = load("enigmavb-minimal.exe");
+    for cut in [0x400usize, 0x460, 0x500, 0x700, 0x900] {
+        let t = &packed[..cut.min(packed.len())];
+        let _ = extract_enigmavb(t);
+    }
+    // Break the tail authenticator: the byte after the blob stream must
+    // be 0x16 followed by zeros.
+    let mut bad = packed.clone();
+    let info = detect_enigmavb(&packed).unwrap();
+    let base = info.base_offset;
+    // find the 0x16 terminator by scanning the blob tail
+    let pos = (base..base + info.tree_size)
+        .find(|&i| packed[i] == 0x16)
+        .expect("terminator");
+    bad[pos] = 0x00;
+    assert!(extract_enigmavb(&bad).is_err());
+    // Non-zero padding must fail.
+    let mut bad2 = packed;
+    bad2[base + info.tree_size - 1] = 0xFF;
+    assert!(extract_enigmavb(&bad2).is_err());
+    assert!(detect_enigmavb(b"not a pe").is_none());
+}
+
+// ---------------------------------------------------------------------------
+// BoxedApp container — oracle member files under corpus/boxedapp.records/.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn boxedapp_minimal_matches_oracle() {
+    let packed = load("boxedapp-minimal.exe");
+    let info = detect_boxedapp(&packed).expect("boxedapp detection");
+    assert_eq!(info.sversion, "");
+    let ours = extract_boxedapp(&packed).expect("boxedapp extract");
+    let mut names: Vec<&str> = ours.iter().map(|r| r.name.as_str()).collect();
+    names.sort();
+    assert_eq!(names, ["app.exe", "lib.dll"]);
+    for rec in &ours {
+        let oracle = load(&format!("boxedapp.records/{}", rec.name));
+        assert_eq!(rec.data, oracle, "boxedapp:{}", rec.name);
+    }
+}
+
+#[test]
+fn boxedapp_rejects_malformed() {
+    let packed = load("boxedapp-minimal.exe");
+    for cut in [0x400usize, 0x480, 0x600, 0x900] {
+        let t = &packed[..cut.min(packed.len())];
+        let _ = extract_boxedapp(t);
+    }
+    // Corrupt the zlib payload: authenticated node + bad payload must
+    // fail the whole extraction.
+    let mut bad = packed.clone();
+    let n = bad.len();
+    for b in bad.iter_mut().take(n.min(0x700)).skip(0x600) {
+        if *b == 0x78 {
+            *b = 0x77;
+            break;
+        }
+    }
+    let _ = extract_boxedapp(&bad);
+    // Drop the .main marker: detection must fail.
+    let mut bad2 = packed;
+    bad2[0x800..0x810].fill(0);
+    assert!(detect_boxedapp(&bad2).is_none());
+    assert!(detect_boxedapp(b"not a pe").is_none());
 }
