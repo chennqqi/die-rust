@@ -5,7 +5,7 @@
 //! enrichment, cross-record inference) are not yet ported; records carry
 //! their static table version/info. This is the table-driven core.
 
-use diec_core::signature::{match_signature, parse_signature};
+use diec_core::signature::{SigCtx, match_signature_ctx, parse_signature};
 
 use crate::gen_names::{FT_STR, RECORD_NAME_STR, RECORD_TYPE_STR, ft, name, rtype};
 use crate::gen_tables as t;
@@ -102,11 +102,69 @@ fn to_detection(r: &ScanRecord) -> Detection {
     }
 }
 
-fn exp_match(data: &[u8], sig: &str, offset: usize) -> bool {
+fn exp_match(data: &[u8], sig: &str, offset: usize, ctx: &SigCtx) -> bool {
     let Ok(elements) = parse_signature(sig) else {
         return false;
     };
-    match_signature(data, offset, &elements)
+    match_signature_ctx(data, offset, &elements, ctx)
+}
+
+/// `XMSDOS::_MEMORY_MAP` signature context: `$$` wraps inside the
+/// current 16-bit segment and `#` resolves 2-byte values via
+/// `nCodeBase` (0 upstream) and seg:off pairs via `nStartLoadOffset`.
+fn msdos_sig_ctx(hdr: usize) -> SigCtx {
+    let hdr = hdr as u64;
+    SigCtx {
+        // Post-header region mapped at segment address 0x10000000.
+        off_to_addr: Some(Box::new(move |o| {
+            (o >= hdr).then_some(0x1000_0000 + o - hdr)
+        })),
+        addr_to_off: Some(Box::new(move |a| {
+            (a >= 0x1000_0000).then(|| a - 0x1000_0000 + hdr)
+        })),
+        seg_wrap16: true,
+        msdos_addr: Some((0, hdr as i64)),
+    }
+}
+
+/// `XBinary::compareSignature` entry with the file's detected memory
+/// map: `$$`/`#` elements resolve through the format's address space
+/// (PE section extents, COM image base, MSDOS segment map); all other
+/// formats use flat offsets.
+pub fn match_signature_mapped(
+    data: &[u8],
+    file_name: &str,
+    offset: usize,
+    elements: &[diec_core::signature::SigElement],
+) -> bool {
+    let ft = sniff_ft_named(data, file_name);
+    let ctx = sig_ctx_for(data, ft);
+    match_signature_ctx(data, offset, elements, &ctx)
+}
+
+/// Build the `SigCtx` for a detected file type.
+pub fn sig_ctx_for(data: &[u8], ft: u16) -> SigCtx {
+    if matches!(ft, x if x == ft::FT_PE || x == ft::FT_PE32 || x == ft::FT_PE64)
+        && let Some(pe) = pe::collect(data)
+    {
+        return pe.sig_ctx();
+    }
+    if ft == ft::FT_MSDOS {
+        let hdr = parse::rd_u16(data, 0x08).map_or(0, |v| usize::from(v) * 16);
+        return msdos_sig_ctx(hdr);
+    }
+    if ft == ft::FT_COM {
+        let com_code = data.len().min(0x10000 - 0x100) as u64;
+        return SigCtx {
+            off_to_addr: Some(Box::new(|o| o.checked_add(0x100))),
+            addr_to_off: Some(Box::new(move |a| {
+                (a >= 0x100 && a < 0x100 + com_code).then_some(a - 0x100)
+            })),
+            seg_wrap16: true,
+            msdos_addr: None,
+        };
+    }
+    SigCtx::flat()
 }
 
 /// Port of `NFD_Binary::signatureExpScan`: `compareSignature` at an
@@ -118,12 +176,13 @@ fn signature_exp_scan(
     records: &[SignatureRecord],
     ft1: u16,
     ft2: u16,
+    ctx: &SigCtx,
 ) {
     for rec in records {
         if (rec.basic.ft != ft1 && rec.basic.ft != ft2) || map.contains_key(&rec.basic.name) {
             continue;
         }
-        if exp_match(data, rec.signature, offset) {
+        if exp_match(data, rec.signature, offset, ctx) {
             map.insert(rec.basic.name, ScanRecord::from_basic(&rec.basic));
         }
     }
@@ -131,6 +190,7 @@ fn signature_exp_scan(
 
 /// Port of `NFD_Binary::memoryScan`: find each signature anywhere inside
 /// `[offset, offset+size)`.
+#[allow(clippy::too_many_arguments)]
 fn memory_scan(
     map: &mut DetectMap,
     data: &[u8],
@@ -139,6 +199,7 @@ fn memory_scan(
     records: &[SignatureRecord],
     ft1: u16,
     ft2: u16,
+    ctx: &SigCtx,
 ) {
     if size == 0 {
         return;
@@ -159,7 +220,7 @@ fn memory_scan(
             continue;
         }
         for i in offset..=end - n {
-            if match_signature(data, i, &elements) {
+            if match_signature_ctx(data, i, &elements, ctx) {
                 map.insert(rec.basic.name, ScanRecord::from_basic(&rec.basic));
                 break;
             }
@@ -695,6 +756,15 @@ fn scan_file(
                 file_type,
                 ft::FT_COM,
             );
+            let com_code = data.len().min(0x10000 - 0x100) as u64;
+            let com_ctx = SigCtx {
+                off_to_addr: Some(Box::new(|o| o.checked_add(0x100))),
+                addr_to_off: Some(Box::new(move |a| {
+                    (a >= 0x100 && a < 0x100 + com_code).then_some(a - 0x100)
+                })),
+                seg_wrap16: true,
+                msdos_addr: None,
+            };
             signature_exp_scan(
                 &mut header,
                 data,
@@ -702,6 +772,7 @@ fn scan_file(
                 t::G_COM_EXP_RECORDS,
                 file_type,
                 ft::FT_COM,
+                &com_ctx,
             );
             // `NFD_COM::getInfo` tail — verbose OS record,
             // `handle_Protection` header->result transfers, conditional
@@ -1008,6 +1079,9 @@ fn pe_scan(
         return;
     };
     let ftpe = ft::FT_PE;
+    // `_MEMORY_MAP` resolution for `$$`/`#` signature elements
+    // (XPE::offsetToAddress/addressToOffset over section extents).
+    let pe_ctx = pe.sig_ctx();
     let actual = if pe.is64 { ft::FT_PE64 } else { ft::FT_PE32 };
 
     signature_scan(header, header_sig, t::PE_HEADER_RECORDS, actual, ftpe);
@@ -1075,6 +1149,7 @@ fn pe_scan(
                     t::PE_ENTRYPOINTEXP_RECORDS,
                     actual,
                     ftpe,
+                    &pe_ctx,
                 );
             }
             if n_offset > 20 || !cont {
@@ -1203,6 +1278,7 @@ fn pe_scan(
                 t::PE_CODESECTION_RECORDS,
                 actual,
                 ftpe,
+                &pe_ctx,
             );
             if pe.is_dotnet {
                 memory_scan(
@@ -1213,6 +1289,7 @@ fn pe_scan(
                     t::PE_DOT_CODESECTION_RECORDS,
                     actual,
                     ftpe,
+                    &pe_ctx,
                 );
             }
         }
@@ -1225,6 +1302,7 @@ fn pe_scan(
                 t::PE_ENTRYPOINTSECTION_RECORDS,
                 actual,
                 ftpe,
+                &pe_ctx,
             );
         }
     }
@@ -1389,8 +1467,11 @@ fn msdos_scan(
     );
 
     // MZ entry point: header_paragraphs*16 + CS*16 + IP.
+    let hdr = usize::from(u16::from_le_bytes([
+        *data.get(0x08).unwrap_or(&0),
+        *data.get(0x09).unwrap_or(&0),
+    ])) * 16;
     let ep_off = (|| {
-        let hdr = usize::from(u16::from_le_bytes([*data.get(0x08)?, *data.get(0x09)?])) * 16;
         let ip = usize::from(u16::from_le_bytes([*data.get(0x14)?, *data.get(0x15)?]));
         let cs = usize::from(u16::from_le_bytes([*data.get(0x16)?, *data.get(0x17)?]));
         Some(hdr + cs * 16 + ip)
@@ -1407,6 +1488,10 @@ fn msdos_scan(
         ft::FT_MSDOS,
         ft::FT_MSDOS,
     );
+    // Upstream maps the post-header region at segment address
+    // 0x10000000 (`XMSDOS::getMemoryMap`); `$$` wraps in 16 bits and
+    // `#` resolves against nCodeBase/nStartLoadOffset.
+    let msdos_ctx = msdos_sig_ctx(hdr);
     signature_exp_scan(
         entrypoint,
         data,
@@ -1414,6 +1499,7 @@ fn msdos_scan(
         t::G_MSDOS_ENTRYPOINTEXP_RECORDS,
         ft::FT_MSDOS,
         ft::FT_MSDOS,
+        &msdos_ctx,
     );
 
     msdos_extender_scan(data, opts, misc);

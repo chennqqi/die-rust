@@ -30,6 +30,12 @@ pub enum SigElement {
     /// matching at the target offset. Used for x86 call/jmp instructions.
     /// The target offset is resolved via RVA→file-offset conversion.
     RelOffset(usize),
+    /// Absolute address jump (`#` run of `2*N` chars): read an N-byte
+    /// little-endian *address* and continue matching at the file offset
+    /// it maps to through the memory map. Upstream `ST_ADDRESS`; the
+    /// optional `[hex]` suffix (`nBaseAddress`) is parsed but unused by
+    /// upstream `compareSignature`.
+    AbsAddress(usize),
     /// Forward byte search: `+` run (N times) followed by a byte pattern
     /// searches the pattern within the next `32 * N` bytes and continues
     /// matching right after the first hit (upstream ST_FINDBYTES).
@@ -180,9 +186,7 @@ pub fn parse_signature_ex(signature: &str) -> Result<Vec<SigElement>, SignatureE
                     "invalid # count ({count}) in signature"
                 )));
             }
-            for _ in 0..addr_size {
-                elements.push(SigElement::Any);
-            }
+            elements.push(SigElement::AbsAddress(addr_size));
             continue;
         }
 
@@ -418,7 +422,7 @@ fn element_matches_byte(elem: &SigElement, b: u8) -> bool {
         SigElement::NotAnsi => !(0x20..=0x7E).contains(&b),
         SigElement::NotAnsiNotNull => !(0x20..=0x7E).contains(&b) && b != 0,
         // Variable-width elements are handled by the cursor matcher.
-        SigElement::RelOffset(_) | SigElement::FindBytes { .. } => true,
+        SigElement::RelOffset(_) | SigElement::AbsAddress(_) | SigElement::FindBytes { .. } => true,
     }
 }
 
@@ -426,7 +430,7 @@ fn element_matches_byte(elem: &SigElement, b: u8) -> bool {
 fn element_is_fixed(elem: &SigElement) -> bool {
     !matches!(
         elem,
-        SigElement::RelOffset(_) | SigElement::FindBytes { .. }
+        SigElement::RelOffset(_) | SigElement::AbsAddress(_) | SigElement::FindBytes { .. }
     )
 }
 
@@ -445,6 +449,22 @@ fn match_find_bytes(data: &[u8], pos: usize, pattern: &[u8], delta: u64) -> Opti
         .map(|k| pos + k + pattern.len())
 }
 
+/// Read an `n`-byte little-endian unsigned integer at `pos`.
+fn read_le_unsigned(data: &[u8], pos: usize, n: usize) -> Option<u64> {
+    if pos.checked_add(n).is_none_or(|end| end > data.len()) {
+        return None;
+    }
+    match n {
+        1 => Some(u64::from(data[pos])),
+        2 => Some(u64::from(u16::from_le_bytes([data[pos], data[pos + 1]]))),
+        4 => Some(u64::from(u32::from_le_bytes(
+            data[pos..pos + 4].try_into().ok()?,
+        ))),
+        8 => Some(u64::from_le_bytes(data[pos..pos + 8].try_into().ok()?)),
+        _ => None,
+    }
+}
+
 /// Read an `n`-byte little-endian signed integer at `pos` (n in 1/2/4/8).
 fn read_le_signed(data: &[u8], pos: usize, n: usize) -> Option<i64> {
     if pos.checked_add(n).is_none_or(|end| end > data.len()) {
@@ -459,12 +479,60 @@ fn read_le_signed(data: &[u8], pos: usize, n: usize) -> Option<i64> {
     }
 }
 
+/// Address-space resolution context for `$$`/`#` signature elements,
+/// mirroring the `_MEMORY_MAP` handling inside upstream
+/// `XBinary::compareSignature`.
+///
+/// The identity (flat) context — `off_to_addr`/`addr_to_off` `None` —
+/// gives the upstream FT_BINARY behavior where address == file offset.
+#[derive(Default)]
+pub struct SigCtx {
+    /// File offset -> address (PE: RVA). `None` means identity.
+    pub off_to_addr: Option<Box<dyn Fn(u64) -> Option<u64> + Send + Sync>>,
+    /// Address -> file offset (PE: RVA/VA -> offset). `None` means
+    /// identity.
+    pub addr_to_off: Option<Box<dyn Fn(u64) -> Option<u64> + Send + Sync>>,
+    /// FT_COM/FT_MSDOS `$$` semantics: the displacement wraps inside a
+    /// 16-bit segment — `pos & !0xffff | u16(low16 + value)`.
+    pub seg_wrap16: bool,
+    /// FT_MSDOS `#` fields `(nCodeBase, nStartLoadOffset)`. Upstream
+    /// leaves `nCodeBase` at 0 (the assignment is commented out).
+    pub msdos_addr: Option<(i64, i64)>,
+}
+
+impl SigCtx {
+    /// Flat identity context (FT_BINARY and friends).
+    pub fn flat() -> Self {
+        Self::default()
+    }
+}
+
 /// Match a parsed signature against data at the given offset.
 /// `RelOffset` elements follow the upstream flat-file semantics: read the
 /// N-byte signed displacement at the current position and continue matching
 /// at `pos + value + N` (for non-PE files the file offset is the address).
 /// `FindBytes` searches forward per upstream ST_FINDBYTES semantics.
 pub fn match_signature(data: &[u8], offset: usize, elements: &[SigElement]) -> bool {
+    match_signature_ctx(data, offset, elements, &SigCtx::flat())
+}
+
+/// Match a parsed signature against data at `offset`, resolving `$$`
+/// (`RelOffset`) and `#` (`AbsAddress`) elements through `ctx`'s address
+/// map — the upstream `compareSignature` `_MEMORY_MAP` path.
+///
+/// - `$$` (`ST_RELOFFSET`): value = signed displacement + size. Under
+///   `seg_wrap16` (COM/MSDOS) the jump wraps inside the current 16-bit
+///   segment; otherwise `off_to_addr(pos) + value -> addr_to_off`.
+/// - `#` (`ST_ADDRESS`): reads an unsigned address and jumps to its
+///   mapped offset. Under `msdos_addr` (FT_MSDOS) 2-byte values gain
+///   `nCodeBase` and 4-byte values decode seg:off relative to
+///   `nStartLoadOffset`; sizes 1/8 leave `pos` unchanged upstream.
+pub fn match_signature_ctx(
+    data: &[u8],
+    offset: usize,
+    elements: &[SigElement],
+    ctx: &SigCtx,
+) -> bool {
     // An empty element list is not a valid signature upstream.
     if elements.is_empty() {
         return false;
@@ -482,6 +550,19 @@ pub fn match_signature(data: &[u8], offset: usize, elements: &[SigElement]) -> b
             .enumerate()
             .all(|(i, elem)| element_matches_byte(elem, data[offset + i]));
     }
+    let off_to_addr = |pos: usize| -> Option<u64> {
+        match &ctx.off_to_addr {
+            Some(f) => f(pos as u64),
+            None => Some(pos as u64),
+        }
+    };
+    let addr_to_off = |addr: u64| -> Option<usize> {
+        let mapped = match &ctx.addr_to_off {
+            Some(f) => f(addr)?,
+            None => addr,
+        };
+        usize::try_from(mapped).ok()
+    };
     let mut pos = offset;
     for elem in elements.iter() {
         match elem {
@@ -492,21 +573,64 @@ pub fn match_signature(data: &[u8], offset: usize, elements: &[SigElement]) -> b
                 }
             }
             SigElement::RelOffset(n) => {
-                // Flat-file jump: read N-byte signed displacement and land at
-                // pos + value + N (upstream `ST_RELOFFSET` for raw buffers).
+                // value = signed displacement + size (upstream folds the
+                // size into `nValue` before resolving the target).
                 let Some(value) = read_le_signed(data, pos, *n) else {
                     return false;
                 };
-                let Ok(delta) = isize::try_from(value) else {
+                let Some(value) = value.checked_add(*n as i64) else {
                     return false;
                 };
-                let Some(target) = pos
-                    .checked_add_signed(delta)
-                    .and_then(|t| t.checked_add(*n))
-                else {
+                if ctx.seg_wrap16 {
+                    let delta = (pos as u16).wrapping_add(value as u16) as usize;
+                    pos = (pos & !0xffff) + delta;
+                } else {
+                    let Some(base) = off_to_addr(pos) else {
+                        return false;
+                    };
+                    let Some(target) = base.checked_add_signed(value) else {
+                        return false;
+                    };
+                    let Some(next) = addr_to_off(target) else {
+                        return false;
+                    };
+                    pos = next;
+                }
+            }
+            SigElement::AbsAddress(n) => {
+                let Some(addr) = read_le_unsigned(data, pos, *n) else {
                     return false;
                 };
-                pos = target;
+                match ctx.msdos_addr {
+                    // FT_MSDOS: 2-byte address += nCodeBase (0 upstream),
+                    // 4-byte is a seg:off pair relative to the load offset;
+                    // other sizes leave the cursor where it is upstream.
+                    Some((_code_base, start_load)) => match n {
+                        2 => {
+                            let Some(next) = addr_to_off(addr) else {
+                                return false;
+                            };
+                            pos = next;
+                        }
+                        4 => {
+                            let low = addr & 0xffff;
+                            let high = addr >> 16;
+                            let Some(next) =
+                                (start_load + (high * 16 + low) as i64).try_into().ok()
+                            else {
+                                return false;
+                            };
+                            pos = next;
+                        }
+                        _ => {}
+                    },
+                    None => {
+                        let Some(next) = addr_to_off(addr) else {
+                            return false;
+                        };
+                        pos = next;
+                    }
+                }
             }
             _ => {
                 if pos >= data.len() || !element_matches_byte(elem, data[pos]) {
@@ -519,71 +643,148 @@ pub fn match_signature(data: &[u8], offset: usize, elements: &[SigElement]) -> b
     true
 }
 
-/// Match a parsed signature with PE-aware relative offset resolution.
-/// `rva_to_offset` converts a file offset to an RVA (used to compute
-/// the jump target for RelOffset elements).
-/// Returns true if the signature matches starting at `offset`.
+/// Match a parsed signature with PE address-space resolution: `$$`/`#`
+/// elements map file offsets to RVAs and back via the two closures.
+/// Equivalent to `match_signature_ctx` with a section-extent map.
 pub fn match_signature_pe(
     data: &[u8],
     offset: usize,
     elements: &[SigElement],
-    rva_to_offset: &dyn Fn(u32) -> Option<u32>,
+    off_to_rva: impl Fn(u64) -> Option<u64> + Send + Sync + 'static,
+    rva_to_off: impl Fn(u64) -> Option<u64> + Send + Sync + 'static,
 ) -> bool {
-    let mut pos = offset;
-    for elem in elements.iter() {
-        match elem {
-            SigElement::FindBytes { pattern, delta } => {
-                match match_find_bytes(data, pos, pattern, *delta) {
-                    Some(next) => pos = next,
-                    None => return false,
-                }
-            }
-            SigElement::RelOffset(addr_size) => {
-                // Read N-byte signed integer at current position (little-endian).
-                if pos + addr_size > data.len() {
-                    return false;
-                }
-                let value: i64 = match addr_size {
-                    1 => data[pos] as i8 as i64,
-                    2 => i16::from_le_bytes([data[pos], data[pos + 1]]) as i64,
-                    4 => {
-                        i32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]])
-                            as i64
-                    }
-                    8 => i64::from_le_bytes(data[pos..pos + 8].try_into().unwrap_or([0u8; 8])),
-                    _ => return false,
-                };
-                // Compute target file offset:
-                // target_rva = current_rva + value + addr_size
-                // target_offset = rva_to_offset(target_rva)
-                // We need the RVA of the current position (pos).
-                // Since we don't have offset_to_rva here, we approximate:
-                // For PE files, file_offset ≈ RVA when sections are aligned
-                // (which is the common case for .text at RVA=0x1000, offset=0x1000).
-                // The proper way: offset_to_rva(pos) + value + addr_size → rva → offset.
-                // We use the inverse of rva_to_offset to get RVA from offset.
-                // Since we don't have offset_to_rva, we compute:
-                // current_rva = pos (approximation for aligned PE)
-                // target_rva = current_rva + value + addr_size
-                // target_offset = rva_to_offset(target_rva)
-                let current_rva = pos as u32; // Approximation: works for aligned PEs
-                let target_rva = current_rva
-                    .wrapping_add(value as u32)
-                    .wrapping_add(*addr_size as u32);
-                match rva_to_offset(target_rva) {
-                    Some(target_offset) => {
-                        pos = target_offset as usize;
-                    }
-                    None => return false,
-                }
-            }
-            _ => {
-                if pos >= data.len() || !element_matches_byte(elem, data[pos]) {
-                    return false;
-                }
-                pos += 1;
-            }
-        }
+    match_signature_ctx(
+        data,
+        offset,
+        elements,
+        &SigCtx {
+            off_to_addr: Some(Box::new(off_to_rva)),
+            addr_to_off: Some(Box::new(rva_to_off)),
+            seg_wrap16: false,
+            msdos_addr: None,
+        },
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sig(s: &str) -> Vec<SigElement> {
+        parse_signature(s).expect("signature parses")
     }
-    true
+
+    /// Flat `$$` jump: `EB$$` reads a 1-byte signed displacement and
+    /// continues at `pos + disp + 1`.
+    #[test]
+    fn reloffset_flat_jump() {
+        // EB +4 -> jump to offset 2+... wait: at pos 1 read disp,
+        // target = 1 + disp + 1.
+        let d = [0xEBu8, 0x02, 0x00, 0x00, 0xAA, 0xBB];
+        // At pos1 disp=2 -> target = 1+2+1 = 4 -> bytes AA BB.
+        assert!(match_signature(&d, 0, &sig("EB$$AABB")));
+        assert!(!match_signature(&d, 0, &sig("EB$$BBBB")));
+    }
+
+    /// `$$` under `seg_wrap16` wraps inside the 16-bit segment
+    /// (upstream FT_COM/FT_MSDOS `ST_RELOFFSET` branch).
+    #[test]
+    fn reloffset_seg_wrap16() {
+        let ctx = SigCtx {
+            seg_wrap16: true,
+            ..SigCtx::flat()
+        };
+        // COM image < 64 KiB: pos=0x0005, disp -10 -> low16 wraps to
+        // 0xFFFC inside the same 16-bit segment.
+        let mut d = vec![0u8; 0x10000];
+        d[0x0005] = 0xEB;
+        // disp is read at 0x0006: target low16 = 6 - 10 + 1 = wraps to
+        // 0xFFFD inside the same segment.
+        d[0x0006] = 0xF6;
+        d[0xFFFD] = 0xCC;
+        assert!(match_signature_ctx(&d, 0x0005, &sig("EB$$CC"), &ctx));
+        // Flat semantics land at a negative offset and fail.
+        assert!(!match_signature(&d, 0x0005, &sig("EB$$CC")));
+    }
+
+    /// `#` reads a little-endian address and jumps to its mapped offset.
+    #[test]
+    fn abs_address_flat_jump() {
+        let d = [0x68u8, 0x06, 0x00, 0x00, 0x00, 0x00, 0x11, 0x22];
+        // At pos1 read u32 = 6 -> jump to offset 6 -> 11 22.
+        assert!(match_signature(&d, 0, &sig("68########1122")));
+        assert!(!match_signature(&d, 0, &sig("68########2211")));
+    }
+
+    /// `#` through a non-identity address map (offset->addr != addr->off).
+    #[test]
+    fn abs_address_mapped() {
+        let ctx = SigCtx {
+            off_to_addr: None,
+            // address 0x4000 -> file offset 0x10 (image at 0x4000).
+            addr_to_off: Some(Box::new(|a| a.checked_sub(0x4000))),
+            ..SigCtx::flat()
+        };
+        let mut d = vec![0u8; 0x20];
+        d[0] = 0x68;
+        d[1..5].copy_from_slice(&0x4010u32.to_le_bytes());
+        d[0x10] = 0xAA;
+        assert!(match_signature_ctx(&d, 0, &sig("68########AA"), &ctx));
+        // Flat: address 0x4010 lands outside the file -> fail.
+        assert!(!match_signature(&d, 0, &sig("68########AA")));
+    }
+
+    /// `$$` through a PE-like map where file offset != RVA: the
+    /// displacement applies to the *address*, not the file offset.
+    #[test]
+    fn reloffset_pe_map() {
+        // sec1 file [0x200,0x400) <-> RVA [0x1000,0x1200);
+        // sec2 file [0x400,0x600) <-> RVA [0x2000,0x2200).
+        let ctx = SigCtx {
+            off_to_addr: Some(Box::new(|o| {
+                if (0x200..0x400).contains(&o) {
+                    Some(o - 0x200 + 0x1000)
+                } else {
+                    (0x400..0x600).contains(&o).then_some(o - 0x400 + 0x2000)
+                }
+            })),
+            addr_to_off: Some(Box::new(|a| {
+                if (0x1000..0x1200).contains(&a) {
+                    Some(a - 0x1000 + 0x200)
+                } else {
+                    (0x2000..0x2200).contains(&a).then_some(a - 0x2000 + 0x400)
+                }
+            })),
+            seg_wrap16: false,
+            msdos_addr: None,
+        };
+        let mut d = vec![0u8; 0x600];
+        d[0x200] = 0xE9; // jmp rel32 at off 0x200
+        // disp is read at 0x201 (RVA 0x1001): target RVA 0x2000 ->
+        // file offset 0x400.
+        d[0x201..0x205].copy_from_slice(&(0x2000i32 - 0x1001 - 4).to_le_bytes());
+        d[0x400] = 0xAA;
+        assert!(match_signature_ctx(&d, 0x200, &sig("E9$$$$$$$$AA"), &ctx));
+        // Flat interpretation lands at 0x201+0xFFB+4 = 0x1000 -> fail.
+        assert!(!match_signature(&d, 0x200, &sig("E9$$$$$$$$AA")));
+    }
+
+    /// MSDOS `#` 4-byte seg:off resolution relative to the load offset.
+    #[test]
+    fn abs_address_msdos_segoff() {
+        let ctx = SigCtx {
+            off_to_addr: Some(Box::new(|o| (o >= 0x20).then_some(0x1000_0000 + o - 0x20))),
+            addr_to_off: Some(Box::new(|a| {
+                (a >= 0x1000_0000).then(|| a - 0x1000_0000 + 0x20)
+            })),
+            seg_wrap16: true,
+            msdos_addr: Some((0, 0x20)),
+        };
+        let mut d = vec![0u8; 0x100];
+        d[0x00] = 0x68;
+        // seg:off = 0x0000:0x0050 -> offset = 0x20 + 0x50 = 0x70.
+        d[1..5].copy_from_slice(&0x0000_0050u32.to_le_bytes());
+        d[0x70] = 0xBB;
+        assert!(match_signature_ctx(&d, 0, &sig("68########BB"), &ctx));
+    }
 }

@@ -7,9 +7,7 @@
 use diec_core::format::FileType;
 use diec_core::input::{ByteSource, ByteView, OwnedSource};
 use diec_rules::host_api::{HostApi, HostApiError};
-use diec_rules::host_api_bridge::{
-    convert_signature, match_signature, nibble_compare, parse_signature_ex,
-};
+use diec_rules::host_api_bridge::{convert_signature, nibble_compare, parse_signature_ex};
 use std::sync::{Arc, Mutex};
 
 /// A simple host API backed by an in-memory byte buffer.
@@ -81,6 +79,10 @@ pub struct BufferHost {
     /// PDSTRUCT error list — e.g. "Invalid signature"). Drained by the
     /// scanner after each rule evaluation.
     scan_errors: Mutex<Vec<String>>,
+    /// Lazily built `_MEMORY_MAP` signature context (`$$`/`#` address
+    /// resolution), cached so per-position scans don't re-parse the
+    /// file layout.
+    sig_ctx: std::sync::OnceLock<diec_core::signature::SigCtx>,
 }
 
 impl BufferHost {
@@ -95,6 +97,7 @@ impl BufferHost {
             file_name,
             flags: ScanFlags::default(),
             scan_errors: Mutex::new(Vec::new()),
+            sig_ctx: std::sync::OnceLock::new(),
         }
     }
 
@@ -108,6 +111,7 @@ impl BufferHost {
             file_name,
             flags: ScanFlags::default(),
             scan_errors: Mutex::new(Vec::new()),
+            sig_ctx: std::sync::OnceLock::new(),
         }
     }
 
@@ -134,6 +138,21 @@ impl BufferHost {
     }
 
     /// Get the underlying data as a slice.
+    /// The cached `_MEMORY_MAP` signature context for this buffer.
+    fn sig_ctx(&self) -> &diec_core::signature::SigCtx {
+        self.sig_ctx.get_or_init(|| {
+            diec_nfd::sig_ctx_for(
+                self.data(),
+                diec_nfd::sniff_ft_named(self.data(), &self.file_name),
+            )
+        })
+    }
+
+    /// `compareSignature` at `offset` through the cached memory map.
+    fn sig_match(&self, offset: usize, elements: &[diec_core::signature::SigElement]) -> bool {
+        diec_core::signature::match_signature_ctx(self.data(), offset, elements, self.sig_ctx())
+    }
+
     fn data(&self) -> &[u8] {
         self.source.as_slice()
     }
@@ -414,9 +433,7 @@ impl HostApi for BufferHost {
             return Ok(nibble_compare(self.data(), offset as usize, &normalized));
         }
         match parse_signature_ex(signature) {
-            Ok(elements) if !elements.is_empty() => {
-                Ok(match_signature(self.data(), offset as usize, &elements))
-            }
+            Ok(elements) if !elements.is_empty() => Ok(self.sig_match(offset as usize, &elements)),
             // Upstream compareSignature records "Invalid signature" for any
             // rejected or empty record list and returns false.
             _ => Ok(self.invalid_signature(signature, false)),
@@ -451,7 +468,7 @@ impl HostApi for BufferHost {
             return Ok(None);
         }
         for i in start..=data.len() - elements.len() {
-            if match_signature(data, i, &elements) {
+            if self.sig_match(i, &elements) {
                 return Ok(Some(i as u64));
             }
         }
@@ -486,7 +503,7 @@ impl HostApi for BufferHost {
             return Ok(None);
         }
         for i in start..=end - elements.len() {
-            if match_signature(data, i, &elements) {
+            if self.sig_match(i, &elements) {
                 return Ok(Some(i as u64));
             }
         }

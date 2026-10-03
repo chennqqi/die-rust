@@ -2029,5 +2029,21 @@ nrv 单测），前端 `npm run build` 通过。
   oracle 验证过的最小样本（RNC1/RNC2/TPWM/pack），回归测试含坏
   CRC/截断拒绝路径。**差分：76 语料文件 0 差异**。
 
+- **Phase 25 已完成**（签名 memory-map 语义 + 矩阵清扫）：
+  `diec-core::signature` 新增 `SigElem_ent::AbsAddress`（`#` 绝对
+  地址跳，之前近似为通配符）与 `SigCtx` 地址空间上下文（
+  `off_to_addr`/`addr_to_off` 闭包 + `seg_wrap16` + `msdos_addr`）。
+  `$$`（`ST_RELOFFSET`）现按上游 `compareSignature` 解析：非
+  COM/MSDOS 走 offset→address→+disp+size→address→offset（PE 经节
+  extents 的 RVA 映射，`PeInfo::sig_ctx`/`off_to_rva`），COM/MSDOS
+  走 16 位段回绕；`#`（`ST_ADDRESS`）按格式读绝对地址跳转，
+  MSDOS 2 字节加 `nCodeBase`（上游恒 0）、4 字节按 seg:off 加
+  `nStartLoadOffset`，上游 `nBaseAddress` 解析后未用为死字段。
+  接线：`signature_exp_scan`/`memory_scan`/`compare_ep` 按 ft 分派
+  ctx；`BufferHost` 规则 API `check_signature`/`find_signature`/
+  `find_signature_in_range` 经 `match_signature_mapped` +
+  `OnceLock` 缓存 ctx。COMPATIBILITY.md 检测矩阵 `⚠ partial`/
+  `差分未跑` 清扫为 ✅。差分：76 文件 0 差异。
+
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。

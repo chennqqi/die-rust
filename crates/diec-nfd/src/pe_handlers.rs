@@ -3776,7 +3776,8 @@ fn compare_at(d: &[u8], off: usize, pattern: &str) -> bool {
 }
 
 /// `compareEntryPoint` — signature match at the entry-point file
-/// offset with PE-aware relative jumps.
+/// offset, with `$$`/`#` resolved through the PE address map
+/// (`offsetToAddress`/`addressToOffset` over section extents).
 fn compare_ep(d: &[u8], pe: &PeInfo, pattern: &str) -> bool {
     if pe.entry_point_offset < 0 {
         return false;
@@ -3784,7 +3785,12 @@ fn compare_ep(d: &[u8], pe: &PeInfo, pattern: &str) -> bool {
     let Ok(elems) = diec_core::signature::parse_signature(pattern) else {
         return false;
     };
-    diec_core::signature::match_signature(d, pe.entry_point_offset as usize, &elems)
+    diec_core::signature::match_signature_ctx(
+        d,
+        pe.entry_point_offset as usize,
+        &elems,
+        &pe.sig_ctx(),
+    )
 }
 
 /// `NFD_PE::handle_Protection` (lines 1463-3113 of nfd_pe.cpp).

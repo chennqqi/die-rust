@@ -877,6 +877,52 @@ impl PeInfo {
         None
     }
 
+    /// `XPE::offsetToAddress` subset for signature jumps: map a file
+    /// offset inside a section's raw extent to its RVA.
+    pub fn off_to_rva(&self, off: usize) -> Option<u32> {
+        for e in &self.extents {
+            if off >= e.off && (off - e.off) < e.size {
+                return Some(e.vaddr.wrapping_add((off - e.off) as u32));
+            }
+        }
+        None
+    }
+
+    /// Owned `SigCtx` resolving `$$`/`#` signature elements through the
+    /// PE address map (`offsetToAddress`/`addressToOffset` over section
+    /// extents — upstream `XPE` `_MEMORY_MAP` semantics).
+    pub fn sig_ctx(&self) -> diec_core::signature::SigCtx {
+        let ext = self.extents.clone();
+        let ib = self.image_base;
+        let o2a = move |o: u64| -> Option<u64> {
+            let off = usize::try_from(o).ok()?;
+            for e in &ext {
+                if off >= e.off && (off - e.off) < e.size {
+                    return Some(u64::from(e.vaddr.wrapping_add((off - e.off) as u32)));
+                }
+            }
+            None
+        };
+        let ext = self.extents.clone();
+        let a2o = move |a: u64| -> Option<u64> {
+            let rva = if a >= ib { a.checked_sub(ib)? } else { a };
+            let rva = u32::try_from(rva).ok()?;
+            for e in &ext {
+                let span = e.size.max(e.vsize as usize);
+                if rva >= e.vaddr && (rva - e.vaddr) < span as u32 && e.size != 0 {
+                    return Some((e.off + (rva - e.vaddr) as usize) as u64);
+                }
+            }
+            None
+        };
+        diec_core::signature::SigCtx {
+            off_to_addr: Some(Box::new(o2a)),
+            addr_to_off: Some(Box::new(a2o)),
+            seg_wrap16: false,
+            msdos_addr: None,
+        }
+    }
+
     /// `XPE::isSectionNamePresent` — raw byte-name membership test
     /// (case-insensitive: our parser uppercases section names).
     pub fn has_section_name(&self, name: &str) -> bool {

@@ -43,7 +43,7 @@ pub mod gen_names;
 pub mod gen_tables;
 
 pub use engine::{
-    Detection, ScanOptions, ft_name, is_scanable_ft, name_id, rtype_id, scan, sniff_ft,
-    sniff_ft_named, supported_ft,
+    Detection, ScanOptions, ft_name, is_scanable_ft, match_signature_mapped, name_id, rtype_id,
+    scan, sig_ctx_for, sniff_ft, sniff_ft_named, supported_ft,
 };
 pub use scans::ScanRecord;
