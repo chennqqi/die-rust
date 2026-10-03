@@ -29,6 +29,7 @@ mod settings;
 mod ssdeep;
 mod state;
 mod string_extractor;
+mod updater;
 mod virustotal;
 mod visualization;
 mod yara_scanner;
@@ -61,6 +62,7 @@ fn main() {
             }
         }))
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::new())
         .setup(move |app| {
             // If launched with a file path (context menu), emit it to frontend.
@@ -143,6 +145,8 @@ fn main() {
             commands::evaluate_struct,
             commands::list_struct_methods,
             commands::get_entropy_info,
+            updater::check_for_update,
+            updater::install_update,
             commands::get_scan_info,
         ])
         .run(tauri::generate_context!())

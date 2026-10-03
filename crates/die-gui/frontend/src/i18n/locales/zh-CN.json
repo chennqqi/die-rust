@@ -221,6 +221,7 @@
     "contextMenuRemove": "从右键菜单移除",
     "contextMenuRemoveSuccess": "已成功从右键菜单移除。",
     "contextMenuUnsupported": "右键菜单集成仅支持 Windows 平台。",
+    "customThemeVars": "CSS variable overrides, one per line (--fg-primary: 210 215 225)",
     "dark": "暗色",
     "language": "语言",
     "light": "亮色",
@@ -228,6 +229,15 @@
     "scanFlags": "扫描标志",
     "system": "跟随系统",
     "theme": "主题",
+    "themeCustom": "Custom",
+    "update": "Updates",
+    "updateAvailable": "Version {{version}} is available.",
+    "updateCheck": "Check for Updates",
+    "updateChecking": "Checking for updates...",
+    "updateError": "Update check failed: {{error}}",
+    "updateInstall": "Download & Install",
+    "updateInstalling": "Installing update...",
+    "updateNone": "You are running the latest version.",
     "viewOptions": "视图选项"
   },
   "sigBrowser": {

@@ -45,6 +45,130 @@
   --accent-purple: 130 70 200;
 }
 
+/* Phase 49: XStyles-derived themes (upstream pin `948dd85`,
+   github.com/horsicq/XStyles qss/*.qss palettes mapped onto the CSS
+   variable set). */
+
+/* Solarized Dark — canonical Solarized palette (SolarizedDark.qss) */
+.theme-solarized-dark {
+  --bg-window: 0 43 54;           /* base03 #002b36 */
+  --bg-panel: 7 54 66;            /* base02 #073642 */
+  --bg-input: 0 43 54;
+  --bg-hover: 14 75 90;           /* #0e4b5a */
+  --bg-selected: 38 139 210;      /* blue #268bd2 */
+  --bg-accent: 14 75 90;
+  --fg-primary: 147 161 161;      /* base1 #93a1a1 */
+  --fg-secondary: 131 148 150;    /* base0 #839496 */
+  --fg-muted: 88 110 117;         /* base01 #586e75 */
+  --border-color: 7 54 66;
+  --border-light: 14 75 90;
+  --accent-blue: 38 139 210;      /* blue #268bd2 */
+  --accent-green: 133 153 0;      /* green #859900 */
+  --accent-red: 220 50 47;        /* red #dc322f */
+  --accent-yellow: 181 137 0;     /* yellow #b58900 */
+  --accent-purple: 108 113 196;   /* violet #6c71c4 */
+}
+
+/* Film Noir — near-grayscale dark (Film-Noir.qss) */
+.theme-film-noir {
+  --bg-window: 20 20 20;          /* #141414 */
+  --bg-panel: 37 37 37;           /* #252525 */
+  --bg-input: 10 10 10;           /* #0a0a0a */
+  --bg-hover: 48 48 48;
+  --bg-selected: 43 61 81;        /* #2b3d51 */
+  --bg-accent: 43 61 81;
+  --fg-primary: 230 230 230;      /* #e6e6e6 */
+  --fg-secondary: 192 192 192;    /* #c0c0c0 */
+  --fg-muted: 90 90 90;           /* #5a5a5a */
+  --border-color: 60 60 60;
+  --border-light: 80 80 80;
+  --accent-blue: 120 150 180;
+  --accent-green: 120 180 120;
+  --accent-red: 200 80 80;
+  --accent-yellow: 200 170 80;
+  --accent-purple: 150 130 190;
+}
+
+/* Midnight Elegance — deep indigo + gold (Midnight Elegance.qss) */
+.theme-midnight-elegance {
+  --bg-window: 7 4 54;            /* #070436 */
+  --bg-panel: 20 16 96;           /* #141060 */
+  --bg-input: 10 6 71;            /* #0a0647 */
+  --bg-hover: 42 37 112;          /* #2a2570 */
+  --bg-selected: 74 65 160;
+  --bg-accent: 42 37 112;
+  --fg-primary: 240 238 255;      /* #f0eeff */
+  --fg-secondary: 170 166 220;
+  --fg-muted: 106 102 160;        /* #6a66a0 */
+  --border-color: 42 37 112;
+  --border-light: 74 65 160;
+  --accent-blue: 201 162 39;      /* gold #c9a227 */
+  --accent-green: 120 200 130;
+  --accent-red: 220 90 100;
+  --accent-yellow: 228 196 85;    /* #e4c455 */
+  --accent-purple: 138 109 240;
+}
+
+/* Lavender Dawn — light pastel (Lavender-Dawn.qss) */
+.theme-lavender-dawn {
+  --bg-window: 245 232 212;       /* #f5e8d4 */
+  --bg-panel: 232 216 232;        /* #e8d8e8 */
+  --bg-input: 255 255 255;
+  --bg-hover: 240 224 240;
+  --bg-selected: 245 199 184;     /* #f5c7b8 */
+  --bg-accent: 216 200 216;
+  --fg-primary: 74 69 72;         /* #4a4548 */
+  --fg-secondary: 110 100 108;
+  --fg-muted: 160 160 160;
+  --border-color: 216 200 216;
+  --border-light: 200 184 200;
+  --accent-blue: 150 120 180;
+  --accent-green: 90 160 110;
+  --accent-red: 200 90 100;
+  --accent-yellow: 200 160 70;
+  --accent-purple: 140 100 160;
+}
+
+/* Emerald Dusk — deep green dark (Emerald Dusk.qss) */
+.theme-emerald-dusk {
+  --bg-window: 1 5 5;             /* #010505 */
+  --bg-panel: 16 34 22;
+  --bg-input: 2 10 7;
+  --bg-hover: 30 60 38;
+  --bg-selected: 21 110 60;
+  --bg-accent: 30 70 40;
+  --fg-primary: 240 255 248;
+  --fg-secondary: 160 200 175;
+  --fg-muted: 90 130 105;
+  --border-color: 30 70 40;
+  --border-light: 45 95 55;
+  --accent-blue: 21 183 107;      /* #15b76b */
+  --accent-green: 21 183 107;
+  --accent-red: 220 80 90;
+  --accent-yellow: 210 190 70;
+  --accent-purple: 140 130 220;
+}
+
+/* Cyber Noir — dark slate + amber accent (Cyber-Noir.qss) */
+.theme-cyber-noir {
+  --bg-window: 18 20 25;          /* #121419 */
+  --bg-panel: 37 40 48;           /* #252830 */
+  --bg-input: 16 18 24;
+  --bg-hover: 56 64 72;           /* #384048 */
+  --bg-selected: 60 80 96;
+  --bg-accent: 56 64 72;
+  --fg-primary: 192 192 199;      /* #c0c0c7 */
+  --fg-secondary: 145 150 158;
+  --fg-muted: 90 95 102;
+  --border-color: 50 54 62;
+  --border-light: 70 76 86;
+  --accent-blue: 216 142 44;      /* amber #d88e2c */
+  --accent-green: 100 180 110;
+  --accent-red: 210 80 80;
+  --accent-yellow: 216 142 44;
+  --accent-purple: 150 120 210;
+}
+
 body {
   margin: 0;
   font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;

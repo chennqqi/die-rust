@@ -58,6 +58,7 @@ import { MemoryMapViewer } from "./components/MemoryMapViewer";
 import { ArchiveViewer } from "./components/ArchiveViewer";
 import { DataConverter } from "./components/DataConverter";
 import VisualizationPanel from "./components/VisualizationPanel";
+import { SUPPORTED_LANGUAGES } from "./i18n/config";
 import ExtractorPanel from "./components/ExtractorPanel";
 import StringExtractor from "./components/StringExtractor";
 import MiscViewPanel from "./components/MiscViewPanel";
@@ -155,7 +156,7 @@ interface ScanFlagsDto {
 }
 
 interface AppSettings {
-  view: { theme: string; language: string; stay_on_top: boolean; advanced: boolean };
+  view: { theme: string; custom_theme?: string; language: string; stay_on_top: boolean; advanced: boolean };
   file: { last_directory: string; recent_files: string[]; save_backup: boolean };
   scan: {
     scan_after_open: boolean;
@@ -246,6 +247,7 @@ export default function App() {
   const [fileInfo, setFileInfo] = useState<{ format: string; base_address: number; entry_point: number; format_count: number; format_counts?: { label: string; count: number }[] } | null>(null);
   const [ctxMenuStatus, setCtxMenuStatus] = useState<"installed" | "not_installed" | "checking" | "unsupported">("checking");
   const [ctxMenuMsg, setCtxMenuMsg] = useState<string | null>(null);
+  const [updateState, setUpdateState] = useState<{ status: "idle" | "checking" | "none" | "available" | "installing" | "error"; version?: string; error?: string }>({ status: "idle" });
   const [activeTab, setActiveTab] = useState<TabId>("scan");
   const [disasmJumpOffset, setDisasmJumpOffset] = useState<number | null>(null);
   const [hexJumpOffset, setHexJumpOffset] = useState<number | null>(null);
@@ -355,6 +357,38 @@ export default function App() {
       setCtxMenuMsg(t("settings.contextMenuError", { error: err.message ?? String(e) }));
     }
   }, [t]);
+
+  // Check the configured update endpoints for a newer signed release.
+  const checkUpdates = useCallback(async () => {
+    setUpdateState({ status: "checking" });
+    try {
+      const res = await invoke<{ available: boolean; version: string | null; error: string | null }>("check_for_update");
+      if (res.available && res.version) {
+        setUpdateState({ status: "available", version: res.version });
+      } else if (res.error) {
+        setUpdateState({ status: "error", error: res.error });
+      } else {
+        setUpdateState({ status: "none" });
+      }
+    } catch (e) {
+      const err = e as GuiError;
+      setUpdateState({ status: "error", error: err.message ?? String(e) });
+    }
+  }, []);
+
+  // Download, verify and install the pending update, then relaunch.
+  const installUpdate = useCallback(async () => {
+    setUpdateState((s) => ({ ...s, status: "installing" }));
+    try {
+      await invoke("install_update");
+      // The app relaunches on success; reaching this line means the
+      // install path returned without restarting (platform quirk).
+      setUpdateState({ status: "none" });
+    } catch (e) {
+      const err = e as GuiError;
+      setUpdateState({ status: "error", error: err.message ?? String(e) });
+    }
+  }, []);
 
   // Register drag-drop event listener (Tauri only; silently ignored in browser).
   useEffect(() => {
@@ -691,45 +725,62 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [pickFile, pickDirectory, toggleFullscreen, filePath, scanning, scan, result, copyResults]);
 
-  // Apply theme to document root.
+  // Apply theme to document root. Themes are CSS classes: `light`,
+  // `dark` (or system-resolved), plus the XStyles-derived `theme-*`
+  // sets (Phase 49). "custom" uses the dark base plus inline CSS
+  // variable overrides from `view.custom_theme`.
   useEffect(() => {
+    const THEME_CLASSES = [
+      "light", "dark",
+      "theme-solarized-dark", "theme-film-noir", "theme-midnight-elegance",
+      "theme-lavender-dawn", "theme-emerald-dusk", "theme-cyber-noir",
+    ];
+    const appliedVars: string[] = [];
+    const setMode = (mode: "light" | "dark") => {
+      document.documentElement.classList.remove(...THEME_CLASSES);
+      document.documentElement.classList.add(mode);
+    };
+    // Only the palette variables defined in index.css may be overridden;
+    // values are restricted to a safe token set (no `;`, `url()`, quotes).
+    const THEME_VAR_NAMES = new Set([
+      "--bg-window", "--bg-panel", "--bg-input", "--bg-hover", "--bg-selected",
+      "--bg-accent", "--fg-primary", "--fg-secondary", "--fg-muted",
+      "--border-color", "--border-light", "--accent-blue", "--accent-green",
+      "--accent-red", "--accent-yellow", "--accent-purple",
+    ]);
     const applyTheme = (theme: string) => {
-      if (theme === "light") {
-        document.documentElement.classList.remove("dark");
-        document.documentElement.classList.add("light");
-      } else if (theme === "dark") {
-        document.documentElement.classList.remove("light");
-        document.documentElement.classList.add("dark");
+      document.documentElement.classList.remove(...THEME_CLASSES);
+      for (const v of appliedVars) {
+        document.documentElement.style.removeProperty(v);
       }
-      // "system" theme: detect OS preference.
-      if (theme === "system") {
-        const mq = window.matchMedia("(prefers-color-scheme: dark)");
-        if (mq.matches) {
-          document.documentElement.classList.remove("light");
-          document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
-          document.documentElement.classList.add("light");
+      appliedVars.length = 0;
+      if (theme === "light" || theme === "dark") {
+        setMode(theme);
+      } else if (theme === "custom") {
+        setMode("dark");
+        for (const line of (settings.view.custom_theme ?? "").split(/[\n;]/)) {
+          const m = /^\s*(--[\w-]+)\s*:\s*([0-9a-fA-F\s(),.%#-]+)\s*$/.exec(line);
+          if (m && THEME_VAR_NAMES.has(m[1])) {
+            document.documentElement.style.setProperty(m[1], m[2]);
+            appliedVars.push(m[1]);
+          }
         }
+      } else if (theme !== "system" && /^[a-z0-9-]+$/.test(theme)) {
+        document.documentElement.classList.add(`theme-${theme}`);
+      }
+      if (theme === "system") {
+        setMode(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
       }
     };
     applyTheme(settings.view.theme);
     // Listen for OS theme changes when in system mode.
     if (settings.view.theme === "system") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
-      const onChange = (e: MediaQueryListEvent) => {
-        if (e.matches) {
-          document.documentElement.classList.remove("light");
-          document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
-          document.documentElement.classList.add("light");
-        }
-      };
+      const onChange = (e: MediaQueryListEvent) => setMode(e.matches ? "dark" : "light");
       mq.addEventListener("change", onChange);
       return () => mq.removeEventListener("change", onChange);
     }
-  }, [settings.view.theme]);
+  }, [settings.view.theme, settings.view.custom_theme]);
 
   const toggleNode = (id: string) => {
     setExpandedNodes((prev) => {
@@ -920,6 +971,13 @@ export default function App() {
                 <option value="system">{t("settings.system")}</option>
                 <option value="dark">{t("settings.dark")}</option>
                 <option value="light">{t("settings.light")}</option>
+                <option value="solarized-dark">Solarized Dark</option>
+                <option value="film-noir">Film Noir</option>
+                <option value="midnight-elegance">Midnight Elegance</option>
+                <option value="lavender-dawn">Lavender Dawn</option>
+                <option value="emerald-dusk">Emerald Dusk</option>
+                <option value="cyber-noir">Cyber Noir</option>
+                <option value="custom">{t("settings.themeCustom")}</option>
               </select>
               <select
                 className="input py-0.5 px-1.5"
@@ -927,13 +985,23 @@ export default function App() {
                 onChange={(e) => setSettings({ ...settings, view: { ...settings.view, language: e.target.value } })}
                 style={{ width: "100px" }}
               >
-                <option value="en">English</option>
-                <option value="zh-CN">中文</option>
-                <option value="ru">Русский</option>
-                <option value="de">Deutsch</option>
-                <option value="fr">Français</option>
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <option key={lang.code} value={lang.code}>{lang.name}</option>
+                ))}
               </select>
             </div>
+            {settings.view.theme === "custom" && (
+              <div className="flex flex-col gap-1 text-xs">
+                <span className="text-fg-muted">{t("settings.customThemeVars")}</span>
+                <textarea
+                  className="input py-0.5 px-1.5 mono"
+                  rows={3}
+                  value={settings.view.custom_theme ?? ""}
+                  onChange={(e) => setSettings({ ...settings, view: { ...settings.view, custom_theme: e.target.value } })}
+                  placeholder="--fg-primary: 210 215 225"
+                />
+              </div>
+            )}
             <label className="flex items-center gap-1.5 cursor-pointer text-xs hover:text-fg-primary">
               <input
                 type="checkbox"
@@ -983,6 +1051,36 @@ export default function App() {
                 )}
               </>
             )}
+          </div>
+          {/* Auto-update */}
+          <div className="border-t border-border-c pt-2 space-y-1.5">
+            <div className="text-xs font-medium text-fg-secondary">{t("settings.update")}</div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-fg-muted">
+                {updateState.status === "checking" && t("settings.updateChecking")}
+                {updateState.status === "none" && t("settings.updateNone")}
+                {updateState.status === "available" && t("settings.updateAvailable", { version: updateState.version })}
+                {updateState.status === "installing" && t("settings.updateInstalling")}
+                {updateState.status === "error" && t("settings.updateError", { error: updateState.error })}
+              </span>
+              <div className="flex-1" />
+              {updateState.status === "available" ? (
+                <button
+                  onClick={installUpdate}
+                  className="px-2 py-0.5 text-xs bg-primary text-background rounded disabled:opacity-50"
+                >
+                  {t("settings.updateInstall")}
+                </button>
+              ) : (
+                <button
+                  onClick={checkUpdates}
+                  disabled={updateState.status === "checking" || updateState.status === "installing"}
+                  className="px-2 py-0.5 text-xs border border-border-c rounded hover:bg-hover disabled:opacity-50"
+                >
+                  {t("settings.updateCheck")}
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex gap-2 pt-1">
             <button onClick={saveSettings} className="btn btn-primary">{t("settings.save")}</button>

@@ -2235,12 +2235,12 @@ name/size/packed/dir/mtime + 提取字节 parity；上游提取失败的
   pin 树——无源码可移植、无 oracle 可验证。**Blocked**（ADR 0042
   #4）：解除条件为独立 pin horsicq/XEmulator 源 + 可复现 oracle
   构建 + 沙盒执行安全评审。
-- **tauri 自动更新**（ADR 0019）：上游 XUpdate/XOnlineTools
-  为未检出 Qt 组件且非 diec 控制台路径；更新签名密钥与
-  更新服务器属产品/分发决策。**Conditional** → Phase 48。
+- **tauri 自动更新**（ADR 0019）：代码侧已交付（Phase 48 ✅）；
+  生产签名密钥/更新服务器/CI 签名管线仍属产品/分发决策，
+  dev fixture 密钥不可用于发布。
 - **XStyles 主题生态**：上游 Qt 样式体系（QSS），**Permanent**
-  平台差异；如有主题需求走 Tauri-native CSS 变量方案
-  （Conditional → Phase 49）。
+  平台差异；Tauri-native CSS 变量方案已交付（Phase 49 ✅，
+  6 个代表主题 + 自定义覆盖入口）。
 - **RNC old 变体/加密流真实语料**：代码已全量移植，真实
   ProPack 样本属语料缺口非代码任务（**Conditional** →
   Phase 47 生成器/哈希清单路线）。
@@ -2497,18 +2497,35 @@ Windows-only 实为 parity（上游 `registerContext` 同样
   保留为哈希清单 fallback——生成流已被 oracle 接受，fallback
   不再必要）。
 
-**Conditional（触发条件未满足，仅登记不产码）：**
+- **Phase 48：Tauri 自动更新** — ✅ DONE（2026-10-12，代码侧；
+  生产签名 infra 仍待部署决策）
+  `tauri-plugin-updater` v2.12.0 + `tauri.conf.json` plugins.updater
+  （pubkey/endpoints 占位 dev fixture）+ `src/updater.rs` IPC
+  命令（check/download_and_install）+ 设置页 "Check for Updates"
+  区块（状态/进度/安装按钮）+ 24 locale i18n 键。
+  `corpus/updater` dev Ed25519 密钥对 + minisign 签名生成器
+  （Python `cryptography`）——**仅为测试夹具，非生产密钥**。
+  `tests/updater_flow.rs` 5 集成测试全过（`generate_context!`
+  嵌入真实 conf + 本地 HTTP mock + `updater_builder` 覆盖
+  endpoints）：有效签名更新发现/下载验签、篡改签名拒绝、
+  离线端点 fail-closed、降级不提示、签名元数据版本不符拒绝。
+  残留条件项：生产 endpoint/公钥/CI 私钥签名管线 = 部署决策
+  （ADR 0019 更新）。
+- **Phase 49：Tauri-native 主题扩展** — ✅ DONE（2026-10-12）
+  XStyles pin `948dd85` 检出审阅 50+ QSS 后选 6 个代表主题翻译为
+  CSS 变量集（`theme-solarized-dark`/`film-noir`/`midnight-elegance`/
+  `lavender-dawn`/`emerald-dusk`/`cyber-noir`，仅色板映射——非
+  QSS 选择器等价，视觉近似定位不变）。`ViewSettings.custom_theme`
+  字段（Rust `String` ↔ TS optional）持久化自定义覆盖；
+  "custom" 主题 = dark 基底 + 白名单 16 个 palette 变量内联覆盖
+  （值字符集受限，禁 `;`/引号/`url()`——防 CSS 注入）。theme 名
+  合法性守卫（手改 settings.json 不再致 `classList` 抛异常）。
+  两处设置 UI（App 快捷面板 + SettingsModal）同步 9 主题选项 +
+  自定义覆盖文本框；App.tsx 语言下拉改用 Phase 45 动态
+  `SUPPORTED_LANGUAGES`（补漏）。前端 tsc/build 通过；i18n
+  校验 24×279 键全过。
 
-- **Phase 48：Tauri 自动更新**（ADR 0019 既定 Implementation Plan）
-  触发：发布 infra 决策（Ed25519 密钥对、私钥 CI 存储、更新
-  manifest 端点）。范围：`tauri-plugin-updater` + `tauri.conf.json`
-  pubkey + "Check for Updates" 入口 + 签名校验/无效签名/离线
-  负向测试 + 降级防护。私钥永不入仓。
-- **Phase 49：Tauri-native 主题扩展**
-  触发：用户/分发方提出 light/dark/system 之外的主题需求。
-  范围：XStyles（pin `948dd85`，未检出——需按需拉取该 commit）
-  代表性主题翻译为 CSS 变量集 + 自定义主题覆盖入口。定位为
-  视觉近似，非 QSS 选择器等价。
+**Conditional（触发条件未满足，仅登记不产码）：**
 
 **Permanent / Blocked / Parity（不再单独编号）：**
 

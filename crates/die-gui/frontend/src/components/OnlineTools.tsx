@@ -49,7 +49,7 @@ interface VtScanInfo {
 }
 
 interface AppSettings {
-  view: { theme: string; language: string; stay_on_top: boolean; advanced: boolean };
+  view: { theme: string; custom_theme?: string; language: string; stay_on_top: boolean; advanced: boolean };
   file: { last_directory: string; recent_files: string[]; save_backup: boolean };
   scan: {
     scan_after_open: boolean;

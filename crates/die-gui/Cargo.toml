@@ -63,6 +63,7 @@ capstone = { version = "0.14.0", default-features = false, features = ["arch_arm
 # WASM (DM_WASM): `capstone::Arch` has no WASM variant, so that one
 # mode is driven through capstone-sys directly (see disassembler.rs).
 capstone-sys = { version = "0.18.0", default-features = false, features = ["arch_wasm", "full"] }
+tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
@@ -71,6 +72,7 @@ winreg = "0.55"
 diec-engine = { workspace = true }
 diec-core = { workspace = true }
 tempfile = "3.27.0"
+tauri = { version = "2", features = ["test"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

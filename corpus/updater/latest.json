@@ -1,0 +1,11 @@
+{
+  "version": "99.0.0",
+  "notes": "dev update fixture",
+  "pub_date": "2026-10-12T00:00:00Z",
+  "platforms": {
+    "linux-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIGRpZWMtcnVzdCBkZXYga2V5ClJXUmthV1ZqWkdWMk1ZbXJmN3BsTDl5MGFwdHVpWllLZDdiL3ppY08rUlFJeDlhQ0NnajdEWFdpWEV1Qnd6NDhjY0hUQVFNSDY3RUgxMjJhNU9seEZET1V6QjIrcm4xOVRBTT0KdHJ1c3RlZCBjb21tZW50OiB0aW1lc3RhbXA6MAl2ZXJzaW9uOjk5LjAuMApCS0NxSklzUGhHNXYrYld5NENoVXI4NFZNMkIxemo2YVAvbFZVQ01nQjlEWUxoU1RCZzZFWlFEZ3lrRW9ZSEswR2FORFE0YXJ0emcxYlFWeEo4Z3VDZz09Cg==",
+      "url": "http://127.0.0.1:0/update.bin"
+    }
+  }
+}

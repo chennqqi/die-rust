@@ -65,5 +65,14 @@
       }
     }
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/chennqqi/diec-rust/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IGRpZWMtcnVzdCBkZXYgdXBkYXRlciBrZXkKUldSa2FXVmpaR1YyTWZNazhSZWZvMXRpaWZqTUVyNmRvdk85WVBKb1RhTEt5WW1IWUhhVUhZd1YK",
+      "requireSignedVersion": true
+    }
+  }
 }

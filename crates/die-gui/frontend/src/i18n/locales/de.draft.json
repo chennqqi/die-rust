@@ -1,5 +1,16 @@
 {
-  "drafts": [],
+  "drafts": [
+    "settings.customThemeVars",
+    "settings.themeCustom",
+    "settings.update",
+    "settings.updateAvailable",
+    "settings.updateCheck",
+    "settings.updateChecking",
+    "settings.updateError",
+    "settings.updateInstall",
+    "settings.updateInstalling",
+    "settings.updateNone"
+  ],
   "same": [
     "advancedToolbar.auto",
     "advancedToolbar.flags",

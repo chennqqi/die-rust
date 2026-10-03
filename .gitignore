@@ -44,3 +44,4 @@ __pycache__/
 /tools/capstone-oracle/disasm_oracle
 /tools/msdos-oracle/build/
 /tools/demangle-oracle/build/
+/tools/updater/dev.key

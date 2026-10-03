@@ -221,6 +221,7 @@
     "contextMenuRemove": "Удалить из контекстного меню",
     "contextMenuRemoveSuccess": "Успешно удалено из контекстного меню.",
     "contextMenuUnsupported": "Интеграция с контекстным меню поддерживается только в Windows.",
+    "customThemeVars": "CSS variable overrides, one per line (--fg-primary: 210 215 225)",
     "dark": "Тёмная",
     "language": "Язык",
     "light": "Светлая",
@@ -228,6 +229,15 @@
     "scanFlags": "Флаги сканирования",
     "system": "Системная",
     "theme": "Тема",
+    "themeCustom": "Custom",
+    "update": "Updates",
+    "updateAvailable": "Version {{version}} is available.",
+    "updateCheck": "Check for Updates",
+    "updateChecking": "Checking for updates...",
+    "updateError": "Update check failed: {{error}}",
+    "updateInstall": "Download & Install",
+    "updateInstalling": "Installing update...",
+    "updateNone": "You are running the latest version.",
     "viewOptions": "Параметры просмотра"
   },
   "sigBrowser": {

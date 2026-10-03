@@ -36,8 +36,13 @@ pub struct OnlineToolsSettings {
 /// View-related settings (upstream `XOptions::ID_VIEW_*`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ViewSettings {
-    /// Theme name: "light", "dark", "system", or custom CSS name.
+    /// Theme name: "light", "dark", "system", a built-in theme class
+    /// ("solarized-dark", ...), or "custom".
     pub theme: String,
+    /// Custom-theme CSS variable overrides (`--name: r g b` per line),
+    /// used when `theme == "custom"` (Phase 49).
+    #[serde(default)]
+    pub custom_theme: String,
     /// Language code: "en", "zh-CN", "ru", etc.
     pub language: String,
     /// Stay on top of other windows.
@@ -150,6 +155,7 @@ impl Default for AppSettings {
         Self {
             view: ViewSettings {
                 theme: "system".to_string(),
+                custom_theme: String::new(),
                 language: "en".to_string(),
                 stay_on_top: false,
                 advanced: false,

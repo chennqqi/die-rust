@@ -7,6 +7,7 @@ import { SUPPORTED_LANGUAGES } from '../i18n/config';
 
 interface ViewSettings {
   theme: string;
+  custom_theme?: string;
   language: string;
   stay_on_top: boolean;
   advanced: boolean;
@@ -191,8 +192,32 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                         <option value="system">System</option>
                         <option value="light">Light</option>
                         <option value="dark">Dark</option>
+                        <option value="solarized-dark">Solarized Dark</option>
+                        <option value="film-noir">Film Noir</option>
+                        <option value="midnight-elegance">Midnight Elegance</option>
+                        <option value="lavender-dawn">Lavender Dawn</option>
+                        <option value="emerald-dusk">Emerald Dusk</option>
+                        <option value="cyber-noir">Cyber Noir</option>
+                        <option value="custom">Custom</option>
                       </select>
                     </label>
+                    {settings.view.theme === 'custom' && (
+                      <label>
+                        Custom theme variables:
+                        <textarea
+                          rows={4}
+                          className="w-full text-xs font-mono"
+                          value={settings.view.custom_theme ?? ''}
+                          onChange={(e) =>
+                            updateSettings((s) => ({
+                              ...s,
+                              view: { ...s.view, custom_theme: e.target.value },
+                            }))
+                          }
+                          placeholder="--fg-primary: 210 215 225"
+                        />
+                      </label>
+                    )}
                     <label>
                       Language:
                       <select

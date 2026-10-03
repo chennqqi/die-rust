@@ -221,6 +221,7 @@
     "contextMenuRemove": "Retirer du menu contextuel",
     "contextMenuRemoveSuccess": "Retrait du menu contextuel réussi.",
     "contextMenuUnsupported": "L'intégration au menu contextuel n'est prise en charge que sous Windows.",
+    "customThemeVars": "CSS variable overrides, one per line (--fg-primary: 210 215 225)",
     "dark": "Sombre",
     "language": "Langue",
     "light": "Clair",
@@ -228,6 +229,15 @@
     "scanFlags": "Indicateurs d'analyse",
     "system": "Système",
     "theme": "Thème",
+    "themeCustom": "Custom",
+    "update": "Updates",
+    "updateAvailable": "Version {{version}} is available.",
+    "updateCheck": "Check for Updates",
+    "updateChecking": "Checking for updates...",
+    "updateError": "Update check failed: {{error}}",
+    "updateInstall": "Download & Install",
+    "updateInstalling": "Installing update...",
+    "updateNone": "You are running the latest version.",
     "viewOptions": "Options d'affichage"
   },
   "sigBrowser": {

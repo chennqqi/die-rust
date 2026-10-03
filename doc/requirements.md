@@ -1429,3 +1429,14 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   0x04d2、unique-key GF(2) 恢复 0xBEEF、欠定负向）；上游 oracle
   逐条验证；`oracle_alignment.rs` +5 测试；NFD 差分 337 文件
   0 差异。
+
+### 2026-10-12：完成剩余 Phase（48/49）的开发
+
+- Phase 48：`tauri-plugin-updater` v2.12.0 + `src/updater.rs` IPC
+  + 设置页更新入口 + `corpus/updater` dev Ed25519 签名夹具 +
+  `tests/updater_flow.rs` 5 集成测试（有效签名/篡改/离线/降级/
+  版本不符）。生产密钥/端点/CI 签名仍为部署决策（ADR 0019）。
+- Phase 49：XStyles pin `948dd85` 六代表色板 → CSS 变量主题类 +
+  `ViewSettings.custom_theme` 白名单变量覆盖持久化 + 两处设置
+  UI 同步 + 语言下拉动态化补漏。
+- 文档：ADR 0019/0042、ROADMAP、COMPATIBILITY 同步。

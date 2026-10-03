@@ -411,8 +411,8 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
   （Phase 19），存储格式为永久产品差异
 - ADR 0038：i18n 增量覆盖 — Accepted；术语锚定草稿生成已排
   **Phase 45**
-- ADR 0019：Tauri 自动更新 — **Conditional**（Phase 48，待签名
-  infra 决策）
+- ADR 0019：Tauri 自动更新 — ✅ 代码侧（Phase 48）；生产签名
+  密钥/端点/CI 管线仍为部署决策（Conditional）
 - ADR 0030：归档安全上限 — **Permanent** 有意加固
 - ADR 0039：SSDeep 已 clean-room 落地（Phase 38）；TLSH
   **Conditional**（待可用纯 Rust 实现 + oracle）
@@ -601,6 +601,6 @@ oracle` 差分锁定）：
 |----|------|------|
 | i18n 键位覆盖 | ✅ 24 locale × 269 键全齐 | en/zh-CN/ru/de/fr 审校 + 19 术语锚定草稿（Phase 45：`dict_*.po` 锚定 27–35%，余 en+draft manifest；`.ts` 为全 unfinished skeleton 不作源）。键 parity/`{{var}}`/格式符 gated em `tests/i18n_parity.rs` + `tools/i18n/check_i18n.py` |
 | 归档视图二级格式 | ✅ 已接线 | Phase 36/37 的 UDF/WIM 曾漏接 `list_archive_members`——本 phase 补齐 `ArchiveKind::Udf/Wim` 映射 + 回归测试 |
-| XStyles 主题生态 | 永久平台差异 | 上游 Qt QSS 体系；本项目 CSS 变量主题（light/dark/system）为有意形态差异；扩展需求走 Phase 49（ADR 0042 #2） |
+| XStyles 主题生态 | 永久平台差异（已交付近似方案） | 上游 Qt QSS 体系；本项目 CSS 变量主题：light/dark/system + Phase 49 六个 XStyles pin `948dd85` 代表性色板（solarized-dark/film-noir/midnight-elegance/lavender-dawn/emerald-dusk/cyber-noir）+ `custom_theme` 白名单变量覆盖。色板映射非 QSS 选择器等价（ADR 0042 #2） |
 | InstallSimple（+aspack/petite 脱壳） | Blocked | 上游 `#ifdef USE_XEMULATOR`，XEmulator 不在 pin 基线；解除条件见 ADR 0042 #4 |
-| Tauri 自动更新 | Conditional → Phase 48 | ADR 0019：需 Ed25519 签名密钥对 + manifest 端点 + CI 私钥托管的 infra 决策 |
+| Tauri 自动更新 | ✅ 代码侧（Phase 48）；生产 infra 仍 Conditional | `tauri-plugin-updater` + IPC 命令 + 设置页入口 + `updater_flow.rs` 5 集成测试（验签/篡改/离线/降级/版本不符）。`corpus/updater` 为 dev 签名夹具，非生产密钥；生产 endpoint/公钥/CI 签名管线待部署决策（ADR 0019） |

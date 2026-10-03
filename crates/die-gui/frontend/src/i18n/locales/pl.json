@@ -221,6 +221,7 @@
     "contextMenuRemove": "Remove from context menu",
     "contextMenuRemoveSuccess": "Successfully removed from context menu.",
     "contextMenuUnsupported": "Context menu integration is only supported on Windows.",
+    "customThemeVars": "CSS variable overrides, one per line (--fg-primary: 210 215 225)",
     "dark": "Dark",
     "language": "Język",
     "light": "Light",
@@ -228,6 +229,15 @@
     "scanFlags": "Scan Flags",
     "system": "System",
     "theme": "Theme",
+    "themeCustom": "Custom",
+    "update": "Updates",
+    "updateAvailable": "Version {{version}} is available.",
+    "updateCheck": "Check for Updates",
+    "updateChecking": "Checking for updates...",
+    "updateError": "Update check failed: {{error}}",
+    "updateInstall": "Download & Install",
+    "updateInstalling": "Installing update...",
+    "updateNone": "You are running the latest version.",
     "viewOptions": "View Options"
   },
   "sigBrowser": {
