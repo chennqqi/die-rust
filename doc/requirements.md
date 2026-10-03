@@ -1412,3 +1412,20 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   Phase 45-49 规划；COMPATIBILITY 状态统一为 Permanent/Scheduled/
   Conditional/Blocked/Parity 五种；修正 ADR 0041 陈旧状态头与
   README；修正 pe_handlers.rs/promote.rs 陈旧注释。
+
+## 2026-10-12 顺序执行 Phase 45-47
+
+- 需求：按顺序完成有意偏离治理的 Scheduled 项 Phase 45、46、47。
+- Phase 45 DONE：i18n 术语锚定草稿——24 locale JSON catalog 拆分 +
+  `tools/i18n/` 生成器/校验器；术语源 XTranslation `dict_*.po`
+  （`.ts` 全 unfinished 不作源）；键 parity/`{{var}}`/格式符入
+  `tests/i18n_parity.rs` 门；RTL 与动态语言下拉。
+- Phase 46 DONE：NFD 残余 handler——`handle_PolyMorph` 上游为
+  no-op（parity 标注）；ZIP 族 Office/OpenDocument member handler
+  移植 `promote.rs`；`tools/gen_p46_corpus.py` 10 fixture oracle
+  parity；NFD 差分 332 文件 0 差异。
+- Phase 47 DONE：RNC old/加密流语料——`tools/gen_p47_corpus.py`
+  镜像解码器位流语义生成 RNC1-old/RNC2-old/locked×3（known-key
+  0x04d2、unique-key GF(2) 恢复 0xBEEF、欠定负向）；上游 oracle
+  逐条验证；`oracle_alignment.rs` +5 测试；NFD 差分 337 文件
+  0 差异。

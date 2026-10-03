@@ -564,7 +564,10 @@ oracle` 差分锁定）：
   `compression_detect.rs`（PowerPacker 比特流校验 + LZMA 解码校验
   + `ancient.rs`：XAncientDecoder 族全量 Rust 移植——RNC1/RNC2
   新旧四路径、TPWM、UNIX pack 新旧、Freeze，含 MSB/LSB 位流、
-  静态/动态 Huffman、VLC、CRC16；见 Phase 24）。
+  静态/动态 Huffman、VLC、CRC16；见 Phase 24。Phase 47 补齐
+  oracle 验证语料：RNC1/RNC2 old 变体与 locked（加密）流的
+  已知密钥/唯一密钥恢复/欠定负向路径，`tools/gen_p47_corpus.py`
+  生成、上游 oracle 逐条验证）。
 - **文件分片递归**（`scanProcess` 对齐）：OVERLAY 无条件扫描且以
   `FT_BINARY` 跑签名表；RESOURCE 经 `varInfo` 传资源类型并受
   `isScanable`/aggressive 门控；归档成员受 `isScanable` 门控；子扫描

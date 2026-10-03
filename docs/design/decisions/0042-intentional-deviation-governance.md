@@ -40,7 +40,7 @@ explicit unblocking condition.
 | 3 | i18n coverage (ADR 0038) | 5 validated locales × 269 keys (en, zh-CN, ru, de, fr) | 22 Qt `.ts` catalogs + 24 XTranslation `.po` terminology dictionaries | **Scheduled** → Phase 45 (terminology-anchored drafts + validation tooling) | — |
 | 4 | InstallSimple static unpacker | Not implemented | `xinstallsimple.cpp` wholly inside `#ifdef USE_XEMULATOR`; XEmulator absent from pin | **Blocked** | Pin horsicq/XEmulator at a fixed SHA as an external oracle source + reproducible build + security review of the sandboxed-execution semantics |
 | 5 | Tauri auto-update (ADR 0019) | Not implemented | Upstream XUpdate/XOnlineTools unchecked-out Qt components; not on the diec console path | **Conditional** → Phase 48 | Release-infrastructure decision: Ed25519 signing key pair, private-key CI storage, update-manifest endpoint |
-| 6 | RNC old-variant / encrypted-stream corpora | Decoders fully ported (Phase 24); only synthetic oracle-verified fixtures exist | Same code path; upstream also lacks bundled samples | **Conditional** → Phase 47 | Generator producing oracle-accepted old-variant streams, or real ProPack samples via hash manifest (never commit binaries) |
+| 6 | RNC old-variant / encrypted-stream corpora | Generators emit oracle-accepted old-variant and locked streams (Phase 47) | Same code path; upstream also lacks bundled samples | **DONE** → Phase 47 | — |
 | 7 | Windows shell context menu | `add_context_menu`/`remove_context_menu`/`get_context_menu_status`, Windows registry only | `XOptions::registerContext` is `#ifdef Q_OS_WIN` — Windows-only upstream | **Parity** (was misclassified as a gap). No action. | If Linux/macOS shell integration is ever requested it is a new product feature, not a parity item |
 | 8 | NFD/SpecAbstract remaining scope (ADR 0035) | All `getInfo` drivers and nearly all `handle_*` chains ported (Phases 21–23). Residual: `handle_PolyMorph` (nfd_pe.cpp:8283 call site) and ZIP-family member handlers `handle_Metainfos`/`handle_Microsoftoffice`/`handle_OpenOffice`/`handle_JAR`/`handle_IPA` (`promote.rs` "Phase 23.C pending"). `handle_AnslymPacker` is commented-out dead code upstream — parity, not a gap | Full SpecAbstract (pinned `5188e04`, checked out) | **Scheduled** → Phase 46 | — |
 | 9 | XStaticUnpacker packers (ADR 0036) | All non-emulator modules ported with oracle-verified parity: UPX (Phase 20), MEW/Petite/yoda/ASPack/NsPack (Phases 26–27), AutoIt/EnigmaVB/BoxedApp (Phase 28) | 10 modules; XEmulator needed only by xinstallsimple and the emulator fallback branches of xaspack/xpetite | **Complete** except: InstallSimple + ASPack/Petite emulator branches → **Blocked** (same XEmulator condition as item 4) | — |
@@ -60,7 +60,13 @@ explicit unblocking condition.
   dead code. Oracle-verified over 10 synthetic ZIP fixtures; NFD
   differential 332 files / 0 diffs.
 - **Phase 47**: RNC old-variant / encrypted-stream corpus generator
-  or hash-manifest sample acquisition (item 6).
+  or hash-manifest sample acquisition (item 6) — **DONE 2026-10-12**:
+  `tools/gen_p47_corpus.py` emits RNC1-old / RNC2-old / locked-RNC1-new
+  streams (known-key, unique-key GF(2) recovery, and an underdetermined-
+  key negative) that the pinned oracle decodes byte-identically; NFD
+  differential 337 files / 0 diffs. Real ProPack samples were not needed
+  — the generator path was oracle-accepted, so the hash-manifest
+  fallback stays dormant.
 
 Each phase follows the established acceptance protocol: independent
 upstream oracle, negative/fail-closed tests, regression tests,

@@ -2485,11 +2485,17 @@ Windows-only 实为 parity（上游 `registerContext` 同样
   no-app/超16KiB门/空成员/stored/odt/odt 无标记），上游 oracle
   逐条记录一致；`oracle_alignment.rs` +3 测试；NFD 差分 332 文件
   0 差异。
-- **Phase 47：RNC old 变体/加密流语料**（小型，语料工程）
-  `tools/` 内写 RNC1 old-variant + 加密 key 流生成器，镜像
-  `ancient.rs` 解码器语义产出上游 oracle 可接受流；或经哈希
-  清单引入真实 ProPack 样本（二进制不入库）。验收：生成流在
-  上游 Qt oracle 与 Rust 两侧解出相同字节。
+- **Phase 47：RNC old 变体/加密流语料** — ✅ DONE（2026-10-12，小型）
+  `tools/gen_p47_corpus.py` 镜像 `ancient.rs` 解码器位流语义生成
+  5 个 fixture：RNC1 old（后向位流 + 锚字节 + 一回溯匹配）、RNC2 old
+  （尾部 config 字节 + 锚字节）、RNC1-new locked ×3——KNOWN_KEYS
+  已知密钥（0x04d2）、9-literal-run 全 16 位约束的唯一密钥 GF(2)
+  恢复（0xBEEF）、欠定密钥负向用例。上游 `nfd-oracle` 逐条验证
+  （old 两变体解码验证、加密两路径恢复验证、欠定流 fail-closed
+  无记录）；`oracle_alignment.rs` +5 测试；NFD 差分 337 文件
+  0 差异。未引入真实 ProPack 样本（许可证/来源不满足入库要求，
+  保留为哈希清单 fallback——生成流已被 oracle 接受，fallback
+  不再必要）。
 
 **Conditional（触发条件未满足，仅登记不产码）：**
 
