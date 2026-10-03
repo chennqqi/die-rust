@@ -670,3 +670,7 @@ enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回�
 ## 2026-10-05 Phase 39（非 x86 反汇编）
 
 分析：ADR 0041 两项阻断均被解除——(1) native 依赖争议由"上游自身即 capstone"正当化（dep/XCapstone/3rdparty/Capstone 含 capstone 5.0 源码+预建静态库，diec-rules 已用 capstone 0.14 做 getDisasmString）；(2) 用户显式要求落地即"维护者决定"复审触发条件。capstone crate bundled 构建避免逐 ISA 的碎片化纯 Rust 移植（yaxpeax-mips 休眠、无 PPC 实现）。DM_RISKVC 是唯一非常规映射：上游只传 CS_MODE_RISCVC 不带 32/64 位，经 Capstone::new_raw+ExtraMode 逐位复刻。oracle 直接链接上游 vendor .a，模式位/端序任何接线漂移都会在 77 指令快照上显形。
+
+## 2026-10-05 Phase 40（收尾）
+
+分析：i18n 用 node eval 真实解析 resources 对象比对——ru/de/fr 各缺 239 键（此前扫描器漏报 zh-CN 引号键名），补齐后 5×269 键全等；ADR 0038 的"增量覆盖、不批量转换 .ts"结论维持。归档视图发现真实缺口：UDF/WIM 在 Phase 36/37 只接了 list_secondary/extract_secondary，`list_secondary_members` 的 kind 映射漏掉两个新变体导致 GUI 归档页静默跳过——补映射并加 corpus 回归。XStyles 为 Qt 专属体系，作为永久平台差异记录；InstallSimple（XEmulator 不在 pin）与 tauri updater（ADR 0019 产品决策）维持不立项。

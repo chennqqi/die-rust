@@ -1384,3 +1384,8 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
 
 需求：补齐 SSDeep 模糊哈希。事实修正：pin 基线（`XBinary::HASH`@`23fec32`、XHashWidget@`291e3ef6`）无任何 SSDeep 实现，无上游 oracle；落 clean-room 纯 Rust 实现（非 GPL fuzzy.c 翻译），`ppdeep`（Apache-2.0）向量 oracle，ADR 0039 v2 记录为 pin 之上扩展。
 - 2026-10-05：Phase 39——capstone 落地 MIPS/PPC/RISC-V 反汇编（ADR 0041 修订反转），11 DM 变体 + 上游 vendor libcapstone oracle 差分语料。
+- 2026-10-05：Phase 40——i18n 全 locale 键位补齐、归档视图二级格式入口核查、XStyles/InstallSimple/更新器收尾文档化。
+
+## 2026-10-05 Phase 40（GUI/i18n 收尾）
+
+需求：扫全部 locale 键位补齐缺失翻译；确认 GUI 归档视图覆盖二级格式；XStyles 记录为永久平台差异；InstallSimple/Tauri updater 维持不立项。

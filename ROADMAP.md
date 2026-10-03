@@ -2355,10 +2355,13 @@ oracle 失败而非能力缺失。全部剩余项重排：
   `corpus/disasm/*.bin`+`*.oracle.txt` 11 模式 77 指令逐字节
   parity；畸形输入 fail-closed 测试；前端下拉补 11 项。x86
   （iced-x86）/ARM（yaxpeax-arm）后端不变。
-- **Phase 40：GUI/i18n/杂项收尾**（小）
-  i18n 全 locale 键位扫描补齐；GUI 归档视图确认二级格式
-  入口（list_archive_members 已自动覆盖）；XStyles 决策
-  文档化（永久平台差异）。
+- **Phase 40：GUI/i18n/杂项收尾** — DONE（小）
+  i18n 键位扫描：en/zh-CN/ru/de/fr 五 locale × 269 键全齐
+  （ru/de/fr 各补 239 键、zh-CN 补 `tabs.struct`；其余 17 种
+  上游 Qt `.ts` 语言维持 ADR 0038 增量项）。归档视图缺口修复：
+  Phase 36/37 的 UDF/WIM 曾漏接 `list_archive_members`，补
+  `ArchiveKind::Udf/Wim` 映射 + 回归测试。XStyles 永久平台
+  差异、InstallSimple/Tauri 更新器不立项均文档化。
 
 每 phase 验收同前：上游 oracle 差分 + 负向 + fmt/clippy/test
 全绿 + NFD 差分 0 差异。

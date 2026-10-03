@@ -268,9 +268,9 @@ scanning:
 
 - **Supported formats**: ZIP, 7Z, RAR, CAB, ISO9660 — the same five
   archive types upstream `scanProcess` unpacks for nested scanning
-  (`archive-gap-closure.md` proof); ARJ/LHA/ACE/CPIO are
-  list/extract-only upstream and matched here (Phase 32), with
-  UDF/WIM gated on sample availability.
+  (`archive-gap-closure.md` proof); ARJ/LHA/ACE/CPIO/UDF/WIM are
+  list/extract-only upstream and matched here (Phases 32–37, full
+  method coverage including all compressed decoders).
 - **Safety bounds** (ADR 0030, stricter than upstream):
   - Single-member limit: 128 MiB
   - Total decompressed limit: 512 MiB
@@ -286,13 +286,17 @@ scanning:
    (ratio > 100:1) or very large members (> 128 MiB) are skipped. This is
    an intentional safety improvement (ADR 0030).
 
-2. **Secondary archive formats**: ARJ/LHA/ACE/CPIO are parsable
+2. **Secondary archive formats**: ARJ/LHA/ACE/CPIO/UDF/WIM are parsable
    upstream (`XFormats::createClass`) but excluded from the
    nested-scan gate; diec-rust enumerates/extracts them through
-   `list_archive_members`/`extract_member` only (stored members
-   byte-identical, compressed members empty — upstream decoders
-   are likewise unavailable). UDF/WIM are gated pending a valid
-   corpus (Phase 32 note in ROADMAP).
+   `list_archive_members`/`extract_member` only. Extraction coverage
+   is at parity: ARJ method 0-6, LHA all methods (stored, lh1 LZHUF,
+   lh4-7 block decoder, legacy lzs/lz5/lhx/lk7/pm1/pm2), ACE stored +
+   tech-1, CPIO all six variants, UDF/WIM stored streams — each
+   validated byte-for-byte against upstream oracle extraction
+   (Phases 32–37). WIM compressed (XPRESS/LZX) streams list but
+   extract empty — a documented gap vs upstream `HANDLE_METHOD_LZX`/
+   `XPRESS_HUFF`.
 
 3. **`--recursive` backward compatibility**: `--recursive` is retained as
    an alias for `--recursive-dir` to avoid breaking existing scripts.
@@ -540,3 +544,13 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 回归测试：`crates/diec-nfd/tests/oracle_alignment.rs`（UPX MinGW/GCC
 链 + C/C++ 聚合、COFF 字符串表 DWARF、空 ZIP EOCD、Mach-O clang→C/C++、
 嵌套 ZIP 短 ELF 成员 + Unknown 抑制、minimal-NE overlay Unknown）。
+
+## Phase 40: GUI/i18n 收尾（2026-10-05）
+
+| 项 | 状态 | 备注 |
+|----|------|------|
+| i18n 键位覆盖 | ✅ 5 locale × 269 键全齐 | en/zh-CN/ru/de/fr；此前 ru/de/fr 各缺 239 键、zh-CN 缺 `tabs.struct`。其余 17 种上游 Qt `.ts` 语言属 ADR 0038 增量项（键空间不相交，不批量转换） |
+| 归档视图二级格式 | ✅ 已接线 | Phase 36/37 的 UDF/WIM 曾漏接 `list_archive_members`——本 phase 补齐 `ArchiveKind::Udf/Wim` 映射 + 回归测试 |
+| XStyles 主题生态 | ❌ 永久平台差异 | 上游 Qt 样式体系；本项目 CSS 变量主题（light/dark/system）为有意形态差异 |
+| InstallSimple | ❌ 不立项 | 上游 `#ifdef USE_XEMULATOR`，XEmulator 不在 pin 基线，无 oracle |
+| Tauri 自动更新 | ❌ 不立项 | ADR 0019：分发/签名属产品决策 |

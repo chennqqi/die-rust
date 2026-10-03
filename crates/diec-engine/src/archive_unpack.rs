@@ -757,6 +757,10 @@ pub enum ArchiveKind {
     Cpio,
     /// ACE archive (Phase 32).
     Ace,
+    /// UDF filesystem image (Phase 36).
+    Udf,
+    /// WIM image (Phase 37).
+    Wim,
 }
 
 impl ArchiveKind {
@@ -778,6 +782,8 @@ impl ArchiveKind {
             Self::Lha => "LHA",
             Self::Cpio => "CPIO",
             Self::Ace => "ACE",
+            Self::Udf => "UDF",
+            Self::Wim => "WIM",
         }
     }
 }
@@ -837,7 +843,8 @@ pub fn list_archive_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemb
     }
 }
 
-/// List members of a Phase 32 secondary archive (ARJ/LHA/CPIO).
+/// List members of a Phase 32+ secondary archive
+/// (ARJ/LHA/ACE/CPIO/UDF/WIM).
 fn list_secondary_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
     let (kind, records) = crate::archive::list_secondary(data)?;
     let kind = match kind {
@@ -845,7 +852,8 @@ fn list_secondary_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMember
         crate::archive::SecondaryKind::Lha => ArchiveKind::Lha,
         crate::archive::SecondaryKind::Cpio => ArchiveKind::Cpio,
         crate::archive::SecondaryKind::Ace => ArchiveKind::Ace,
-        _ => return None,
+        crate::archive::SecondaryKind::Udf => ArchiveKind::Udf,
+        crate::archive::SecondaryKind::Wim => ArchiveKind::Wim,
     };
     let members = records
         .into_iter()
@@ -1453,6 +1461,22 @@ mod tests {
         );
         assert!(list_archive_members(b"Rar!\x1a\x07\x00\xff").is_none());
         assert!(list_archive_members(b"7z\xbc\xaf\x27\x1c\x00\xff\xff\xff\xff").is_none());
+    }
+
+    #[test]
+    fn list_archive_members_covers_udf_wim() {
+        // Regression: UDF/WIM were enumerated by `list_secondary` but
+        // were not mapped into `list_archive_members`, so the GUI
+        // archive view silently skipped them.
+        let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+        let udf = std::fs::read(corpus.join("test.udf")).unwrap();
+        let (kind, members) = list_archive_members(&udf).expect("UDF must list");
+        assert_eq!(kind, ArchiveKind::Udf);
+        assert_eq!(members.len(), 3);
+        let wim = std::fs::read(corpus.join("test.wim")).unwrap();
+        let (kind, members) = list_archive_members(&wim).expect("WIM must list");
+        assert_eq!(kind, ArchiveKind::Wim);
+        assert_eq!(members.len(), 3);
     }
 
     #[test]
