@@ -1376,3 +1376,4 @@ SSDeep、非 x86 反汇编、GUI/i18n 收尾；InstallSimple（无上游
 XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
 
 - 2026-10-03：Phase 33 继续——ARJ+ACE 压缩解码器手写移植；ACE tech-1 与 ARJ method-4 补fixture/decoder/差分。
+- 2026-10-03：Phase 34 继续——LHA 主流压缩 lh4-lh7 手写 Rust 解码器（xlzhdecoder 移植）+ 四方法 fixture + 差分。

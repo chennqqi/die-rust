@@ -12,6 +12,7 @@ mod arj;
 mod arj_decode;
 mod cpio;
 mod lha;
+mod lzh_decode;
 
 /// Secondary format detected by [`list_secondary`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,7 +124,12 @@ pub fn extract_secondary(data: &[u8], kind: SecondaryKind, name: &str) -> Vec<u8
         // ARJ methods 5/6 are "no compression" variants alongside 0;
         // only those extract byte-identically without a decoder.
         SecondaryKind::Arj => matches!(rec.method, 0 | 5 | 6),
-        SecondaryKind::Lha => rec.method == u32::from_be_bytes(*b"-lh0"),
+        // Upstream maps `-lh0-`/`-lz4-`/`-lhd-`/`-pm0-` to STORE;
+        // `-lhd-` members are directories and return earlier anyway.
+        SecondaryKind::Lha => matches!(
+            rec.method.to_be_bytes(),
+            [b'-', b'l', b'h', b'0'] | [b'-', b'l', b'z', b'4'] | [b'-', b'p', b'm', b'0']
+        ),
         SecondaryKind::Cpio => true, // CPIO is an uncompressed container.
         // `method` carries the upstream HANDLE_METHOD value; 1 == STORE.
         SecondaryKind::Ace => rec.method == 1,
@@ -153,6 +159,16 @@ pub fn extract_secondary(data: &[u8], kind: SecondaryKind, name: &str) -> Vec<u8
         // decoder window comes from `TECH.PARM`'s low nibble.
         if rec.method == 61 {
             return ace_decode::decompress_ace(packed, rec.size as usize, rec.window_size)
+                .unwrap_or_default();
+        }
+    }
+    if kind == SecondaryKind::Lha {
+        // `method` carries the first 4 tag bytes; `-lhN-` decodes via
+        // the lh4-7 state machine (N selects the window size).
+        let tag = rec.method.to_be_bytes();
+        let packed = &data[off..end];
+        if tag[..3] == *b"-lh" && (b'4'..=b'7').contains(&tag[3]) {
+            return lzh_decode::decompress_lzh(packed, rec.size as usize, i32::from(tag[3] - b'0'))
                 .unwrap_or_default();
         }
     }

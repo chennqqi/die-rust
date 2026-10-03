@@ -94,9 +94,11 @@ def gen_arj():
     w(f"{OUT}/test.arj", "test.arj", bytes(out))
 
 
-def lha_header(name, method, payload, level=0, crc16=None, is_dir=False):
+def lha_header(name, method, payload, level=0, crc16=None, is_dir=False, orig=None):
     if crc16 is None:
         crc16 = crc16_arc(payload)
+    if orig is None:
+        orig = len(payload)
     name_b = name.encode("latin-1")
     if level == 0:
         hsize = 22 + len(name_b)
@@ -105,7 +107,7 @@ def lha_header(name, method, payload, level=0, crc16=None, is_dir=False):
         h.append(0)  # checksum placeholder
         h += method
         h += struct.pack("<I", len(payload))
-        h += struct.pack("<I", len(payload))
+        h += struct.pack("<I", orig)
         h += struct.pack("<I", 0)  # datetime
         h.append(0x20)
         h.append(0)
@@ -122,7 +124,7 @@ def lha_header(name, method, payload, level=0, crc16=None, is_dir=False):
     h.append(0)
     h += method
     h += struct.pack("<I", len(payload))  # skip_sz (ext + comp)
-    h += struct.pack("<I", len(payload))
+    h += struct.pack("<I", orig)
     h += struct.pack("<I", 0)
     h.append(0x20)
     h.append(1)
@@ -475,6 +477,123 @@ def ace_m1_encode(literals, matches=()):
 
 
 
+
+def lzh_encode(method, blocks, lt_widths=None):
+    """Encode an LHA -lhN- (method 4-7) stream for fixture use.
+
+    `blocks`: list of token lists; tokens are ("lit", sym) or
+    ("match", 3). `lt_widths`: {sym: bitlen} for the literal/length
+    table; default assigns width 1 to every used symbol (valid only
+    for <=2 symbols). Simplifications (still a valid stream):
+      - literal PT meta-table fixed at bitlens {0:1,1:2,2:3,3:4,4:5,5:5}
+        -> canonical codes 0:'0' 1:'10' 2:'110' 3:'1110' 4:'11110'
+        5:'11111', covering lt bitlen values 0-4 (value = sym-2).
+      - position table is a "fake table" (len_avail=0) returning
+        sym 0 -> dist 1 with zero bits per match.
+    """
+    w_bits = {4: 12, 5: 13, 6: 15, 7: 16}[method]
+    pos_pt_bits = 5 if w_bits in (15, 16) else 4
+    # meta-code table: sym -> (bit pattern, length), canonical order.
+    meta = {0: (0b0, 1), 1: (0b10, 2), 2: (0b110, 3),
+            3: (0b1110, 4), 4: (0b11110, 5), 5: (0b11111, 5)}
+    bw = BitWriter()
+
+    def put_zeros(count):
+        """Emit `count` zero bitlens via c0/c1/c2 runs."""
+        while count >= 23:
+            n = min(count - 20, 511)
+            bw.put(0b110, 3)
+            bw.put(n, 9)
+            count -= 20 + n
+        if count >= 3:
+            n = min(count - 3, 15)
+            bw.put(0b10, 2)
+            bw.put(n, 4)
+            count -= 3 + n
+        for _ in range(count):
+            bw.put(0, 1)
+
+    for tokens in blocks:
+        n_tok = len(tokens)
+        assert 0 < n_tok <= 0xFFFF
+        literals = sorted({v for k, v in tokens if k == "lit"})
+        has_match = any(k == "match" for k, _ in tokens)
+        used = literals + ([256] if has_match else [])
+        widths = lt_widths or {sym: 1 for sym in used}
+        assert set(widths) == set(used) and max(widths.values()) <= 4
+        max_sym = max(used)
+        # canonical codes: assigned in symbol order within each length,
+        # matching the decoder's bitptn/weight walk.
+        codes = {}
+        nxt = {}
+        ptn = 0
+        for ln in range(1, 17):
+            syms = [s for s in used if widths[s] == ln]
+            for sym in sorted(syms):
+                codes[sym] = (ptn, ln)
+                ptn += 1
+            ptn <<= 1
+        assert all(len(bin(c)) - 2 <= ln for sym, (c, ln) in codes.items())
+        bw.put(n_tok, 16)
+        # literal PT table (19 syms, len_bits=5):
+        # bitlens {0:1,1:2,2:3,3:4,4:5,5:5}, len_avail=6
+        bw.put(6, 5)
+        for v in (1, 2, 3):
+            bw.put(v, 3)
+        bw.put(0, 2)          # no extra zeros skipped after index 3
+        for v in (4, 5, 5):
+            bw.put(v, 3)      # bitlens at indices 3,4,5
+        # literal table (len_bits=9)
+        bw.put(max_sym + 1, 9)
+        i = 0
+        for sym in used:
+            put_zeros(sym - i)
+            code, ln = meta[widths[sym] + 2]
+            bw.put(code, ln)
+            i = sym + 1
+        put_zeros(max_sym + 1 - i)
+        # position table: fake table, sym 0 -> dist 1, 0 bits per use
+        bw.put(0, pos_pt_bits)
+        bw.put(0, pos_pt_bits)
+        for kind, v in tokens:
+            sym = v if kind == "lit" else 256
+            if kind == "match":
+                assert v == 3
+            code, ln = codes[sym]
+            bw.put(code, ln)
+    return bw.finish()
+
+
+def gen_lha_compressed():
+    """LHA with real -lh4..-lh7- compressed members (oracle-decodable).
+
+    lh5: 2 'B' literals + len3/dist1 match + 2 'B' -> "BBBBBBB".
+    lh7: 6 'C' + 6 'D' literals.
+    lh4: 'EE' + len3/dist1 match + 'E' + 'F' -> 7 bytes, exercises
+         the 3-symbol non-uniform literal table.
+    lh6: 5 'G' + 5 'H' literals (5-bit position-table metadata path).
+    """
+    p5 = lzh_encode(5, [[("lit", 66), ("lit", 66), ("match", 3),
+                         ("lit", 66), ("lit", 66)]])
+    e5 = b"B" * 7
+    w(f"{OUT}/test-lh5.lha", "test-lh5.lha",
+      lha_header("m5.bin", b"-lh5-", p5, crc16=crc16_arc(e5), orig=len(e5)))
+    p7 = lzh_encode(7, [[("lit", 67)] * 6 + [("lit", 68)] * 6])
+    e7 = b"C" * 6 + b"D" * 6
+    w(f"{OUT}/test-lh7.lha", "test-lh7.lha",
+      lha_header("m7.bin", b"-lh7-", p7, crc16=crc16_arc(e7), orig=len(e7)))
+    p4 = lzh_encode(4, [[("lit", 69), ("lit", 69), ("match", 3),
+                         ("lit", 69), ("lit", 70)]],
+                    lt_widths={69: 1, 70: 2, 256: 2})
+    e4 = bytes([69, 69, 69, 69, 69, 69, 70])
+    w(f"{OUT}/test-lh4.lha", "test-lh4.lha",
+      lha_header("m4.bin", b"-lh4-", p4, crc16=crc16_arc(e4), orig=len(e4)))
+    p6 = lzh_encode(6, [[("lit", 71)] * 5 + [("lit", 72)] * 5])
+    e6 = b"G" * 5 + b"H" * 5
+    w(f"{OUT}/test-lh6.lha", "test-lh6.lha",
+      lha_header("m6.bin", b"-lh6-", p6, crc16=crc16_arc(e6), orig=len(e6)))
+
+
 def arj_m4_encode(tokens):
     """Encode tokens as an ARJ method-4 (fastest) stream.
 
@@ -624,5 +743,6 @@ if __name__ == "__main__":
     gen_arj_compressed()
     gen_arj_m4()
     gen_lha()
+    gen_lha_compressed()
     gen_ace()
     gen_ace_compressed()

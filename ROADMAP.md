@@ -2267,9 +2267,24 @@ oracle 失败而非能力缺失。全部剩余项重排：
   fixture 全部 `unpacked:true`，提取字节差分一致。
   测试：secondary_archives.rs 增至 14 项（m1/m4/tech-1 字节
   parity + 截断畸形流不 panic 产空）。
-- **Phase 34：LHA 主流压缩方法**（~2k 上游行）
-  `xlzhdecoder.cpp`（lh5/6/7 静态+动态 Huffman LZSS）+
-  `xlzhufdecoder.cpp`（lh4/lzhuf）。同 33 语料模式。
+- **Phase 34：LHA 主流压缩方法 lh4-lh7** ✅ 完成
+  `lzh_decode.rs`（~800 行，移植 `xlzhdecoder.cpp` 的
+  libarchive lzh_decode.c 版状态机）：MSB-first 64 位位缓
+  存、`read_ahead`/`bits_forced`、块状态机（blocksize→
+  pt 元表→lt 码长→pos 表→token）、canonical Huffman 直接
+  查找表+长码二叉树、fake-table（len_avail=0）语义、物理
+  EOF（残余<8bit）、PT 三段式码长读法（前3+2bit 零跳过+
+  余量）、c0/c1/c2 零-run、单符号表拒收（ptn!=0x10000）、
+  重叠 match 逐字节拷贝、w_bits 12/13/15/16 与 pos-pt
+  4/5bit 按方法分派。
+  接线：`-lh4-`..`-lh7-`→decoder；`-lh0-`/`-lz4-`/`-pm0-`
+  →stored（对齐上游 `_methodToHandle`）。lh1/lzhuf 独立
+  路径未覆盖（上游单测文件 ~450 行，归 Phase 35 批次）。
+  语料：`lzh_encode` 编码器（meta 表 {0:1,1:2,2:3,3:4,
+  4:5,5:5} + 可配 lt bitlen + fake pos 表），lh4/5/6/7 四
+  fixture 上游 `unpacked:true`。
+  测试：secondary_archives.rs 增至 19 项（四方法字节
+  parity + 截断/位翻转不 panic）。NFD 差分 173 文件 0 差异。
 - **Phase 35：LHA legacy 变体**（~1.8k+ 上游行，可分 35.B）
   `xlha_legacy_*`（lzs/lz5/lk7/pm1/pm2 + dearkmodule 框架），
   注意 `xlha_legacy.LICENSE`/`PROVENANCE.md` 归属保留；超出

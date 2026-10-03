@@ -218,3 +218,55 @@ fn arj_compressed_malformed_rejected() {
         );
     }
 }
+
+/// Phase 34: LHA `-lh5-` compressed member (literal+match) vs oracle.
+#[test]
+fn lha_lh5_records_and_extract_match_oracle() {
+    check_fixture("test-lh5.lha", diec_engine::archive::SecondaryKind::Lha);
+}
+
+/// Phase 34: LHA `-lh7-` compressed member (literals, 64 KiB window
+/// parameters) vs oracle.
+#[test]
+fn lha_lh7_records_and_extract_match_oracle() {
+    check_fixture("test-lh7.lha", diec_engine::archive::SecondaryKind::Lha);
+}
+
+/// Malformed/truncated LHA compressed streams must fail closed.
+#[test]
+fn lha_compressed_malformed_rejected() {
+    let data = std::fs::read(corpus_root().join("test-lh5.lha")).unwrap();
+    for cut in [32usize, 36, 38, 40] {
+        let short = &data[..cut.min(data.len())];
+        let _ = diec_engine::archive::extract_secondary(
+            short,
+            diec_engine::archive::SecondaryKind::Lha,
+            "m5.bin",
+        );
+    }
+    // Corrupted mid-stream bits: flip bytes inside the packed member
+    // (offset 30..41 for the level-0 header used by the fixture).
+    for off in 30..data.len().min(41) {
+        let mut bad = data.clone();
+        bad[off] ^= 0xFF;
+        let _ = diec_engine::archive::extract_secondary(
+            &bad,
+            diec_engine::archive::SecondaryKind::Lha,
+            "m5.bin",
+        );
+    }
+}
+
+/// Phase 34: LHA `-lh4-` member with a non-uniform 3-symbol literal
+/// table (widths 1/2/2) and a len-3 match vs oracle.
+#[test]
+fn lha_lh4_records_and_extract_match_oracle() {
+    check_fixture("test-lh4.lha", diec_engine::archive::SecondaryKind::Lha);
+}
+
+/// Phase 34: LHA `-lh6-` member (5-bit position-table metadata) vs
+/// oracle.
+#[test]
+fn lha_lh6_records_and_extract_match_oracle() {
+    check_fixture("test-lh6.lha", diec_engine::archive::SecondaryKind::Lha);
+}
