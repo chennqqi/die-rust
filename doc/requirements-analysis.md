@@ -645,3 +645,13 @@ enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回�
   infoCurrent 实际属性集对齐，非按格式规范想象。
 - UDF/WIM 按 gate 跳过：上游 isValid 要求 AVDP 链/查找表+XML，
   无系统工具可生成合法样本。
+
+## 2026-10-03 剩余项规划分析
+- 修正 Phase 32 误判：上游 Algos 含 xarjdecoder/xacedecoder/
+  xlzhdecoder/xlha_legacy 完整解码器，oracle 失败是假压缩流，
+  压缩方法实为可立项项（编码器镜像法生成合法语料）。
+- InstallSimple 永久不可行：XEmulator 非 submodule 也未检入
+  pin 树，无源码无 oracle。
+- SSDeep 上游在 XHashWidget（pin 291e3ef6 未检出）——可按
+  SHA 提取 oracle，否则参考实现+ADR 修订。
+- 粒度按 ≤3-4k 上游行/phase 拆 8 个 phase（33-40）。

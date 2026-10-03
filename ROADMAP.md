@@ -2227,13 +2227,56 @@ name/size/packed/dir/mtime + 提取字节 parity；上游提取失败的
 压缩成员断言我们也产空（同一 fail-closed 契约）。NFD 差分
 148 文件 0 差异（含新语料）。嵌套扫描门不变。
 
-### 不立项项
+### 不立项项（永久，附理由）
 
-- **tauri 自动更新**（ADR 0019）：分发/签名/更新服务器属产品
-  决策，非代码缺口，不立项。
-- **SSDeep**：ADR 0039 明确 rejected，上游实现本身有偏差，
-  不值得复制。
-- **多语言 i18n**：ADR 0038 持续增量项，无独立 phase。
-- **XStyles 主题生态**：上游 Qt 样式体系，不移植。
-- **RNC old/加密流真实语料覆盖**：代码已全量移植，仅缺
-  真实 ProPack 样本——语料问题非代码任务，遇到样本时补测。
+- **InstallSimple 静态解包**：上游 `xinstallsimple.cpp` 整体在
+  `USE_XEMULATOR` 内，XEmulator 既不是 submodule 也未检入
+  pin 树——无源码可移植、无 oracle 可验证，永久跳过。
+- **tauri 自动更新**（ADR 0019）：上游 XUpdate/XOnlineTools
+  为未检出 Qt 组件且非 diec 控制台路径；更新签名密钥与
+  更新服务器属产品/分发决策，无 infra 前不产生代码缺口。
+- **XStyles 主题生态**：上游 Qt 样式体系，平台差异永久项；
+  GUI 主题若需要走 Tauri 自有方案另行立项。
+- **RNC old 变体/加密流真实语料**：代码已全量移植，真实
+  ProPack 样本属语料缺口非代码任务（遇样本补测；若 Phase 内
+  可合成 oracle-acceptable 流则并入对应 phase）。
+
+### Phase 33-40：剩余项规划（2026-10-03 复审后立项）
+
+复审修正：Phase 32 时判定"上游也解不出"有误——上游
+`XArchive/Algos` 含 ARJ/ACE/LZH 完整解码器，假压缩流导致
+oracle 失败而非能力缺失。全部剩余项重排：
+
+- **Phase 33：ARJ+ACE 压缩解码器**（~1.8k 上游行）
+  `xarjdecoder.cpp`（ARJ method 1-3 Huffman+LZSS、method 4
+  快速 LZSS、GARBLE 口令修饰符）+ `xacedecoder.cpp`（ACE
+  tech 1 LZ77+Huffman）。语料：镜像解码器写编码器生成合法
+  压缩流（FSG/MEW/NsPack 已验证模式），上游 oracle 验收后
+  移植；提取字节差分。
+- **Phase 34：LHA 主流压缩方法**（~2k 上游行）
+  `xlzhdecoder.cpp`（lh5/6/7 静态+动态 Huffman LZSS）+
+  `xlzhufdecoder.cpp`（lh4/lzhuf）。同 33 语料模式。
+- **Phase 35：LHA legacy 变体**（~1.8k+ 上游行，可分 35.B）
+  `xlha_legacy_*`（lzs/lz5/lk7/pm1/pm2 + dearkmodule 框架），
+  注意 `xlha_legacy.LICENSE`/`PROVENANCE.md` 归属保留；超出
+  粒度上限的按方法分批。
+- **Phase 36：UDF**（生成器 ~300 行 + 枚举 ~400 行）
+  ECMA-167 VRS(BEA01/NSR03/TEA01) + AVDP + PVD/LVD/PD/FSD +
+  FE/ICB/FID 链合成器；移植 `xudf.cpp` 枚举核心。
+- **Phase 37：WIM**（生成器 + 枚举 ~400 行）
+  MSWIM 头 + lookup table + XML 元数据/dirent 合成器；移植
+  `xwim.cpp` 枚举核心。
+- **Phase 38：SSDeep**（小）
+  XHashWidget pin `291e3ef6` 提取上游实现做 oracle；若不可
+  检出则落 libfuzzy 兼容参考实现并记 ADR 偏离（ADR 0039
+  复审，理由随 phase 一并修订）。
+- **Phase 39：非 x86 反汇编**（ADR 0041 修订，中型）
+  capstone（上游自带 `libcapstone` 已建，native 例外正当化）
+  vs yaxpeax 复审 → 落地 MIPS/PPC/RISC-V + ELF/PE 架构语料。
+- **Phase 40：GUI/i18n/杂项收尾**（小）
+  i18n 全 locale 键位扫描补齐；GUI 归档视图确认二级格式
+  入口（list_archive_members 已自动覆盖）；XStyles 决策
+  文档化（永久平台差异）。
+
+每 phase 验收同前：上游 oracle 差分 + 负向 + fmt/clippy/test
+全绿 + NFD 差分 0 差异。

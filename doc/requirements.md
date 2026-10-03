@@ -1368,3 +1368,9 @@ ADR 附复审证据表。继续 Phase 31。
 stored 提取 parity（`diec-engine/src/archive/`），UDF/WIM 因
 无合法样本按 phase gate 记录跳过；一律 list/extract-only，
 不进嵌套扫描；上游 list-oracle 差分 + 提取字节 parity。
+
+## 2026-10-03 剩余项 phase 规划
+要求将此前"不立项/gate"的剩余项重新规划为 phase 完成。
+复审后 Phase 33-40 立项：ARJ/ACE/LHA 压缩解码器、UDF/WIM、
+SSDeep、非 x86 反汇编、GUI/i18n 收尾；InstallSimple（无上游
+XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
