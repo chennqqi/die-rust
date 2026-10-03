@@ -223,9 +223,10 @@ pub fn compute_md5(data: &[u8]) -> String {
 
 /// Hash algorithms selectable in the GUI hash panel, mirrors upstream
 /// `XHashWidget`/`XBinary::HASH` naming. All implementations are pure Rust.
-/// SSDeep stays excluded (ADR 0039, rejected); TLSH is provided by the
-/// pure-Rust `tlsh2` port (upstream XHashWidget offers it via the TLSH
-/// C library — the `T1` string form is identical).
+/// `SSDEEP` is a clean-room CTPH implementation validated against
+/// libfuzzy-compatible reference digests — an extension beyond the pinned
+/// upstream (which ships no fuzzy hash at all; ADR 0039 v2). TLSH is
+/// provided by the pure-Rust `tlsh2` port.
 pub const HASH_ALGORITHMS: &[&str] = &[
     "MD4",
     "MD5",
@@ -255,6 +256,7 @@ pub const HASH_ALGORITHMS: &[&str] = &[
     "GOST94",
     "GOST94_CP",
     "GOST94_S2015",
+    "SSDEEP",
 ];
 
 /// Compute a named hash hex digest (uppercase hex for CRC/Adler32,
@@ -367,6 +369,7 @@ pub fn compute_named_hash(data: &[u8], algorithm: &str) -> Option<String> {
             use gost94::Digest as _;
             Some(hex::encode(gost94::Gost94s2015::digest(data)))
         }
+        "SSDEEP" => Some(crate::ssdeep::ssdeep(data)),
         _ => None,
     }
 }

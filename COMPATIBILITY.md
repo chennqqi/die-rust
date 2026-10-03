@@ -347,7 +347,7 @@ GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
 | SHA3-224/256/384/512 | ✅ | ✅ |
 | BLAKE2b512, BLAKE2s256, BLAKE3 | ✅ | ✅ |
 | Adler32, CRC32, CRC64(ECMA-182) | ✅ | ✅ |
-| SSDeep | ✅ | ❌ rejected（libfuzzy 为 GPL-2.0，ADR 0039） |
+| SSDeep | ❌（pin 基线无实现） | ✅ clean-room CTPH 实现，`ppdeep` oracle 字节兼容（ADR 0039 v2，pin 之上的扩展） |
 | TLSH | ✅ | ✅ `tlsh2` 纯 Rust 移植（T1 前缀串，官方向量验证；<50B 返回空） |
 | Tiger, Tiger2 | ✅ | ✅ `tiger` crate，官方 "abc" 向量 |
 | Whirlpool | ✅ | ✅ `whirlpool` crate，官方空串向量 |
@@ -416,7 +416,9 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 
 ### 评估性 ADR（18.C/18.D）
 
-- ADR 0039：SSDeep 拒绝（libfuzzy GPL-2.0）；TLSH 暂缓。
+- ADR 0039 v2：SSDeep 已实现——pin 基线（`XBinary::HASH`@`23fec32`、
+  XHashWidget@`291e3ef6`）无 SSDeep，clean-room 实现规避 libfuzzy
+  GPL-2.0，`ppdeep` 向量 oracle；TLSH 已由 `tlsh2` 提供（Phase 29）。
 - ADR 0040：BZ2/XZ/LZMA 纯 Rust 解码（本 Phase 已实现）。
 - ADR 0041：MIPS/PPC/RISC-V 反汇编 deferred——无完整纯 Rust 覆盖，
   capstone native 绑定是唯一全架构路径但增加构建负担。

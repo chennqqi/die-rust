@@ -1,0 +1,47 @@
+{
+  "empty": {
+    "len": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssdeep": "3::"
+  },
+  "hello": {
+    "len": 11,
+    "sha256": "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9",
+    "ssdeep": "3:iKFSMPn:rJPn"
+  },
+  "blocksize-boundary-192": {
+    "len": 192,
+    "sha256": "e40de99d850403e2afb0103236ee77eb82d8ef4f1a87ec32d5dcd9a32edc47b9",
+    "ssdeep": "3:Wttkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkw:Yu"
+  },
+  "blocksize-boundary-193": {
+    "len": 193,
+    "sha256": "76d42b88163786311e47f66fa730501e25ffa6b1a2bda433361cc4d03d4dc3c1",
+    "ssdeep": "3:WttkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkR:Yr"
+  },
+  "repetitive-4k": {
+    "len": 4096,
+    "sha256": "d0e0da8a862406373f116f68abe4c82266b0b374d9f6999f56c8de9c5ac26205",
+    "ssdeep": "12:+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbC:n"
+  },
+  "pseudo-random-8k": {
+    "len": 8192,
+    "sha256": "fbcfd26b0caa49c0c76247f5332dab9e1ca0475c66ce58bc3869784659620ce3",
+    "ssdeep": "192:jTEHgZraNfRwKZxmTym9e6X8N0d7ithsJw5xIFrk4o5C:0HgZrO+xv8C0hEpeC"
+  },
+  "pseudo-random-64k": {
+    "len": 65536,
+    "sha256": "fec1818c8ab069dec73dd0c145342538d35d07a09bb8e118d1bee14d34c0bea5",
+    "ssdeep": "1536:kf5OyxrLigmERSINwJSq9zR9JpTidqtUdpM/:kf53LogNiSeR9j4SeU"
+  },
+  "halving-retry": {
+    "len": 1792,
+    "sha256": "a3652ad1f4cb62f8cec5a16bf51b158f2f538cbeaa72c8d647fcdac6b1cc6cfa",
+    "ssdeep": "48:XDfLTTLTDfLTTf7fTL377fTL3TDfLTTLTDfLTTf7fTL377fTL3TDfLTTLTDfLTTn:zf33Pf3ff33Pf33Pf33Pf3ff33Pf33Pb"
+  },
+  "high-entropy-300": {
+    "len": 300,
+    "sha256": "1cec66f9d6b86168dba9b1c24262212e40a67ea5cb6416501417e2706c20446d",
+    "ssdeep": "6:sZAalycHGLYaf9C0e7gPmK7yBI4y0Ar/GYJrtX4wlDLp8Q0IlN+FqBrkR1Zgn:oAaHfaw0ec9mBIF5bfX4WDLSilNVBoIn"
+  }
+}

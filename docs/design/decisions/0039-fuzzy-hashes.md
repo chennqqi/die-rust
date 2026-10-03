@@ -1,33 +1,48 @@
-# ADR 0039: Fuzzy Hashes (SSDeep / TLSH) — Deferred
+# ADR 0039: Fuzzy Hashes (SSDeep / TLSH) — Accepted (SSDeep), Superseded TLSH
 
-**Date**: 2026-10-05
-**Status**: Deferred (SSDeep effectively rejected on license)
+**Date**: 2026-10-05 (v1), revised 2026-10-05 (v2, Phase 38)
+**Status**: Accepted — SSDeep implemented clean-room; v1 "rejected" status superseded
 
 ## Context
 
-Upstream `XHashWidget` offers SSDeep and TLSH alongside cryptographic
-hashes. Phase 18.C evaluated Rust-side options:
+v1 evaluated SSDeep as "upstream offers it via XHashWidget" and rejected it
+on license grounds (libfuzzy is GPL-2.0; no maintained pure-Rust port).
+Phase 38 re-investigated the pinned baseline directly:
 
-| Option | Status | License | Notes |
-|--------|--------|---------|-------|
-| `ssdeep` crate 0.7.0 | native binding to libfuzzy | **GPL-2.0** | libfuzzy/ssdeep is GPL — linking infects the binary distribution; incompatible with the project's dependency policy |
-| Pure-Rust SSDeep port | none mature | — | fuzzy hashing rolling-hash algorithm is implementable but no maintained crate exists |
-| `tlsh` crate 0.1.0 | pure Rust port, dormant since 2021 | Apache-2.0/BSD | 18k downloads, unmaintained; algorithm version skew risk vs upstream libtlsh (TrendMicro, C++) |
-| `libtlsh` native | C++ library | BSD | native build burden on all platforms for a niche hash |
+- `XHashWidget` submodule at pinned `291e3ef6` contains **no fuzzy-hash
+  code** — it is a thin wrapper over `XBinary::getHashMethodsAsList()`.
+- `XBinary::HASH` at pinned DIE-engine `23fec32` lists only
+  MD4/MD5/SHA1/SHA2-family entries. **Upstream at the pin ships no
+  SSDeep implementation at all**, so there is no upstream oracle and the
+  earlier "upstream implementation deviates" rationale was incorrect.
+
+Phase 29 already set a precedent of extending the hash panel beyond the
+pinned list (GOST/Tiger/Whirlpool/TLSH via `tlsh2`), so adding SSDeep is
+consistent — provided the GPL license blocker is removed.
 
 ## Decision
 
-- **SSDeep: rejected** — GPL-2.0 license of libfuzzy is incompatible; no
-  maintained pure-Rust implementation exists. Re-evaluate only if a
-  permissively-licensed maintained implementation appears.
-- **TLSH: deferred** — the pure-Rust `tlsh` port is unmaintained since
-  2021; the native libtlsh adds C++ build burden for a low-value widget
-  feature. Revisit when analyst demand appears.
+- **SSDeep: implemented** as a clean-room Rust port
+  (`crates/die-gui/src/ssdeep.rs`). Written against the published CTPH /
+  SpamSum algorithm description — not translated from GPL `fuzzy.c` — so
+  no copyleft is introduced. Output is byte-compatible with libfuzzy.
+- Oracle: `ppdeep` 20260221 (Apache-2.0 pure-Python port of spamsum)
+  generated reference digests stored in `corpus/ssdeep-vectors.json`;
+  payloads are reconstructed by a shared deterministic LCG recipe, and the
+  unit test asserts digest parity including the block-size halving retry
+  and rolling-hash tail semantics.
+- **TLSH**: unchanged — provided by the `tlsh2` pure-Rust crate since
+  Phase 29.
+- The `ssdeep` native crate (libfuzzy binding) remains rejected: native
+  dependency + GPL linkage.
 
 ## Consequences
 
-- The hash widget covers 17 cryptographic/checksum algorithms (Phase 17.C);
-  fuzzy-hash columns remain absent vs upstream.
-- No native or GPL dependencies are introduced.
-- Re-evaluation trigger: maintained pure-Rust SSDeep/TLSH crate, or
-  documented analyst workflow requiring fuzzy-hash triage.
+- `SSDEEP` is selectable in the GUI hash panel (`HASH_ALGORITHMS`) and
+  `compute_named_hash`; output format is the canonical
+  `blocksize:digest1:digest2`.
+- This is a documented **extension** over the pinned upstream, not an
+  alignment gap — no differential-against-upstream test can exist.
+- Re-evaluation trigger: upstream adds a fuzzy hash to `XBinary::HASH`
+  with a different algorithm version (e.g. ssdeep v3 digests); then the
+  oracle target changes.

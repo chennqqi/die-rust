@@ -1378,3 +1378,8 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
 - 2026-10-03：Phase 33 继续——ARJ+ACE 压缩解码器手写移植；ACE tech-1 与 ARJ method-4 补fixture/decoder/差分。
 - 2026-10-03：Phase 34 继续——LHA 主流压缩 lh4-lh7 手写 Rust 解码器（xlzhdecoder 移植）+ 四方法 fixture + 差分。
 - 2026-10-04：Phase 35 继续——LHA legacy 变体手写 Rust 解码器（lzs/lz5/lhx/lk7/pm1/pm2 + lh1 LZHUF），镜像编码器生成 fixture，上游 oracle 差分。
+- 2026-10-04：继续 Phase 36-40——UDF/WIM 枚举、SSDeep 模糊哈希、非 x86 反汇编、GUI/i18n 收尾。
+
+## 2026-10-04 Phase 38（SSDeep）
+
+需求：补齐 SSDeep 模糊哈希。事实修正：pin 基线（`XBinary::HASH`@`23fec32`、XHashWidget@`291e3ef6`）无任何 SSDeep 实现，无上游 oracle；落 clean-room 纯 Rust 实现（非 GPL fuzzy.c 翻译），`ppdeep`（Apache-2.0）向量 oracle，ADR 0039 v2 记录为 pin 之上扩展。

@@ -23,6 +23,7 @@ mod pe_viewer;
 mod peid_scanner;
 mod search;
 mod settings;
+mod ssdeep;
 mod state;
 mod string_extractor;
 mod virustotal;

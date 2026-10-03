@@ -662,3 +662,7 @@ enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回�
 
 需求：补齐 LHA 全部剩余压缩方法。移植上游 `xlha_legacy_*`（lhasa/dearkmodule 移植链，ISC 许可）与 `xlzhufdecoder`（Okumura LZHUF 自适应 Huffman）。
 要点：(1) `_methodToHandle` 分派——`-lzs-`/`-lz5-`/`-lhx-`/`-lk7-`/`-pm1-`/`-pm2-`→legacy 驱动、`-lh1-`→LZHUF、`-lh0-`/`-lz4-`/`-pm0-`/`-lhd-`→stored；(2) `-lk7-` 仅由 level-1 + OS 0x20 + `-lh7-` 头经 LHARK 重映射产生，裸 `-lk7-` 标签上游不识别；(3) LZHUF 解码 `c += bit; c = son[c]` 选的是位置槽——编码端从 `prnt[leaf]` 起链，叶子边不占位（此前生成器多发一位导致上游拒绝）；(4) PM1 强收尾 copy 块、PM2 自适应树重建阈值、各环缓冲预填值均属可观察语义须逐字保留。
+
+## 2026-10-04 Phase 38（SSDeep）
+
+分析：先核查上游——`upstream/DIE-engine/dep/Formats/xbinary.h` 的 HASH 枚举仅 MD4/MD5/SHA1/SHA2 家族；临时检出 XHashWidget@291e3ef6 仅含 dialoghash/hashprocess 薄封装，无 fuzzy 代码。结论：ADR 0039 v1"上游实现有偏差"的前提不成立，改为 pin 之上扩展。GPL 阻断由 clean-room 实现规避（按 CTPH 算法描述编写，ppdeep 独立验证）；native `ssdeep` crate 维持拒绝（native+GPL 双重问题）。实现要点：7 字节滚动窗触发、双通道摘要（64/32 字符上限）、短摘要减半重试语义、rh==0 尾部 last_char 兜底——均从 ppdeep 语义镜像，9 组向量含块边界/高熵/halving 路径全 parity。

@@ -756,7 +756,8 @@ Phase 9 修复了信息展示格式和基础功能缺陷（20 项 P1/P2/P3），
 ### Deferred 项
 
 - NFD/InfoDB/静态脱壳/DEX 专用视图 — 需独立 ADR
-- SSDeep/TLSH 哈希 — 需 native 依赖
+- ~~SSDeep/TLSH 哈希 — 需 native 依赖~~（已解决：TLSH Phase 29
+  `tlsh2` 纯 Rust；SSDeep Phase 38 clean-room 实现，ADR 0039 v2）
 - RAR 归档 — 需 native 依赖（unrar），需 ADR
 - 多语言扩展到 22 种 — 低优先级
 - 自动更新 — ADR 0019 deferred
@@ -2144,8 +2145,8 @@ InstallSimple（857），约 3.7k 行。这组非 PE 解压而是嵌入式
 - 29.A **TLSH**：采用 `tlsh2` v1.1.0（纯 Rust、no_std、贴上游
   C++ 参考实现的移植版），替代 ADR 0039 中"自实现"预案。
   `TlshDefaultBuilder::build_from` + `T1` 前缀串输出与 C 参考
-  实现一致；<50 字节输入返回空（对齐 TLSH 语义）。SSDeep 维持
-  ADR 0039 rejected。
+  实现一致；<50 字节输入返回空（对齐 TLSH 语义）。SSDeep 后于
+  Phase 38 实现（ADR 0039 v2 修订）。
 - 29.B **小众哈希接线**：Tiger/Tiger2/Whirlpool/RIPEMD-128/160/
   256/320/GOST94（Test/CryptoPro/S-2015 三参数集）经 `tiger`/
   `whirlpool`/`ripemd`/`gost94` crate 接入 `file_info.rs` 的
@@ -2332,10 +2333,17 @@ oracle 失败而非能力缺失。全部剩余项重排：
   未移植，记录为缺口）。语料 `gen_p37_corpus.py` 合成
   v1.13 未压缩 WIM（SHA-1 链完整），oracle 3 记录
   `unpacked:true` 字节 parity。
-- **Phase 38：SSDeep**（小）
-  XHashWidget pin `291e3ef6` 提取上游实现做 oracle；若不可
-  检出则落 libfuzzy 兼容参考实现并记 ADR 偏离（ADR 0039
-  复审，理由随 phase 一并修订）。
+- **Phase 38：SSDeep** — DONE（小）
+  事实修正：XHashWidget pin `291e3ef6` 与 `XBinary::HASH`
+  （上游 `23fec32`）均**无** SSDeep——pin 基线本身不含模糊
+  哈希，不存在上游 oracle。落 clean-room 纯 Rust 实现
+  （`crates/die-gui/src/ssdeep.rs`，按公开 CTPH/SpamSum 算法
+  描述编写、非 GPL fuzzy.c 翻译，规避 libfuzzy GPL-2.0），
+  输出与 libfuzzy 字节兼容；独立 oracle 为 `ppdeep`
+  20260221（Apache-2.0），向量入 `corpus/ssdeep-vectors.json`，
+  载荷由共享 LCG 配方重建。接入 `HASH_ALGORITHMS` +
+  `compute_named_hash`；ADR 0039 v2 记录为 pin 基线之上的
+  文档化扩展。
 - **Phase 39：非 x86 反汇编**（ADR 0041 修订，中型）
   capstone（上游自带 `libcapstone` 已建，native 例外正当化）
   vs yaxpeax 复审 → 落地 MIPS/PPC/RISC-V + ELF/PE 架构语料。
