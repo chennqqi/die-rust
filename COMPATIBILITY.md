@@ -292,11 +292,14 @@ scanning:
    `list_archive_members`/`extract_member` only. Extraction coverage
    is at parity: ARJ method 0-6, LHA all methods (stored, lh1 LZHUF,
    lh4-7 block decoder, legacy lzs/lz5/lhx/lk7/pm1/pm2), ACE stored +
-   tech-1, CPIO all six variants, UDF/WIM stored streams — each
-   validated byte-for-byte against upstream oracle extraction
-   (Phases 32–37). WIM compressed (XPRESS/LZX) streams list but
-   extract empty — a documented gap vs upstream `HANDLE_METHOD_LZX`/
-   `XPRESS_HUFF`.
+   tech-1, CPIO all six variants, UDF stored streams, WIM stored +
+   XPRESS-Huffman (`HANDLE_METHOD_XPRESS_HUFF`/71) + LZX
+   (`HANDLE_METHOD_LZX`/69) compressed resources — each validated
+   byte-for-byte against upstream oracle extraction (Phases 32–37,
+   41). WIM LZMS (`HANDLE_METHOD_LZMS`) and solid/spliced resources
+   remain unsupported and fail closed, matching upstream refusal
+   where upstream also refuses (LZMS decoder is absent upstream at
+   the pinned commit as well).
 
 3. **`--recursive` backward compatibility**: `--recursive` is retained as
    an alias for `--recursive-dir` to avoid breaking existing scripts.

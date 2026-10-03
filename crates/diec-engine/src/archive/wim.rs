@@ -10,13 +10,11 @@
 //! actual references found in the metadata, and the boot descriptor
 //! must alias a live metadata resource.
 //!
-//! Scope: resources are read only when stored (no compression flags
-//! and `pack == unpack`), which covers uncompressed WIMs end to end.
-//! A compressed metadata resource fails enumeration closed; a
-//! compressed file stream still lists (matching upstream record
-//! fields) but extracts empty — the chunked XPRESS/LZX plumbing is
-//! intentionally not ported yet.
+//! Scope: stored, XPRESS-Huffman and LZX chunked resources are read
+//! and decoded (`wim_decode`); LZMS stays unsupported, matching the
+//! upstream `_stageChunkedResource` contract which rejects it.
 
+use super::wim_decode;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::SecondaryRecord;
@@ -244,9 +242,7 @@ pub fn is_wim(d: &[u8]) -> bool {
     h.part_number != 0 && h.number_of_parts != 0 && h.part_number <= h.number_of_parts
 }
 
-/// `_readResource` restricted to stored resources (uncompressed WIMs);
-/// compressed resources return `None` (fail-closed gap vs upstream's
-/// XPRESS/LZX chunk decoding).
+/// `_readStoredResource`.
 fn read_stored_resource(d: &[u8], r: &Resource) -> Option<Vec<u8>> {
     if !resource_stored(r) {
         return None;
@@ -260,6 +256,59 @@ fn read_stored_resource(d: &[u8], r: &Resource) -> Option<Vec<u8>> {
     let off = r.offset as usize;
     let end = off.checked_add(r.pack_size as usize)?;
     d.get(off..end).map(<[u8]>::to_vec)
+}
+
+/// `_getChunkSize`: WIM v1 defaults to the fixed 32768-byte chunk;
+/// explicit sizes must be powers of two inside [4096, MAX_CHUNK].
+fn effective_chunk_size(chunk: u32) -> Option<u32> {
+    if chunk == 0 {
+        return Some(32768);
+    }
+    if !(4096..=MAX_CHUNK).contains(&chunk) || (chunk & (chunk - 1)) != 0 || chunk > i32::MAX as u32
+    {
+        return None;
+    }
+    Some(chunk)
+}
+
+/// `_getCompressionType`: header flags to the compression enum used by
+/// `_readResource`/`_stageChunkedResource`.
+fn compression_type(flags: u32) -> Option<wim_decode::WimCompression> {
+    if flags & FLAG_COMPRESSION == 0 {
+        return None;
+    }
+    if flags & FLAG_LZX != 0 {
+        return Some(wim_decode::WimCompression::Lzx);
+    }
+    if flags & (FLAG_XPRESS | FLAG_XPRESS2) != 0 {
+        return Some(wim_decode::WimCompression::Xpress);
+    }
+    None
+}
+
+/// `_readResource` + `_decompressChunkedResource`: stored resources
+/// copy verbatim; compressed non-solid resources are staged through the
+/// chunk table by `wim_decode`. LZMS and solid resources return `None`
+/// (upstream does not decode them either).
+fn read_resource_data(d: &[u8], r: &Resource, h: &Header) -> Option<Vec<u8>> {
+    if !resource_extent_valid(r, d.len() as u64)
+        || r.pack_size > MAX_BUFFERED
+        || r.unpack_size > MAX_BUFFERED
+    {
+        return None;
+    }
+    if resource_stored(r) {
+        return read_stored_resource(d, r);
+    }
+    if r.flags & RES_COMPRESSED == 0 || r.flags & RES_SOLID != 0 {
+        return None;
+    }
+    if r.unpack_size == 0 || r.unpack_size > i32::MAX as u64 {
+        return None;
+    }
+    let chunk = effective_chunk_size(h.chunk_size)?;
+    let compression = compression_type(h.flags)?;
+    wim_decode::stage_chunked_resource(d, r.offset, r.pack_size, r.unpack_size, compression, chunk)
 }
 
 #[derive(Clone, Default)]
@@ -989,9 +1038,19 @@ fn sha1(d: &[u8]) -> Vec<u8> {
     sha1::Sha1::digest(d).to_vec()
 }
 
+/// Parsed image context shared by `list` and `extract`.
+struct Collected {
+    flags: u32,
+    chunk_size: u32,
+    legacy: bool,
+    /// Image index of the first record when a multi-image prefix is used.
+    first_image: u32,
+    images: Vec<Vec<Record>>,
+}
+
 /// `initUnpack` enumeration: header checks -> stream list -> metadata
-/// parse + SHA-1 verify -> refcount reconciliation -> image prefixes.
-pub fn list(d: &[u8]) -> Option<Vec<SecondaryRecord>> {
+/// parse + SHA-1 verify -> refcount reconciliation -> image list.
+fn collect(d: &[u8]) -> Option<Collected> {
     if !is_wim(d) {
         return None;
     }
@@ -1004,19 +1063,6 @@ pub fn list(d: &[u8]) -> Option<Vec<SecondaryRecord>> {
     }
     let streams = read_stream_list(d, &h)?;
     let legacy = u64::from(h.header_size) == HEADER_OLD;
-    // Upstream HANDLE_METHOD values: LZX=69, XPRESS_HUFF=71.
-    let compressed_method: u32 = {
-        if h.flags & FLAG_COMPRESSION == 0 {
-            0
-        } else if h.flags & FLAG_LZX != 0 {
-            69
-        } else if h.flags & (FLAG_XPRESS | FLAG_XPRESS2) != 0 {
-            71
-        } else {
-            0
-        }
-    };
-
     let mut by_hash: HashMap<Vec<u8>, StreamInfo> = HashMap::new();
     let mut by_id: HashMap<u32, StreamInfo> = HashMap::new();
     for s in &streams {
@@ -1055,7 +1101,7 @@ pub fn list(d: &[u8]) -> Option<Vec<SecondaryRecord>> {
         if s.ref_count != 1 || images.len() >= MAX_IMAGES {
             return None;
         }
-        let blob = read_stored_resource(d, &s.resource)?;
+        let blob = read_resource_data(d, &s.resource, &h)?;
         if blob.is_empty() {
             return None;
         }
@@ -1127,13 +1173,38 @@ pub fn list(d: &[u8]) -> Option<Vec<SecondaryRecord>> {
         return None;
     }
 
-    let use_prefix = images.len() > 1;
     let first_image = if h.version == 0x0001_0900 { 0 } else { 1 };
+    Some(Collected {
+        flags: h.flags,
+        chunk_size: h.chunk_size,
+        legacy,
+        first_image,
+        images,
+    })
+}
+
+/// `initUnpack` enumeration plus `SecondaryRecord` projection.
+pub fn list(d: &[u8]) -> Option<Vec<SecondaryRecord>> {
+    let c = collect(d)?;
+    // Upstream HANDLE_METHOD values: LZX=69, XPRESS_HUFF=71.
+    let compressed_method: u32 = {
+        if c.flags & FLAG_COMPRESSION == 0 {
+            0
+        } else if c.flags & FLAG_LZX != 0 {
+            69
+        } else if c.flags & (FLAG_XPRESS | FLAG_XPRESS2) != 0 {
+            71
+        } else {
+            0
+        }
+    };
+
+    let use_prefix = c.images.len() > 1;
     let mut out = Vec::new();
     let mut final_names = HashSet::new();
-    for (i, records) in images.iter().enumerate() {
+    for (i, records) in c.images.iter().enumerate() {
         let prefix = if use_prefix {
-            format!("image_{}/", first_image + i as u32)
+            format!("image_{}/", c.first_image + i as u32)
         } else {
             String::new()
         };
@@ -1165,4 +1236,79 @@ pub fn list(d: &[u8]) -> Option<Vec<SecondaryRecord>> {
         }
     }
     Some(out)
+}
+
+/// `_stageResource` + the digest check from `unpackCurrent`: stage the
+/// record's resource (stored or chunked-compressed), verify SHA-1 when
+/// the digest is required, and return the uncompressed bytes.
+pub fn extract(d: &[u8], name: &str) -> Vec<u8> {
+    let Some(c) = collect(d) else {
+        return Vec::new();
+    };
+    let use_prefix = c.images.len() > 1;
+    let mut target: Option<&Record> = None;
+    for (i, records) in c.images.iter().enumerate() {
+        let prefix = if use_prefix {
+            format!("image_{}/", c.first_image + i as u32)
+        } else {
+            String::new()
+        };
+        for r in records {
+            let full = format!("{prefix}{}", r.name);
+            if full == name {
+                target = Some(r);
+                break;
+            }
+        }
+        if target.is_some() {
+            break;
+        }
+    }
+    let Some(r) = target else {
+        return Vec::new();
+    };
+    if r.is_folder
+        || r.uncompressed_size == 0
+        || r.uncompressed_size != r.resource.unpack_size
+        || r.hash.len() != HASH_SIZE
+        || (!c.legacy && is_empty_hash(&r.hash))
+        || !resource_extent_valid(&r.resource, d.len() as u64)
+    {
+        return Vec::new();
+    }
+
+    let staged = if resource_stored(&r.resource) {
+        read_stored_resource(d, &r.resource)
+    } else if r.resource.flags & RES_COMPRESSED != 0 && r.resource.flags & RES_SOLID == 0 {
+        let chunk = match effective_chunk_size(c.chunk_size) {
+            Some(v) => v,
+            None => return Vec::new(),
+        };
+        let Some(compression) = compression_type(c.flags) else {
+            return Vec::new();
+        };
+        wim_decode::stage_chunked_resource(
+            d,
+            r.resource.offset,
+            r.resource.pack_size,
+            r.resource.unpack_size,
+            compression,
+            chunk,
+        )
+    } else {
+        None
+    };
+    let Some(out) = staged else {
+        return Vec::new();
+    };
+
+    // `bDigestRequired && baDigest != record.baHash` in `unpackCurrent`.
+    let digest_required = !(c.legacy && is_empty_hash(&r.hash));
+    if digest_required && sha1(&out) != r.hash {
+        return Vec::new();
+    }
+    if out.len() as u64 != r.uncompressed_size {
+        return Vec::new();
+    }
+    out
 }

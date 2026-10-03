@@ -17,6 +17,7 @@ mod lzh_decode;
 mod lzhuf;
 mod udf;
 mod wim;
+mod wim_decode;
 
 /// Secondary format detected by [`list_secondary`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,21 +150,11 @@ pub fn extract_secondary(data: &[u8], kind: SecondaryKind, name: &str) -> Vec<u8
         };
         return data[soff..send].to_vec();
     }
-    // WIM: stored streams copy verbatim (upstream verifies the record's
-    // SHA-1 digest at unpack; the generator and real images both carry
-    // real digests).  Compressed streams (XPRESS/LZX) return empty —
-    // the chunked decode plumbing is not ported yet, matching the
-    // fail-closed contract of the other formats.
+    // WIM: upstream `unpackCurrent` stages the record's resource and
+    // verifies its SHA-1 digest; `wim::extract` re-runs the full parse
+    // so both stored and chunked XPRESS/LZX resources are covered.
     if kind == SecondaryKind::Wim {
-        if rec.method != 1 {
-            return Vec::new();
-        }
-        let soff = rec.data_offset as usize;
-        let send = match soff.checked_add(rec.packed_size as usize) {
-            Some(e) if e <= data.len() => e,
-            _ => return Vec::new(),
-        };
-        return data[soff..send].to_vec();
+        return wim::extract(data, name);
     }
     if stored {
         return data[off..end].to_vec();

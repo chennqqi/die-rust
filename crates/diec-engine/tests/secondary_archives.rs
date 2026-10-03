@@ -411,6 +411,57 @@ fn wim_records_and_extract_match_oracle() {
     check_fixture("test.wim", diec_engine::archive::SecondaryKind::Wim);
 }
 
+/// Phase 41: XPRESS-Huffman compressed WIM (compressed metadata,
+/// multi-chunk + match-path members, stored member) vs oracle.
+#[test]
+fn wim_xpress_records_and_extract_match_oracle() {
+    check_fixture("test-xpress.wim", diec_engine::archive::SecondaryKind::Wim);
+}
+
+/// Phase 41: LZX compressed WIM (BLOCK_UNCOMPRESSED chunks, stored
+/// passthrough chunk inside a compressed resource, odd-size tail chunk,
+/// E8 member) vs oracle.
+#[test]
+fn wim_lzx_records_and_extract_match_oracle() {
+    check_fixture("test-lzx.wim", diec_engine::archive::SecondaryKind::Wim);
+}
+
+/// Corrupted compressed WIM resources must fail closed: decode errors
+/// produce empty output and never panic.
+#[test]
+fn wim_compressed_malformed_rejected() {
+    use diec_engine::archive::{SecondaryKind, extract_secondary, list_secondary};
+    let data = std::fs::read(corpus_root().join("test-xpress.wim")).unwrap();
+    // Mutate every 97th byte: Huffman-table corruption, bad offsets,
+    // broken chunk tables and truncated streams must not panic or
+    // yield garbage.
+    for off in (0..data.len()).step_by(97) {
+        let mut bad = data.clone();
+        bad[off] ^= 0xFF;
+        let _ = list_secondary(&bad);
+        let _ = extract_secondary(&bad, SecondaryKind::Wim, "big.bin");
+        let _ = extract_secondary(&bad, SecondaryKind::Wim, "match.bin");
+    }
+    // Truncations must fail closed as well.
+    for cut in [0x60, 0xD0, data.len() / 2, data.len() - 200] {
+        let _ = list_secondary(&data[..cut]);
+        let _ = extract_secondary(&data[..cut], SecondaryKind::Wim, "big.bin");
+    }
+
+    let data = std::fs::read(corpus_root().join("test-lzx.wim")).unwrap();
+    for off in (0..data.len()).step_by(211) {
+        let mut bad = data.clone();
+        bad[off] ^= 0xFF;
+        let _ = list_secondary(&bad);
+        let _ = extract_secondary(&bad, SecondaryKind::Wim, "mixed.bin");
+        let _ = extract_secondary(&bad, SecondaryKind::Wim, "odd.bin");
+    }
+    for cut in [0x60, 0xD0, data.len() / 2, data.len() - 200] {
+        let _ = list_secondary(&data[..cut]);
+        let _ = extract_secondary(&data[..cut], SecondaryKind::Wim, "mixed.bin");
+    }
+}
+
 /// Truncated or corrupted WIM images must fail closed.
 #[test]
 fn wim_malformed_rejected() {

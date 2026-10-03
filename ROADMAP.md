@@ -2365,13 +2365,26 @@ oracle 失败而非能力缺失。全部剩余项重排：
 
 ### 收尾补齐批（Phase 41-44，消除剩余可立项差距）
 
-- **Phase 41：WIM 压缩流提取**（中型）
-  移植 `xlzxdecoder.cpp`（954 行）+ `xxpressdecoder.cpp`（388
-  行）→ `wim_decode.rs`；WIM 分块重组（chunk table + 64KiB
-  窗口）。语料：手写 XPRESS 编码器 + LZX `BLOCK_UNCOMPRESSED`(3)
-  编码器（合法流走上游解码器），`test-xpress.wim`/`test-lzx.wim`
-  fixture，oracle `unpacked:true` 后提取字节 parity。消除
-  "WIM 压缩流 list 但提取产空"缺口。
+- **Phase 41：WIM 压缩流提取** — DONE（中型）
+  `crates/diec-engine/src/archive/wim_decode.rs`：移植
+  `xxpressdecoder.cpp`（XPRESS Huffman：256B nibble 表→512 符号
+  canonical 完备码、16 位字位流、终端 `sym==256 && bitbuf==0 &&
+  inPos==inSize` 判据）+ `xlzxdecoder.cpp` WIM 变体（3-bit 块型
+  + flag/16(+8)-bit 块长、verbatim/aligned/uncompressed 块、
+  R0-R2、位置槽 `{30,32,34,36,38,42,50}`、E8 反变换 filesize
+  12000000、严格 `inPos==inSize && bitBuf==0`）。
+  `_stageChunkedResource` 完整移植：num_chunks-1 个累积
+  end-offset（4B/8B 按 unpack>4GiB）、`comp==unc` 直通、解码块
+  精确尺寸校验、`chunk_start==compressed_total &&
+  output_done==unpack_size` 收尾；`_readResource`/`_stageResource`
+  语义（stored≠comp flags、SOLID/LZMS 产空与上游一致、SHA-1
+  digest 按 `bDigestRequired` 校验、256MiB `MAX_BUFFERED`）。
+  metadata 资源同样经 `read_resource_data` 解压（上游
+  `_readResource` 同源）。语料 `gen_p41_corpus.py`（Python
+  XPRESS/LZX-UNCOMPRESSED 编码器）：`test-xpress.wim`/
+  `test-lzx.wim` 各 5 记录（压缩 metadata + 多块/奇数尾块/
+  stored 混合），oracle `unpacked:true` 全字节 parity + 双
+  fixture 逐字节变异/截断 fail-closed。
 - **Phase 42：MSDOS host API 补全**（中型）
   消除 `MSDOS.compareEP/compareOverlay/getEntryPointOffset/
   getOverlayOffset/getNEOffset/getBaseOffset/getOperationSystem*
