@@ -540,6 +540,8 @@ fn apply_pe_filter(
 /// Section header view used for both packed and output images.
 #[derive(Clone, Copy)]
 pub(crate) struct SectionHead {
+    /// Raw 8-byte section name (yoda's name-DWORD skip list).
+    pub(crate) name: [u8; 8],
     pub(crate) virtual_size: u32,
     pub(crate) virtual_address: u32,
     pub(crate) raw_size: u32,
@@ -610,7 +612,10 @@ impl<'a> PackedPe<'a> {
             if s + SECTION_HEADER_SIZE > data.len() {
                 return Err(UnpackError::Malformed("section table truncated"));
             }
+            let mut name = [0u8; 8];
+            name.copy_from_slice(&data[s..s + 8]);
             sections.push(SectionHead {
+                name,
                 virtual_size: read_u32(data, s + 8).unwrap_or(0),
                 virtual_address: read_u32(data, s + 12).unwrap_or(0),
                 raw_size: read_u32(data, s + 16).unwrap_or(0),

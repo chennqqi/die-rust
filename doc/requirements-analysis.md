@@ -599,3 +599,14 @@ save/restore 机制。通过 DIE-engine 调试追踪确认：Qt Script 中 `var 
 
 ## 2026-10-03 Phase 26 分析
 - 三个壳同构（自定义位流解码 + PE rebuild），aPLib 原位解压需共享缓冲区 API 规避借用冲突；MEW 合成流终止字节 0x18（非 0x10）；Petite 为 op-table 驱动 + _doubledl 哨兵位流。所有样本用可重复生成器构造并先经上游 oracle 验证才入库。意外收获：oracle 差分暴露 nEntryPointSection 应为 VA 空间反向查找而非文件偏移，修正后 86 文件 0 差异。
+
+## 2026-10-03 Phase 27 NsPack 分析
+- XNSPACK 为 LZMA 变体二进制 range coder：自适应 u16 概率表(init 0x400)、
+  literal/match/rep 三类路径、damian 位置状态、oldback×3 历史距离。
+- 编码侧逆运算用 LZMA SDK 式 cache/carry shiftLow，literal-only 流可完整构造。
+- 上游 _detect 分 2.x(E9 redirector+差值定位) 与 1.4/3.x(_findStartOfStuff
+  needle=dsize==sec0.vsize) 两路；OEP 经 loader 尾部 61 9D E9 扫描。
+- _deFilterCallJmp 双路径：control 无效→naive 全量逆滤波；有效→marker-gated。
+- _reconstructImports 描述符流(marker=记录长自校验)+DLL 名池 KERNEL32.DLL 锚定，
+  合成 .idata + IAT 回填；stub 头双布局(1.4 dword/3.x qword 字段距)。
+- 偏差：dsize 256MiB 硬上限（上游 -1 无限），对齐 XASPACK 同款守卫语义。

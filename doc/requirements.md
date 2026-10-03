@@ -1336,3 +1336,7 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 
 ## 2026-10-03 Phase 26 完成
 - 移植 XStaticUnpacker FSG/MEW/Petite 三个 PE 压缩壳脱壳器（纯 Rust，复用 unpack:: PE 重建基件）；统一分派 detect_packed/unpack_any；CLI --unpack 与 GUI detect_packer/unpack_file 接入。合成语料经独立 Qt oracle 逐字节差分通过；顺带修正 nEntryPointSection 的 VA 空间语义（oracle 差分发现）。继续顺序执行 Phase 27-31。
+
+## 2026-10-03 Phase 27 收尾
+顺序执行 26-31 中的 Phase 27：NsPack 静态脱壳移植（LZMA 变体 range coder）、
+统一分派注册、合成语料 + oracle 字节差分、畸形输入负向测试、文档更新。

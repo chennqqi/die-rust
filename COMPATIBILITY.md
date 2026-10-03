@@ -431,7 +431,10 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 | Petite 2.x / level 1 | `XPETITE` | ✅ op-table + `_doubledl` 位流 + XOR 字面量 + OEP 恢复 + PE 重建 | oracle 字节差分（合成 v2）|
 | 统一分派 | `XStaticUnpacker::tryUnpack` 候选序 | ✅ `detect_packed`/`unpack_any`；CLI `--unpack` + GUI `detect_packer`/`unpack_file` | |
 | `nEntryPointSection` | `XPE::getEntryPointSection`（VA + 反向 memory-map 查找） | ✅ 修正为 VA 空间 + 重叠取末节（原文件偏移语义偏差） | `protector: Generic [Last section entry point]` 差分发现 |
-| 其他壳 | ASPack/NsPack/yoda/AutoIt/… | ❌ deferred → Phase 27/28 | ADR 0036；XInstallSimple 需 USE_XEMULATOR |
+| yoda 1.3 (yC) | `XYODA` | ✅ 双层字节码 VM + 节名 DWORD 跳过表 + OEP 恢复 + PE 重建 | oracle 字节差分（合成 1.3）|
+| ASPack 2.12 | `XASPACK` | ✅ 布局表行匹配 + 动态 Huffman-LZ + PE 重建 | oracle 字节差分（合成 2.12）；模拟器分支未覆盖（无对应布局行）|
+| NsPack 1.4/2.x/3.x | `XNSPACK` | ✅ LZMA 变体 range coder + 双 stub 布局 + marker-gated/naive E8-E9 逆滤波 + 导入重建 + `.clam01`/`.idata`/`.ghost` PE 重建 | oracle 字节差分（合成 naive + gated/imports 两变体）；dsize 加 256MiB 硬上限（对齐 XASPACK 前置，fail-closed）|
+| 其他壳 | AutoIt/EnigmaVB/BoxedApp/InstallSimple | ❌ deferred → Phase 28 | ADR 0036；XInstallSimple 需 USE_XEMULATOR |
 
 ## Phase 21: NFD/SpecAbstract 第二引擎（2026-10-07）
 

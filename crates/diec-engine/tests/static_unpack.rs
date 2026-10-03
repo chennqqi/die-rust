@@ -9,8 +9,9 @@
 use std::path::PathBuf;
 
 use diec_engine::unpack::{
-    PackerKind, detect_fsg, detect_mew, detect_packed, detect_petite, unpack_any, unpack_fsg,
-    unpack_mew, unpack_petite,
+    PackerKind, detect_aspack, detect_fsg, detect_mew, detect_nspack, detect_packed, detect_petite,
+    detect_yoda, unpack_any, unpack_aspack, unpack_fsg, unpack_mew, unpack_nspack, unpack_petite,
+    unpack_yoda,
 };
 
 fn corpus(name: &str) -> PathBuf {
@@ -110,6 +111,9 @@ fn unpack_any_dispatches_by_packer() {
         ("fsg-v100-minimal.exe", PackerKind::Fsg, "FSG"),
         ("mew11-minimal.exe", PackerKind::Mew, "MEW"),
         ("petite2-minimal.exe", PackerKind::Petite, "Petite"),
+        ("yoda13-minimal.exe", PackerKind::Yoda, "yC"),
+        ("aspack212-minimal.exe", PackerKind::Aspack, "ASPack"),
+        ("nspack-minimal.exe", PackerKind::Nspack, "NsPack"),
     ] {
         let packed = load(fixture);
         let info = detect_packed(&packed).expect(fixture);
@@ -132,4 +136,74 @@ fn detect_packed_rejects_plain_pe() {
     assert!(detect_packed(&plain).is_none());
     assert!(unpack_any(&plain).is_err());
     assert!(detect_packed(b"not a pe").is_none());
+}
+
+#[test]
+fn yoda13_minimal_matches_oracle() {
+    let packed = load("yoda13-minimal.exe");
+    let info = detect_yoda(&packed).expect("yoda detection");
+    assert_eq!(info.sversion, "1.3");
+    let ours = unpack_yoda(&packed, -1).expect("yoda unpack");
+    let oracle = load("yoda13-minimal.unpacked.exe");
+    assert_eq!(ours, oracle, "yoda 1.3 output must match oracle");
+}
+
+#[test]
+fn aspack212_minimal_matches_oracle() {
+    let packed = load("aspack212-minimal.exe");
+    let info = detect_aspack(&packed).expect("aspack detection");
+    assert_eq!(info.sversion, "2.12");
+    let ours = unpack_aspack(&packed, -1).expect("aspack unpack");
+    let oracle = load("aspack212-minimal.unpacked.exe");
+    assert_eq!(ours, oracle, "aspack 2.12 output must match oracle");
+}
+
+#[test]
+fn nspack_minimal_matches_oracle() {
+    let packed = load("nspack-minimal.exe");
+    let info = detect_nspack(&packed).expect("nspack detection");
+    assert_eq!(info.dsize, 0x410);
+    assert_eq!(info.rva, 0x1000);
+    let ours = unpack_nspack(&packed, -1).expect("nspack unpack");
+    let oracle = load("nspack-minimal.unpacked.exe");
+    assert_eq!(
+        ours, oracle,
+        "nspack naive-defilter output must match oracle"
+    );
+}
+
+#[test]
+fn nspack_gated_matches_oracle() {
+    let packed = load("nspack-gated.exe");
+    let info = detect_nspack(&packed).expect("nspack detection");
+    assert_eq!(info.dsize, 0x900);
+    let ours = unpack_nspack(&packed, -1).expect("nspack unpack");
+    let oracle = load("nspack-gated.unpacked.exe");
+    assert_eq!(
+        ours, oracle,
+        "nspack gated-defilter + import-rebuild output must match oracle"
+    );
+}
+
+#[test]
+fn nspack_rejects_malformed() {
+    let packed = load("nspack-minimal.exe");
+    // Truncations must fail closed, never panic.
+    for cut in [0x100usize, 0x600, 0x60d, 0x680] {
+        let t = &packed[..cut];
+        assert!(detect_nspack(t).is_none() || unpack_nspack(t, -1).is_err());
+    }
+    let mut bad = packed.clone();
+    bad[0x200] = 0x00; // break the loader prologue at the entry point
+    assert!(detect_nspack(&bad).is_none());
+    // Corrupt the mode byte (>= 0xE1 is rejected upstream); sos sits at
+    // file offset 0x200 (raw ptr) + 0x600.
+    let mut bad2 = packed.clone();
+    bad2[0x800] = 0xFF;
+    assert!(detect_nspack(&bad2).is_none() || unpack_nspack(&bad2, -1).is_err());
+    // Corrupt the stream tail; must not hang or panic.
+    let mut bad3 = packed;
+    let n = bad3.len();
+    bad3[n - 20] ^= 0xFF;
+    let _ = unpack_nspack(&bad3, 0x400);
 }

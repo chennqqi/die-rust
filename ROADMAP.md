@@ -2070,10 +2070,39 @@ Phase 25 后的全部未做项均来自 ADR deferred 决议。本节按
   "可重复生成器/哈希清单/隔离语料"规则处理，不直接提交
   来源不明样本；找不到合法样本的壳记录后跳过。
 
-### Phase 27：静态脱壳·PE 压缩壳组二 — TODO
+### Phase 27：静态脱壳·PE 压缩壳组二 — DONE（2026-10-03）
 
 范围：ASPack（1068）、NsPack（1435）、yoda（672），约 3.2k 行。
 结构同 Phase 26，验收与 gate 相同。
+
+交付（`diec-engine/src/unpack/`）：
+
+- `yoda.rs`（672 行移植）：双层字节码 VM（layer1 解扰 layer2 程序
+  再执行）、节名前 4 字节 DWORD 跳过表（`SKIP_NAMES`）、`push +8;
+  pop` OEP 恢复、`_buildPE`；fixture `corpus/yoda13-minimal.exe`
+  经 oracle 字节差分通过。
+- `aspack.rs`（1068 行移植）：布局表逐行匹配（`COMP_B` 114 字节
+  原表直比）、自实现动态 Huffman-LZ 解码（`_getdec`/`_readstream`），
+  块表 `[rva,size]` 链 + `strMlt` 乘数表；fixture
+  `corpus/aspack212-minimal.exe` 报 `2.12` 且字节一致。
+- `nspack.rs`（1435 行移植）：LZMA 变体 range coder（自适应
+  `quint16` 概率表 init `0x400`、`_getBit/_get100/_get100Size/_getN/
+  _getNSize/_getBB/_getBitmap` 全家）、1.4/2.x/3.x 双 stub 布局、
+  `nsp0` 扫描（`_findStartOfStuff` needle=sec0.vsize）、E8/E9 逆滤波
+  双路径（naive 全量 / marker-gated）、`_reconstructImports` 描述符
+  流解码 + `.idata` 合成 + IAT 回填、`.clam01/.idata/.ghost` 重建。
+  偏差记录：`dsize` 增加 256MiB 硬上限（上游 `nOutputLimit=-1`
+  无限，按项目 fail-closed 规则对齐 XASPACK 同款守卫）。
+- 生成器 `tools/gen_yoda_corpus.py`、`tools/gen_aspack_corpus.py`、
+  `tools/gen_nspack_corpus.py`——nspack 生成器含 LZMA SDK 式
+  cache/carry range encoder（literal-only 流）。
+- 统一分派 `detect_packed`/`unpack_any` 扩至 7 壳（UPX/FSG/MEW/
+  Petite/yC/ASPack/NsPack）；CLI `--unpack` 与 GUI `detect_packer`/
+  `unpack_file` 自动生效；`diec-engine` 全 detect/unpack API 导出。
+- 测试：`static_unpack.rs` 14 项（7 壳 oracle 字节差分 + 分派 +
+  三类畸形输入负向）；语料 8 fixture 全部入 `corpus/`。
+- 验证：NFD 差分 94 文件 0 差异；fmt/clippy -D warnings 零警告；
+  workspace 全量测试通过。
 
 ### Phase 28：静态脱壳·容器/脚本提取组 — TODO
 

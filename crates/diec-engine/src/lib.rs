@@ -27,8 +27,10 @@ pub use struct_mode::{
     StructNode, StructSelector, evaluate_struct, evaluate_struct_default, general_method_names,
 };
 pub use unpack::{
-    PackedInfo, PackerKind, UnpackError, UpxInfo, detect_packed, detect_upx, is_upx_packed,
-    unpack_any as unpack_static,
+    AspackInfo, FsgInfo, MewInfo, NsPackInfo, PackedInfo, PackerKind, PetiteInfo, UnpackError,
+    UpxInfo, YodaInfo, detect_aspack, detect_fsg, detect_mew, detect_nspack, detect_packed,
+    detect_petite, detect_upx, detect_yoda, is_upx_packed, unpack_any as unpack_static,
+    unpack_aspack, unpack_fsg, unpack_mew, unpack_nspack, unpack_petite, unpack_yoda,
 };
 
 #[cfg(test)]

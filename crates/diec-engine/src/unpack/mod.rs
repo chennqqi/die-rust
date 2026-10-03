@@ -13,21 +13,27 @@
 //! but their rebuilders are not implemented yet.
 
 mod aplib;
+mod aspack;
 mod fsg;
 mod mew;
 mod nrv;
+mod nspack;
 mod petite;
 mod upx;
+mod yoda;
 
 pub(crate) use upx::PackedPe;
 
+pub use aspack::{AspackInfo, detect_aspack, unpack_aspack};
 pub use fsg::{FsgInfo, detect_fsg, unpack_fsg};
 pub use mew::{MewInfo, detect_mew, unpack_mew};
 pub use nrv::{BitWidth, NrvAlgorithm, NrvError, nrv_decompress};
+pub use nspack::{NsPackInfo, detect_nspack, unpack_nspack};
 pub use petite::{PetiteInfo, detect_petite, unpack_petite};
 pub use upx::{
     UnpackError, UpxInfo, decompress_payload, detect_upx, is_upx_packed, unpack, unpack_pe,
 };
+pub use yoda::{YodaInfo, detect_yoda, unpack_yoda};
 
 /// Packer family identified by [`detect_packed`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +46,12 @@ pub enum PackerKind {
     Mew,
     /// Petite (2.x).
     Petite,
+    /// yoda's Crypter (yC).
+    Yoda,
+    /// ASPack (non-emulator layout rows).
+    Aspack,
+    /// NsPack (1.4/2.x/3.x loader stub).
+    Nspack,
 }
 
 /// Detection result across all supported static unpackers.
@@ -77,10 +89,32 @@ pub fn detect_packed(data: &[u8]) -> Option<PackedInfo> {
             version: info.sversion.to_string(),
         });
     }
-    detect_petite(data).map(|info| PackedInfo {
-        kind: PackerKind::Petite,
-        name: "Petite",
-        version: info.sversion.to_string(),
+    if let Some(info) = detect_petite(data) {
+        return Some(PackedInfo {
+            kind: PackerKind::Petite,
+            name: "Petite",
+            version: info.sversion.to_string(),
+        });
+    }
+    if let Some(info) = detect_yoda(data) {
+        return Some(PackedInfo {
+            kind: PackerKind::Yoda,
+            name: "yC",
+            version: info.sversion.to_string(),
+        });
+    }
+    if let Some(info) = detect_aspack(data) {
+        return Some(PackedInfo {
+            kind: PackerKind::Aspack,
+            name: "ASPack",
+            version: info.sversion.to_string(),
+        });
+    }
+    // Upstream reports an empty version string for NsPack.
+    detect_nspack(data).map(|_| PackedInfo {
+        kind: PackerKind::Nspack,
+        name: "NsPack",
+        version: String::new(),
     })
 }
 
@@ -105,6 +139,18 @@ pub fn unpack_any(data: &[u8]) -> Result<Vec<u8>, UnpackError> {
             kind: PackerKind::Petite,
             ..
         }) => unpack_petite(data, -1),
+        Some(PackedInfo {
+            kind: PackerKind::Yoda,
+            ..
+        }) => unpack_yoda(data, -1),
+        Some(PackedInfo {
+            kind: PackerKind::Aspack,
+            ..
+        }) => unpack_aspack(data, -1),
+        Some(PackedInfo {
+            kind: PackerKind::Nspack,
+            ..
+        }) => unpack_nspack(data, -1),
         None => Err(UnpackError::NotPacked),
     }
 }
