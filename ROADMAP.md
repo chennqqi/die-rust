@@ -2018,5 +2018,16 @@ nrv 单测），前端 `npm run build` 通过。
   Unknown 抑制）、各专用 getInfo 补齐与解析修正（COFF 字符串表节名、
   短 ELF 宽松读、PE32+ 偏移）。**差分收敛：72 语料文件 0 差异**。
 
+- **Phase 24 已完成**：`ancient.rs` — 上游 `XAncientDecoder`（vendored
+  libancient）全量纯 Rust 移植：In/FOut/BOut/XOut 流抽象、LSB/MSB 位
+  读取、静态+动态 Huffman、VLC 表、CRC16，及 4 族解码器——RNC
+  （RNC1/RNC2 各新旧双路径，含加密 key GF(2) 线性恢复）、TPWM、
+  UNIX pack（新旧变体、≤16 尾填充）、Freeze（describe 的 rawSize≤0
+  quirk 保持为死路径，见 `doc/upstream-bugs.md`）。`compression_detect`
+  `ancient()` 门禁对齐（128MiB packed/raw 上限、RNC packed==文件
+  大小、TPWM/pack 尾部规则）。`tools/gen_ancient_corpus.py` 生成 4 个
+  oracle 验证过的最小样本（RNC1/RNC2/TPWM/pack），回归测试含坏
+  CRC/截断拒绝路径。**差分：76 语料文件 0 差异**。
+
 验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。

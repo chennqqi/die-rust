@@ -470,8 +470,10 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 - **子检测引擎**：`archiveheaders.rs`（7z/RAR/LHA/TAR/compress-z/
   lzip/lzop）、`legacy.rs`（NFDLegacy 全量）、`containers.rs`
   （DMG/VHD/VHDX/QCOW/VDI/VMDK/CPIO/ar/RPM/git/SQLite/WIM）、
-  `compression_detect.rs`（PowerPacker 比特流校验 + LZMA 解码校验；
-  ancient 解码器缺位，记录为 pending）。
+  `compression_detect.rs`（PowerPacker 比特流校验 + LZMA 解码校验
+  + `ancient.rs`：XAncientDecoder 族全量 Rust 移植——RNC1/RNC2
+  新旧四路径、TPWM、UNIX pack 新旧、Freeze，含 MSB/LSB 位流、
+  静态/动态 Huffman、VLC、CRC16；见 Phase 24）。
 - **文件分片递归**（`scanProcess` 对齐）：OVERLAY 无条件扫描且以
   `FT_BINARY` 跑签名表；RESOURCE 经 `varInfo` 传资源类型并受
   `isScanable`/aggressive 门控；归档成员受 `isScanable` 门控；子扫描

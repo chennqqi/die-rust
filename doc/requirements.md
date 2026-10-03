@@ -1328,3 +1328,5 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 
 - 2026-10-08: 继续顺序完成 — Phase 21.N（FixDetects + Microsoft Rich 链）后进入 Phase 22 非 PE 启发：NE/LE/LX（22.C）、ELF/Mach-O protection+fixdetects（22.A/B）、COM/PDF/CFBF/Amiga/JAR/text（22.D）。
 - 2026-10-08：继续 Phase 23 差分收敛，将 Qt oracle 对比的剩余差异清零。
+
+- 2026-10-08: 新开 Phase 24——手写 Rust 解码器补齐 `compression_detect` 的 ancient 分支（RNC/TPWM/UNIX pack/Freeze），要求移植上游验证语义而非仅 magic 匹配。

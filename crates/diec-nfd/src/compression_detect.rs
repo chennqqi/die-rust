@@ -1,12 +1,9 @@
 //! Port of `NFDCompression` — compressed-stream recognizers that prove
 //! the payload by decoding or validating its bitstream: PowerPacker
-//! (PP20/PPLS), LZMA-alone, and (upstream-only for now) the
-//! XAncientDecoder family RNC/TPWM/pack/Freeze.
-//!
-//! `ancient` is not ported yet: it requires a full decoder for four
-//! formats upstream resolves through XAncientDecoder. See
-//! `docs/design/` notes — PowerPacker and LZMA cover every corpus hit.
+//! (PP20/PPLS), LZMA-alone, and the XAncientDecoder family
+//! RNC/TPWM/pack/Freeze (decoders live in `ancient.rs`).
 
+use crate::ancient::{self, Kind};
 use crate::gen_names::{ft, name as n, rtype as rt};
 use crate::scans::{ResultMaps, ScanRecord};
 
@@ -197,6 +194,62 @@ fn lzma(data: &[u8], res: &mut ResultMaps) -> bool {
     )
 }
 
+/// `ancient` — the `XAncientDecoder` gate: `describe` must report a
+/// positive raw size, the full decode must succeed and match it, and
+/// the consumed packed size must stay inside the file. TPWM rejects any
+/// trailing bytes; UNIX pack tolerates up to 16 (encoder padding).
+///
+/// Upstream quirk preserved: `describe` reports `rawSize = -1` for
+/// Freeze (its size is known only after decompression), so the
+/// `rawSize <= 0` gate makes the Freeze branch unreachable upstream.
+fn ancient(d: &[u8], res: &mut ResultMaps) -> bool {
+    let Some(kind) = ancient::identify(d) else {
+        return false;
+    };
+    let rnc = kind == Kind::Rnc;
+    let Some(desc) = ancient::describe(d, kind) else {
+        return false;
+    };
+    if (rnc && desc.packed != d.len() as i64)
+        || desc.raw <= 0
+        || desc.raw > MAX_OUTPUT as i64
+        || desc.image > MAX_OUTPUT as i64
+    {
+        return false;
+    }
+    let Ok((raw, desc)) = ancient::decode(d, kind, true) else {
+        return false;
+    };
+    if raw.len() as i64 != desc.raw {
+        return false;
+    }
+    if desc.packed <= 0 || desc.packed > d.len() as i64 {
+        return false;
+    }
+    let trailing = d.len() as i64 - desc.packed;
+    if kind == Kind::Tpwm && trailing != 0 {
+        return false;
+    }
+    if kind == Kind::UnixPack && trailing > 16 {
+        return false;
+    }
+    let name = match kind {
+        Kind::Rnc => "RNC",
+        Kind::Tpwm => "TPWM",
+        Kind::UnixPack => "pack",
+        Kind::Freeze => "Freeze",
+    };
+    let mut detail = format!(
+        "{}, decoded stream verified, {} bytes unpacked",
+        desc.method,
+        raw.len()
+    );
+    if trailing != 0 {
+        detail += &format!(", {trailing} trailing bytes permitted as pack padding");
+    }
+    add(res, n::RECORD_NAME_UNKNOWN, name, &detail)
+}
+
 /// `NFDCompression::detect` — bounded header prefilter then the full
 /// validator for the recognized family.
 pub fn detect(d: &[u8], res: &mut ResultMaps) -> bool {
@@ -209,8 +262,11 @@ pub fn detect(d: &[u8], res: &mut ResultMaps) -> bool {
         return false;
     }
     let is_powerpacker = header.starts_with(b"PP20") || header.starts_with(b"PPLS");
-    // XAncientDecoder family (RNC/TPWM/pack/Freeze) is not ported yet —
-    // the upstream recognizer verifies with a full decode we cannot run.
+    let known_magic = is_powerpacker
+        || matches!(
+            ancient::identify(header),
+            Some(Kind::Rnc) | Some(Kind::Tpwm) | Some(Kind::UnixPack) | Some(Kind::Freeze)
+        );
     let dictionary = u32::from_le_bytes(header[1..5].try_into().unwrap_or_default());
     let possible_lzma = header.len() >= 14
         && header[0] < 225
@@ -220,6 +276,9 @@ pub fn detect(d: &[u8], res: &mut ResultMaps) -> bool {
             || (dictionary >= 3 * 1024 * 1024 && (dictionary & 0xfffff) == 0));
     if is_powerpacker {
         return power_packer(d, res);
+    }
+    if known_magic {
+        return ancient(d, res);
     }
     if possible_lzma {
         return lzma(d, res);

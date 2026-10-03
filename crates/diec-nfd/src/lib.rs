@@ -14,6 +14,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod ancient;
 mod archiveheaders;
 pub mod axml;
 mod compression_detect;

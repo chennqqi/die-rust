@@ -236,3 +236,17 @@ set via the MFC path (`section(".", 0, 0)`). Replicated verbatim in
 
 Upstream source: `dep/SpecAbstract/modules/nfd_pe.cpp`
 `handle_Microsoft`, the `sLinkerMajorVersion` block.
+
+## XAncientDecoder — Freeze describe() reports rawSize <= 0, making detection dead code (2026-10-03)
+
+`FreezeDecoder::describe` does not populate `info.rawSize` before
+`decompress()` runs, so `XAncientDecoder::describe` returns with
+`rawSize <= 0`. The caller (`NFDCompression::detect` ancient branch)
+guards on `rawSize > 0`, therefore Freeze streams can never be detected
+upstream — the recognizer is effectively dead code. Replicated verbatim
+in `diec-nfd::compression_detect::ancient` / `ancient.rs`
+(`FreezeDecoder::describe` leaves `raw = 0`) for output parity; do not
+"fix".
+
+Upstream source: `dep/XArchive/Algos/FreezeDecoder.*` describe path +
+`XAncientDecoder::describe` rawSize guard.
