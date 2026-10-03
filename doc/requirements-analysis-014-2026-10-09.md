@@ -20,3 +20,13 @@
 - 不立项：自动更新（产品决策）、SSDeep（ADR rejected）、i18n
   （持续增量项）。
 - 落地：ROADMAP.md 追加 Phase 26-31 节。
+
+## 补充：deferred 清单完整性审计
+
+- COMPATIBILITY.md 全部 ❌ 行核对：ARJ/SFX/其它（归档矩阵）与
+  "完整 hex 编辑"（phase17 17.E）两处漏规划。
+- ARJ/LHA/ACE/CPIO/UDF/WIM 在上游仅为 list/extract（嵌套扫描门
+  闭集 ZIP/7Z/RAR/CAB/ISO9660 已证），新增 Phase 32 按"list 优先、
+  extract 按解码器成本分级"规划。
+- 完整 hex 编辑并入 Phase 31 GUI 补齐。
+- 另修 COMPATIBILITY.md 两处 CAB/ISO 过期陈述（与 18.B 矛盾）。

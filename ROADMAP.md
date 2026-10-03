@@ -2105,11 +2105,31 @@ InstallSimple（857），约 3.7k 行。这组非 PE 解压而是嵌入式
 覆盖不齐）vs 维持 deferred。先确认真实需求（MIPS/PPC 固件
 样本占比），再编码。产出 ADR 0041 修订 + 实现或维持决议。
 
-### Phase 31：GUI NFD 视图/提取器 — TODO（7C deferred 项）
+### Phase 31：GUI 补齐 — NFD 视图/提取器 + 完整 hex 编辑 — TODO
 
-范围：GUI 侧 NFD 结果展示面板与归档提取器扩展。纯展示层，
-检测语义已全对齐，无引擎改动风险。验收：界面功能对照上游
-DIE GUI 对应面板。
+范围：7C deferred 的 NFD 结果展示面板与归档提取器扩展，
+外加 17.E deferred 的**完整 hex 编辑**（当前仅
+`edit_bytes_at_offset` 单点入口；上游 XHexView 为展示为主，
+补齐范围为编辑会话/撤销/保存链而非重写 hex 控件）。纯
+展示层，检测语义已全对齐，无引擎改动风险。验收：界面功能
+对照上游 DIE GUI 对应面板。
+
+### Phase 32：归档格式补齐（list 优先）— TODO
+
+范围：COMPATIBILITY `ARJ/SFX/其它 ❌ deferred` 行。上游
+`XFormats::createClass` 可解析 ARJ/LHA(LZH)/ACE/CPIO/UDF/WIM
+等；注意上游 `scanProcess` 成员解包门只含
+ZIP/7Z/RAR/CAB/ISO9660 五类（`archive-gap-closure.md` 已证），
+这批格式**只需 list/extract parity，不进嵌套扫描**。
+
+- 32.A list 先行：ARJ/CPIO/UDF/WIM/LHA 目录枚举（均只读遍历，
+  各自数百行）
+- 32.B extract 按解码器可得性分级：store/无压缩直接提取；
+  LHA lh5-7 与 ARJ method-4 需 LZSS/LZH 位流移植（量级同
+  ancient 单解码器）；ACE（unacev2）/WIM 压缩流视成本 gate
+- 验收：上游 `list_archive` 输出差分；提取项与上游 extract
+  输出字节差分；嵌套扫描行为不变（仍只五类）
+- **Gate**：无法获得合法样本的格式记录后跳过。
 
 ### 不立项项
 
@@ -2118,3 +2138,6 @@ DIE GUI 对应面板。
 - **SSDeep**：ADR 0039 明确 rejected，上游实现本身有偏差，
   不值得复制。
 - **多语言 i18n**：ADR 0038 持续增量项，无独立 phase。
+- **XStyles 主题生态**：上游 Qt 样式体系，不移植。
+- **RNC old/加密流真实语料覆盖**：代码已全量移植，仅缺
+  真实 ProPack 样本——语料问题非代码任务，遇到样本时补测。

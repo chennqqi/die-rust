@@ -266,7 +266,10 @@ The `-r`/`--recursivescan` flag now matches upstream semantics:
 The `--archives` flag enables archive member extraction and recursive
 scanning:
 
-- **Supported formats**: ZIP, 7Z, RAR (CAB and ISO9660 deferred)
+- **Supported formats**: ZIP, 7Z, RAR, CAB, ISO9660 — the same five
+  archive types upstream `scanProcess` unpacks for nested scanning
+  (`archive-gap-closure.md` proof); ARJ/LHA/ACE/CPIO/UDF/WIM are
+  list/extract-only upstream and deferred here (Phase 32).
 - **Safety bounds** (ADR 0030, stricter than upstream):
   - Single-member limit: 128 MiB
   - Total decompressed limit: 512 MiB
@@ -282,8 +285,10 @@ scanning:
    (ratio > 100:1) or very large members (> 128 MiB) are skipped. This is
    an intentional safety improvement (ADR 0030).
 
-2. **CAB and ISO9660**: Not yet implemented. Upstream supports all 5
-   archive formats; diec-rust currently supports 3 (ZIP/7Z/RAR).
+2. **Secondary archive formats**: ARJ/LHA/ACE/CPIO/UDF/WIM etc. are
+   parsable upstream (`XFormats::createClass`) but excluded from the
+   nested-scan gate; diec-rust lists/extracts the five nested-scan
+   formats and defers the rest to Phase 32.
 
 3. **`--recursive` backward compatibility**: `--recursive` is retained as
    an alias for `--recursive-dir` to avoid breaking existing scripts.
