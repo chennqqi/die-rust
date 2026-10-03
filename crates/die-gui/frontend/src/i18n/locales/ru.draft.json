@@ -1,0 +1,24 @@
+{
+  "drafts": [],
+  "same": [
+    "app.subtitle",
+    "app.title",
+    "converter.ascii",
+    "converter.base64",
+    "converter.hex",
+    "demangle.title",
+    "disasm.gas",
+    "disasm.intel",
+    "disasm.nasm",
+    "fileInfo.vaddr",
+    "fileInfo.vsize",
+    "memmap.vaddr",
+    "memmap.vsize",
+    "nfd.title",
+    "tabs.demangle",
+    "tabs.hex",
+    "tabs.nfd",
+    "tabs.peid",
+    "tabs.yara"
+  ]
+}

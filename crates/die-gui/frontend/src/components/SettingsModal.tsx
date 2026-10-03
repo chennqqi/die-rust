@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { X } from 'lucide-react';
+import { SUPPORTED_LANGUAGES } from '../i18n/config';
 
 // --- Settings types (mirror Rust AppSettings) ---
 
@@ -203,11 +204,9 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       >
-                        <option value="en">English</option>
-                        <option value="zh-CN">中文</option>
-                        <option value="ru">Русский</option>
-                        <option value="de">Deutsch</option>
-                        <option value="fr">Français</option>
+                        {SUPPORTED_LANGUAGES.map((l) => (
+                          <option key={l.code} value={l.code}>{l.name}</option>
+                        ))}
                       </select>
                     </label>
                     <label>

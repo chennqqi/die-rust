@@ -595,7 +595,7 @@ oracle` 差分锁定）：
 
 | 项 | 状态 | 备注 |
 |----|------|------|
-| i18n 键位覆盖 | ✅ 5 locale × 269 键全齐 | en/zh-CN/ru/de/fr；此前 ru/de/fr 各缺 239 键、zh-CN 缺 `tabs.struct`。其余语言属 ADR 0038/0042 项，已排 Phase 45（术语锚定草稿 + 键 parity 校验，非直接 .ts 转换） |
+| i18n 键位覆盖 | ✅ 24 locale × 269 键全齐 | en/zh-CN/ru/de/fr 审校 + 19 术语锚定草稿（Phase 45：`dict_*.po` 锚定 27–35%，余 en+draft manifest；`.ts` 为全 unfinished skeleton 不作源）。键 parity/`{{var}}`/格式符 gated em `tests/i18n_parity.rs` + `tools/i18n/check_i18n.py` |
 | 归档视图二级格式 | ✅ 已接线 | Phase 36/37 的 UDF/WIM 曾漏接 `list_archive_members`——本 phase 补齐 `ArchiveKind::Udf/Wim` 映射 + 回归测试 |
 | XStyles 主题生态 | 永久平台差异 | 上游 Qt QSS 体系；本项目 CSS 变量主题（light/dark/system）为有意形态差异；扩展需求走 Phase 49（ADR 0042 #2） |
 | InstallSimple（+aspack/petite 脱壳） | Blocked | 上游 `#ifdef USE_XEMULATOR`，XEmulator 不在 pin 基线；解除条件见 ADR 0042 #4 |

@@ -1,0 +1,20 @@
+{
+  "drafts": [],
+  "same": [
+    "app.subtitle",
+    "app.title",
+    "converter.ascii",
+    "converter.base64",
+    "demangle.button",
+    "demangle.title",
+    "disasm.gas",
+    "disasm.intel",
+    "disasm.nasm",
+    "nfd.title",
+    "tabs.demangle",
+    "tabs.hex",
+    "tabs.nfd",
+    "tabs.peid",
+    "tabs.yara"
+  ]
+}

@@ -2457,21 +2457,20 @@ Windows-only 实为 parity（上游 `registerContext` 同样
 
 **Scheduled（上游源与 oracle 均在 pin 基线内）：**
 
-- **Phase 45：i18n 术语锚定批量草稿**（中型，修订 ADR 0038 的执行方式）
-  上游 `dep/XTranslation/dicts/dict_*.po`（24 语言领域术语表）
-  与 `translations/die_*.ts`（22 语言）均已检入 pin 树，可作为
-  术语参照源（键空间不相交的事实不变：`.ts` 不作机械转换，仅
-  提取术语）。范围：
-  - `tools/i18n-glossary` 提取 `.po` msgid→msgstr 术语对 +
-    `.ts` 中本 UI 存在的串，构建 per-locale 术语锚定表；
-  - 对 en 目录 269 键生成剩余语言草稿 JSON——术语命中走锚定
-    译文、未命中保留 en 占位并标记 `x-draft: true`；
-  - 校验工具：键集合 parity、`{{var}}` 占位符、格式符保留检查，
-    接入测试门；
-  - 设置页语言下拉扩展；RTL 语言（ar/he/fa）验证 `dir` 布局。
-  验收：全部新 locale 键 parity 测试通过、术语命中处与上游
-  `.po` 字典一致、draft 标记可机器统计；不声称未经人工审校的
-  locale 为"完成质量"。
+- **Phase 45：i18n 术语锚定批量草稿** — ✅ DONE（2026-10-12）
+  Catalogs 拆分 `i18n/locales/*.json`（config.ts importa）；19 novos
+  locales gerados a partir do en 269-key — descoberta: `die_*.ts` é
+  100% skeleton (`type="unfinished"`, 37 fontes), âncora real é
+  `dict_*.po` (~664 termos/idioma). Anchoring conservador: valor en
+  == msgid normalizado → msgstr (msgstr==msgid conta como draft, não
+  âncora); sem substituição in-sentence (nada de pseudo-tradução).
+  Cobertura 27–35% por locale; resto en + `.draft.json` manifest
+  (`drafts`/`same` separados — `same` marca cognatas revisadas dos
+  5 locales originais). Validação dupla: `tools/i18n/check_i18n.py` +
+  `crates/die-gui/tests/i18n_parity.rs` (cargo gate: key parity,
+  `{{var}}`, %-specifiers, stale draft marks). `SUPPORTED_LANGUAGES`
+  exportado, dropdown dinâmico, `document.dir` via `i18n.dir` para
+  RTL (ar/he/fa).
 - **Phase 46：NFD/SpecAbstract 收尾**（小型，ADR 0035 partial → full）
   盘点后残余仅两处真实缺口（`handle_AnslymPacker` 上游注释死
   代码，属 parity 不补）：`handle_PolyMorph`（`nfd_pe.cpp:8283`
