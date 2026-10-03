@@ -223,10 +223,38 @@ pub fn compute_md5(data: &[u8]) -> String {
 
 /// Hash algorithms selectable in the GUI hash panel, mirrors upstream
 /// `XHashWidget`/`XBinary::HASH` naming. All implementations are pure Rust.
-/// SSDeep/TLSH are excluded (native dependencies, deferred).
+/// SSDeep stays excluded (ADR 0039, rejected); TLSH is provided by the
+/// pure-Rust `tlsh2` port (upstream XHashWidget offers it via the TLSH
+/// C library — the `T1` string form is identical).
 pub const HASH_ALGORITHMS: &[&str] = &[
-    "MD4", "MD5", "SHA1", "SHA224", "SHA256", "SHA384", "SHA512", "SHA3_224", "SHA3_256",
-    "SHA3_384", "SHA3_512", "BLAKE2B", "BLAKE2S", "BLAKE3", "ADLER32", "CRC32", "CRC64",
+    "MD4",
+    "MD5",
+    "SHA1",
+    "SHA224",
+    "SHA256",
+    "SHA384",
+    "SHA512",
+    "SHA3_224",
+    "SHA3_256",
+    "SHA3_384",
+    "SHA3_512",
+    "BLAKE2B",
+    "BLAKE2S",
+    "BLAKE3",
+    "ADLER32",
+    "CRC32",
+    "CRC64",
+    "TLSH",
+    "TIGER",
+    "TIGER2",
+    "WHIRLPOOL",
+    "RIPEMD128",
+    "RIPEMD160",
+    "RIPEMD256",
+    "RIPEMD320",
+    "GOST94",
+    "GOST94_CP",
+    "GOST94_S2015",
 ];
 
 /// Compute a named hash hex digest (uppercase hex for CRC/Adler32,
@@ -291,6 +319,53 @@ pub fn compute_named_hash(data: &[u8], algorithm: &str) -> Option<String> {
         "CRC64" => {
             let crc = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
             Some(format!("{:016X}", crc.checksum(data)))
+        }
+        "TLSH" => {
+            // `build_from` returns `None` for inputs below the TLSH 50-byte
+            // minimum — propagate as "no value", mirroring upstream's empty
+            // hash cell for unhashable payloads.
+            let tlsh = tlsh2::TlshDefaultBuilder::build_from(data)?;
+            Some(String::from_utf8_lossy(&tlsh.hash()).into_owned())
+        }
+        "TIGER" => {
+            use tiger::Digest as _;
+            Some(hex::encode(tiger::Tiger::digest(data)))
+        }
+        "TIGER2" => {
+            use tiger::Digest as _;
+            Some(hex::encode(tiger::Tiger2::digest(data)))
+        }
+        "WHIRLPOOL" => {
+            use whirlpool::Digest as _;
+            Some(hex::encode(whirlpool::Whirlpool::digest(data)))
+        }
+        "RIPEMD128" => {
+            use ripemd::Digest as _;
+            Some(hex::encode(ripemd::Ripemd128::digest(data)))
+        }
+        "RIPEMD160" => {
+            use ripemd::Digest as _;
+            Some(hex::encode(ripemd::Ripemd160::digest(data)))
+        }
+        "RIPEMD256" => {
+            use ripemd::Digest as _;
+            Some(hex::encode(ripemd::Ripemd256::digest(data)))
+        }
+        "RIPEMD320" => {
+            use ripemd::Digest as _;
+            Some(hex::encode(ripemd::Ripemd320::digest(data)))
+        }
+        "GOST94" => {
+            use gost94::Digest as _;
+            Some(hex::encode(gost94::Gost94Test::digest(data)))
+        }
+        "GOST94_CP" => {
+            use gost94::Digest as _;
+            Some(hex::encode(gost94::Gost94CryptoPro::digest(data)))
+        }
+        "GOST94_S2015" => {
+            use gost94::Digest as _;
+            Some(hex::encode(gost94::Gost94s2015::digest(data)))
         }
         _ => None,
     }
@@ -1986,15 +2061,75 @@ mod tests {
             compute_named_hash(b"123456789", "CRC32").unwrap(),
             "CBF43926"
         );
+        // RIPEMD family — official spec vectors.
+        assert_eq!(
+            compute_named_hash(abc, "RIPEMD128").unwrap(),
+            "c14a12199c66e4ba84636b0f69144c77"
+        );
+        assert_eq!(
+            compute_named_hash(abc, "RIPEMD160").unwrap(),
+            "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc"
+        );
+        assert_eq!(
+            compute_named_hash(abc, "RIPEMD256").unwrap(),
+            "afbd6e228b9d8cbbcef5ca2d03e6dba10ac0bc7dcbe4680e1e42d2e975459b65"
+        );
+        assert_eq!(
+            compute_named_hash(abc, "RIPEMD320").unwrap(),
+            "de4c01b3054f8930a79d09ae738e92301e5a17085beffdc1b8d116713e74f82fa942d64cdbc4682d"
+        );
+        // Tiger/Tiger2 official "abc" vectors.
+        assert_eq!(
+            compute_named_hash(abc, "TIGER").unwrap(),
+            "2aab1484e8c158f2bfb8c5ff41b57a525129131c957b5f93"
+        );
+        assert_eq!(
+            compute_named_hash(abc, "TIGER2").unwrap(),
+            "f68d7bc5af4b43a06e048d7829560d4a9415658bb0b1f3bf"
+        );
+        // Whirlpool("") — official ISO/IEC 10118-3 vector.
+        assert_eq!(
+            compute_named_hash(b"", "WHIRLPOOL").unwrap(),
+            "19fa61d75522a4669b44e39c1d2e1726c530232130d407f89afee0964997f7a73e83be698b288febcf88e3e03c4f0757ea8964e59b63d93708b138cc42a66eb3"
+        );
+        // GOST R 34.11-94 — test-parameters empty-message vector; the
+        // CryptoPro and S-2015 S-box variants get different digests for
+        // the same input (guards against wiring the wrong type).
+        assert_eq!(
+            compute_named_hash(b"", "GOST94").unwrap(),
+            "ce85b99cc46752fffee35cab9a7b0278abb4c2d2055cff685af4912c49490f8d"
+        );
+        assert_eq!(
+            compute_named_hash(b"", "GOST94_CP").unwrap(),
+            "981e5f3ca30c841487830f84fb433e13ac1101569b9c13584ac483234cd656c0"
+        );
+        assert_eq!(
+            compute_named_hash(b"", "GOST94_S2015").unwrap(),
+            "d47819718a633fa42ff02a4d1c7180da02178067aeb4b1490388c84f88538d80"
+        );
+        // TLSH — tlsh2 crate doc vector (identical to the C reference
+        // implementation, `T1` prefix included).
+        assert_eq!(
+            compute_named_hash(
+                b"Lorem ipsum dolor sit amet, consectetur adipiscing elit",
+                "TLSH"
+            )
+            .unwrap(),
+            "T12D900249414E0BD59A46503F3ADA802AE50825242B2590561CF690599112214C051556"
+        );
+        // TLSH requires >= 50 bytes of input; shorter data has no hash.
+        assert!(compute_named_hash(b"x", "TLSH").is_none());
         assert!(compute_named_hash(abc, "NOPE").is_none());
     }
 
     #[test]
     fn test_hash_algorithms_all_implemented() {
-        // Every advertised algorithm must produce a value.
+        // Every advertised algorithm must produce a value. TLSH needs at
+        // least 50 bytes of input, so the probe payload exceeds that.
+        let probe = b"the quick brown fox jumps over the lazy dog, and then some more bytes!";
         for a in HASH_ALGORITHMS {
             assert!(
-                compute_named_hash(b"x", a).is_some(),
+                compute_named_hash(probe, a).is_some(),
                 "algorithm {} not implemented",
                 a
             );

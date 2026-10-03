@@ -1346,3 +1346,8 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 容器接入归档显式浏览/提取路径（不入嵌套扫描门）、InstallSimple 因
 上游 USE_XEMULATOR 不可构建而 defer。顺带修复 PE 节名全局大写化偏差
 （区分大小写比较导致 .enigma1/.bxpck 等表条目漏检）。继续 Phase 29。
+
+## 2026-10-03 Phase 29 收尾
+顺序执行 26-31 中的 Phase 29：TLSH（tlsh2 纯 Rust crate）+ 小众哈希
+（Tiger/Tiger2/Whirlpool/RIPEMD 四变体/GOST94 三参数集）接入 GUI 哈希
+工具，官方 test vector 回归。继续 Phase 30。

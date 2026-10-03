@@ -339,8 +339,11 @@ GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
 | BLAKE2b512, BLAKE2s256, BLAKE3 | ✅ | ✅ |
 | Adler32, CRC32, CRC64(ECMA-182) | ✅ | ✅ |
 | SSDeep | ✅ | ❌ rejected（libfuzzy 为 GPL-2.0，ADR 0039） |
-| TLSH | ✅ | ❌ deferred（纯 Rust 移植版停更，ADR 0039） |
-| GOST, Tiger, Whirlpool, RIPEMD… | ✅ | ❌ deferred（低优先级） |
+| TLSH | ✅ | ✅ `tlsh2` 纯 Rust 移植（T1 前缀串，官方向量验证；<50B 返回空） |
+| Tiger, Tiger2 | ✅ | ✅ `tiger` crate，官方 "abc" 向量 |
+| Whirlpool | ✅ | ✅ `whirlpool` crate，官方空串向量 |
+| RIPEMD-128/160/256/320 | ✅ | ✅ `ripemd` crate，官方 spec 向量（含 openssl 交叉验证 160） |
+| GOST94 Test/CryptoPro/S-2015 | ✅ | ✅ `gost94` crate 三参数集，官方空串向量 |
 
 ### DEX 深视图（17.D）
 

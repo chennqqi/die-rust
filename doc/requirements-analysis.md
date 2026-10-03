@@ -617,3 +617,9 @@ archive_unpack 的显式 list/extract 路径；上游 FT_FLAG_STATICUNPACKERS
 opt-in 且嵌套扫描不递归容器，故 is_archive/extract_archive 保持闭集。
 节名大写化是潜伏偏差：此前语料无小写敏感表条目故差分未暴露，新增
 enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回归。
+
+## 2026-10-03 Phase 29 分析
+上游 XBinary 引擎侧仅 7 算法；XHashWidget 扩展集（含 TLSH）在
+未检出 submodule，TLSH 采用 tlsh2 纯 Rust 移植并以官方向量验证，
+不再走"自实现"预案。RIPEMD-128 "abc" 记忆向量有误，经空串官方
+向量 + openssl 交叉验证确认 crate 正确（教训：向量必须实测核对）。

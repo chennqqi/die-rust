@@ -54,6 +54,11 @@ blake2 = "0.10"
 blake3 = "1.8"
 adler2 = "2.0"
 crc = "3.4"
+tlsh2 = "1.1.0"
+whirlpool = "0.11.0"
+ripemd = "0.2.0"
+tiger = "0.3.0"
+gost94 = "0.11.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

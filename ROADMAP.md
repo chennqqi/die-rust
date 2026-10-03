@@ -2139,16 +2139,24 @@ InstallSimple（857），约 3.7k 行。这组非 PE 解压而是嵌入式
   oracle）；NFD 差分 **109 文件 0 差异**（含修复后的 EnigmaVB/
   BoxedApp Protector 记录）；fmt/clippy/workspace 测试全绿。
 
-### Phase 29：TLSH + 小众哈希 — TODO（小 phase）
+### Phase 29：TLSH + 小众哈希 — DONE（小 phase）
 
-- 29.A **TLSH**（ADR 0039 deferred 项）：先评估 `tlsh` crate
-  移植版成熟度；不达标则自实现 bucketing/quartile/diff
-  （算法公开，~400 行）。验收：上游 DIE 哈希对话框输出 +
-  公开 test vector 差分。SSDeep 维持 ADR 0039 rejected 不做。
-- 29.B **小众哈希接线**：GOST/Tiger/Whirlpool/RIPEMD-160 经
-  RustCrypto 生态 crate（均已成熟）接入现有哈希工具，
-  纯 wiring 无算法实现风险。
-- 验收：GUI/CLI 哈希输出与上游对齐；RFC 官方向量测试。
+- 29.A **TLSH**：采用 `tlsh2` v1.1.0（纯 Rust、no_std、贴上游
+  C++ 参考实现的移植版），替代 ADR 0039 中"自实现"预案。
+  `TlshDefaultBuilder::build_from` + `T1` 前缀串输出与 C 参考
+  实现一致；<50 字节输入返回空（对齐 TLSH 语义）。SSDeep 维持
+  ADR 0039 rejected。
+- 29.B **小众哈希接线**：Tiger/Tiger2/Whirlpool/RIPEMD-128/160/
+  256/320/GOST94（Test/CryptoPro/S-2015 三参数集）经 `tiger`/
+  `whirlpool`/`ripemd`/`gost94` crate 接入 `file_info.rs` 的
+  `HASH_ALGORITHMS` + `compute_named_hash`，前端
+  `list_hash_algorithms` 动态获取无需改动。
+- 验收：官方 test vector 回归（RIPEMD 四变体空串/"abc"、Tiger/
+  Tiger2 "abc"、Whirlpool 空串、GOST94 空串、TLSH lorem 串）；
+  openssl 交叉验证 RIPEMD-160。fmt/clippy/workspace 全绿。
+- 注：上游 `XBinary::getHashMethods` 仅 MD4/MD5/SHA1/SHA2 系；
+  XHashWidget 扩展算法（含 TLSH）所在 submodule 未检出，TLSH
+  以官方向量验证而非上游差分。
 
 ### Phase 30：反汇编架构扩展 — GATED（ADR 0041 复审）
 
