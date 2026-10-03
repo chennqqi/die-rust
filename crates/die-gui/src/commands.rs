@@ -1222,6 +1222,57 @@ pub async fn edit_bytes_at_offset(
     result.map_err(|e| GuiError::new("BYTE_EDIT_ERROR", e))
 }
 
+/// Write bytes through the hex-edit session (undo-tracked, creates .bak).
+#[tauri::command]
+pub async fn hex_edit_write(path: String, offset: usize, bytes: Vec<u8>) -> Result<(), GuiError> {
+    let result = tokio::task::spawn_blocking(move || crate::hex_edit::write(&path, offset, &bytes))
+        .await
+        .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("BYTE_EDIT_ERROR", e))
+}
+
+/// Undo the most recent hex-edit write (returns bytes restored).
+#[tauri::command]
+pub async fn hex_edit_undo(path: String) -> Result<usize, GuiError> {
+    crate::hex_edit::undo(&path).map_err(|e| GuiError::new("BYTE_UNDO_ERROR", e))
+}
+
+/// Number of undoable hex-edit writes for a path.
+#[tauri::command]
+pub fn hex_edit_undo_depth(path: String) -> usize {
+    crate::hex_edit::undo_depth(&path)
+}
+
+/// Drop the undo stack for a path (e.g. switching files).
+#[tauri::command]
+pub fn hex_edit_discard(path: String) {
+    crate::hex_edit::discard(&path);
+}
+
+/// Run the NFD/SpecAbstract engine standalone (NFD view parity —
+/// upstream's dedicated NFD panel shows only its own records, not the
+/// merged DIE+NFD result list).
+#[tauri::command]
+pub async fn nfd_scan(
+    path: String,
+    deep: bool,
+    heuristic: bool,
+    verbose: bool,
+) -> Result<Vec<ScanDetectionDto>, GuiError> {
+    let result = tokio::task::spawn_blocking(move || -> Result<Vec<ScanDetectionDto>, String> {
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok(
+            diec_engine::nfd_scan(&data, &path, deep, heuristic, verbose)
+                .into_iter()
+                .map(ScanDetectionDto::from)
+                .collect(),
+        )
+    })
+    .await
+    .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
+    result.map_err(|e| GuiError::new("NFD_SCAN_ERROR", e))
+}
+
 // --- Annotations (XInfoDB parity, Phase 19; see annotations.rs) ---
 
 /// List bookmarks/comments/labels for a file (sidecar `<file>.diec.json`).

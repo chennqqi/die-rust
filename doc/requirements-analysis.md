@@ -623,3 +623,12 @@ enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回�
 未检出 submodule，TLSH 采用 tlsh2 纯 Rust 移植并以官方向量验证，
 不再走"自实现"预案。RIPEMD-128 "abc" 记忆向量有误，经空串官方
 向量 + openssl 交叉验证确认 crate 正确（教训：向量必须实测核对）。
+
+## 2026-10-03 Phase 31 分析
+`run_nfd_pass` 抽出 `nfd_scan_opts`/`nfd_scan` 复用层，merged scan
+与独立 NFD 面板共享同一映射；hex_edit 会话复用
+`edit_bytes_at_offset` 的原位写语义（.bak/越界/上限），撤销栈仅
+内存态、capped，undo 直写避免自压栈。测试暴露 temp_file 同尺寸
+命名冲突与共享目录 remove_dir_all 竞态，改为原子序号独立子目录。
+上游 XHexView 编辑即时落盘可逆，会话层在命令侧补齐同等语义。
+109 文件 NFD 差分 0 差异确认重构无回归。

@@ -15,6 +15,7 @@ mod disassembler;
 mod elf_viewer;
 mod extractor;
 mod file_info;
+mod hex_edit;
 mod hex_viewer;
 mod macho_viewer;
 mod misc_viewer;
@@ -101,6 +102,11 @@ fn main() {
             commands::pe_add_overlay,
             commands::edit_string_at_offset,
             commands::edit_bytes_at_offset,
+            commands::hex_edit_write,
+            commands::hex_edit_undo,
+            commands::hex_edit_undo_depth,
+            commands::hex_edit_discard,
+            commands::nfd_scan,
             commands::list_annotations,
             commands::upsert_annotation,
             commands::delete_annotation,

@@ -2167,7 +2167,7 @@ InstallSimple（857），约 3.7k 行。这组非 PE 解压而是嵌入式
 `rvdasm`/`riscv-decode`/`capstone` 版本无变化）。维持
 deferred 决议，ADR 已附复审记录与证据表。
 
-### Phase 31：GUI 补齐 — NFD 视图/提取器 + 完整 hex 编辑 — TODO
+### Phase 31：GUI 补齐 — NFD 视图/提取器 + 完整 hex 编辑 — ✅ DONE
 
 范围：7C deferred 的 NFD 结果展示面板与归档提取器扩展，
 外加 17.E deferred 的**完整 hex 编辑**（当前仅
@@ -2175,6 +2175,16 @@ deferred 决议，ADR 已附复审记录与证据表。
 补齐范围为编辑会话/撤销/保存链而非重写 hex 控件）。纯
 展示层，检测语义已全对齐，无引擎改动风险。验收：界面功能
 对照上游 DIE GUI 对应面板。
+
+完成项：专用 NFD 面板（`NfdPanel.tsx` + `nfd_scan` 命令，
+经新 `diec_engine::nfd_scan` 公共 API 独立运行
+SpecAbstract 引擎，deep/heuristic/verbose 选项、记录表含
+启发式标记；主检测行此前已渲染 `[nfd]` 引擎徽章）；
+hex 编辑会话（`hex_edit.rs`：每路径撤销栈、上限 256 条/
+1MiB、`.bak` 复用既有原位写语义、失败不压栈；前端
+Edit/Undo 按钮、切换文件时 discard）；容器归档
+list/extract 已于 Phase 28 接入 `list_archive_members`/
+`extract_member` 与 GUI 复用。
 
 ### Phase 32：归档格式补齐（list 优先）— TODO
 

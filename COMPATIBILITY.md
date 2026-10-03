@@ -362,6 +362,10 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 - Extra Information：扫描工具栏新增格式化文本导出对话框。
 - Hex 编辑入口：`edit_bytes_at_offset` 命令（.bak 备份、1 MiB 上限、
   越界拒绝）+ HexViewer "Edit" 按钮。
+- Hex 编辑会话（Phase 31）：`hex_edit` 模块按路径维护撤销栈
+  （上限 256 条记录、每条 ≤1 MiB；写失败不压栈），HexViewer 提供
+  Edit/Undo 按钮，切换文件时丢弃会话。上游 XHexView 的编辑同样
+  即时落盘且视图内可逆；本会话层在命令侧补齐可逆性。
 
 ### Deferred（17.F ADR）
 
@@ -469,6 +473,7 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
 | COM | `NFD_COM::getInfo` | ✅ | header+exp 签名表 + `handle_Protection` 提升 + MSDOS/CPM OS 记录（`isCPM` BDOS/INT21 计数 + Z80/CP-M 序言启发） | |
 | Amiga hunk | `NFD_Amiga::getInfo` | ✅ | HUNK_HEADER/UNIT sniff + OS 记录（68K/PPC + 16/32-bit + EXE/Object, BE） | Phase 23 oracle 差分已收敛 |
 | 引擎接入 | GUI scan-engine 选择器 | ✅ `ScanFlags::nfd` + CLI `--nfd` + GUI checkbox | 记录带 `engine=nfd` 标记，与 DIE 结果共存不去重 |
+| NFD 独立视图 | 上游 NFD 工具窗口 | ✅ `NfdPanel`（Phase 31） | `nfd_scan` 命令经 `diec_engine::nfd_scan` 独立跑 SpecAbstract；deep/heuristic/verbose 选项 |
 
 ## Phase 23: Qt oracle 差分收敛（2026-10-08）
 

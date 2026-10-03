@@ -514,7 +514,6 @@ fn run_nfd_pass(
     flags: &crate::host::ScanFlags,
     detections: &mut Vec<ScanDetection>,
 ) {
-    let ft = diec_nfd::sniff_ft_named(data, file_name);
     let opts = diec_nfd::ScanOptions {
         deep_scan: flags.deep,
         heuristic_scan: flags.heuristic,
@@ -526,10 +525,47 @@ fn run_nfd_pass(
         overlay_scan: flags.overlays,
         aggressive_scan: flags.aggressive,
     };
+    detections.extend(nfd_scan_opts(data, file_name, opts));
+}
+
+/// Shared NFD entry: sniff the file type, run `diec_nfd::scan`, map
+/// records to `ScanDetection` (engine marker `"nfd"`).
+fn nfd_scan_opts(data: &[u8], file_name: &str, opts: diec_nfd::ScanOptions) -> Vec<ScanDetection> {
+    let ft = diec_nfd::sniff_ft_named(data, file_name);
     let ft_label = diec_nfd::ft_name(ft);
-    for rec in diec_nfd::scan(data, ft, opts) {
-        detections.push(detection_from_nfd(ft_label, rec));
-    }
+    diec_nfd::scan(data, ft, opts)
+        .into_iter()
+        .map(|rec| detection_from_nfd(ft_label, rec))
+        .collect()
+}
+
+/// Standalone NFD scan for the GUI NFD view (upstream's dedicated NFD
+/// panel shows the engine's own records, independent of the merged DIE
+/// result list). `deep`/`heuristic`/`verbose` mirror the three
+/// user-visible scan options; archive/recursive scanning stay enabled to
+/// match the oracle defaults.
+pub fn nfd_scan(
+    data: &[u8],
+    file_name: &str,
+    deep: bool,
+    heuristic: bool,
+    verbose: bool,
+) -> Vec<ScanDetection> {
+    nfd_scan_opts(
+        data,
+        file_name,
+        diec_nfd::ScanOptions {
+            deep_scan: deep,
+            heuristic_scan: heuristic,
+            verbose,
+            all_types: false,
+            archives_scan: true,
+            recursive_scan: true,
+            resources_scan: true,
+            overlay_scan: true,
+            aggressive_scan: false,
+        },
+    )
 }
 
 /// Scan a single file against the database.
@@ -1899,5 +1935,31 @@ mod tests {
         let result = scanner.scan_bytes("test.7z", data, flags, &cancel).unwrap();
         let found = result.detections.iter().any(|d| d.name == "7-Zip");
         assert!(found, "Expected 7-Zip detection after reset");
+    }
+
+    /// Standalone NFD pass (GUI NFD view): records carry the `"nfd"`
+    /// engine marker and reproduce the NFD-side detections the merged
+    /// scan would append.
+    #[test]
+    fn nfd_scan_standalone_marks_engine() {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let root = std::path::Path::new(manifest)
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("workspace root");
+        let fixture = root.join("corpus/enigmavb-minimal.exe");
+        let data = std::fs::read(&fixture).expect("corpus fixture");
+        let name = fixture.file_name().unwrap().to_str().unwrap();
+
+        let recs = nfd_scan(&data, name, true, true, false);
+        assert!(!recs.is_empty());
+        assert!(recs.iter().all(|r| r.engine.as_deref() == Some("nfd")));
+        // The fixture's `.enigma1/.enigma2` sections must surface the
+        // Enigma Virtual Box protector record (case-sensitive section
+        // names — regression for the Phase 28 casing fix).
+        assert!(
+            recs.iter().any(|r| r.name == "Enigma Virtual Box"),
+            "missing Enigma Virtual Box record: {recs:?}"
+        );
     }
 }

@@ -22,7 +22,7 @@ pub mod unpack;
 pub use archive_unpack::{ArchiveKind, ArchiveMemberInfo, extract_member, list_archive_members};
 pub use database::{Database, DatabaseBuilder, DatabaseError, DatabaseVersion};
 pub use host::{BufferHost, ScanFlags};
-pub use scanner::{ScanDetection, ScanError, ScanResult, Scanner, scan_bytes, scan_once};
+pub use scanner::{ScanDetection, ScanError, ScanResult, Scanner, nfd_scan, scan_bytes, scan_once};
 pub use struct_mode::{
     StructNode, StructSelector, evaluate_struct, evaluate_struct_default, general_method_names,
 };

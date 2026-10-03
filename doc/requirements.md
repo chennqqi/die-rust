@@ -1356,3 +1356,9 @@ BINARY/MSDOS/PE32/PE64 dispatch + ScanFlags::nfd/CLI --nfd/GUI engine
 顺序执行 26-31 中的 Phase 30（GATED）：ADR 0041 复审——语料零
 MIPS/PPC/RISC-V 需求 + crate 生态零变化 → 维持 deferred 决议，
 ADR 附复审证据表。继续 Phase 31。
+
+## 2026-10-03 Phase 31 收尾
+顺序执行 26-31 中的 Phase 31：GUI 专用 NFD 视图（NfdPanel +
+`diec_engine::nfd_scan` 公共 API + `nfd_scan` 命令）+ hex 编辑
+会话层（hex_edit.rs：每路径撤销栈 256 条/1MiB、Edit/Undo 按钮、
+切换文件 discard）；容器归档 list/extract 已在 Phase 28 完成接入。

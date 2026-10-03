@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { Search, ArrowRight, Copy, Check, Code, Bookmark, MessageSquare } from "lucide-react";
+import { Search, ArrowRight, Copy, Check, Code, Bookmark, MessageSquare, Undo2 } from "lucide-react";
 import {
   AnnotationsPanel,
   loadAnnotations,
@@ -61,6 +61,7 @@ export function HexViewer({
   const [inspectorBytes, setInspectorBytes] = useState<Uint8Array>(new Uint8Array(0));
   const [editMsg, setEditMsg] = useState<string | null>(null);
   const [annotations, setAnnotations] = useState<AnnotationsDto | null>(null);
+  const [undoDepth, setUndoDepth] = useState(0);
 
   // Annotated offsets for row markers (bookmarks + comments).
   const annotatedOffsets = useMemo(() => {
@@ -102,17 +103,18 @@ export function HexViewer({
     [path, selectedByteOffset],
   );
 
-  // Byte edit entry: prompt for hex bytes, write via backend (creates .bak),
-  // then drop cached chunks so the view reloads fresh bytes.
+  // Byte edit entry: prompt for hex bytes, write via the hex-edit session
+  // (creates .bak, records an undo record), then drop cached chunks so the
+  // view reloads fresh bytes.
   const editAtSelection = useCallback(async () => {
     if (selectedByteOffset == null) return;
     const input = window.prompt(
-      `Enter hex bytes to write at 0x${selectedByteOffset.toString(16)} (e.g. "90 90 CC")`,
+      `${t("hex.editPrompt")} @ 0x${selectedByteOffset.toString(16)}`,
     );
     if (input == null) return;
     const cleaned = input.replace(/0x/gi, "").replace(/[^0-9a-fA-F]/g, "");
     if (cleaned.length === 0 || cleaned.length % 2 !== 0) {
-      setEditMsg("Invalid hex input");
+      setEditMsg(t("hex.invalidHex"));
       return;
     }
     const bytes: number[] = [];
@@ -120,13 +122,28 @@ export function HexViewer({
       bytes.push(parseInt(cleaned.slice(i, i + 2), 16));
     }
     try {
-      await invoke("edit_bytes_at_offset", { path, offset: selectedByteOffset, bytes });
+      await invoke("hex_edit_write", { path, offset: selectedByteOffset, bytes });
       setChunks(new Map());
-      setEditMsg(`Wrote ${bytes.length} byte(s) at 0x${selectedByteOffset.toString(16)}`);
+      setUndoDepth(await invoke<number>("hex_edit_undo_depth", { path }));
+      setEditMsg(
+        `${t("hex.wrote")} ${bytes.length} ${t("hex.bytesAt")} 0x${selectedByteOffset.toString(16)}`,
+      );
     } catch (e) {
       setEditMsg(String(e));
     }
-  }, [path, selectedByteOffset]);
+  }, [path, selectedByteOffset, t]);
+
+  // Undo the most recent session write, then refresh the view.
+  const undoLastEdit = useCallback(async () => {
+    try {
+      const restored = await invoke<number>("hex_edit_undo", { path });
+      setChunks(new Map());
+      setUndoDepth(await invoke<number>("hex_edit_undo_depth", { path }));
+      setEditMsg(`${t("hex.undid")} ${restored} ${t("hex.bytesAt")}`);
+    } catch (e) {
+      setEditMsg(String(e));
+    }
+  }, [path, t]);
 
   // Total number of lines in the file (for virtual scroll height).
   const totalLines = useMemo(() => Math.ceil(fileSize / LINE_BYTES), [fileSize]);
@@ -156,6 +173,11 @@ export function HexViewer({
       });
     setAnnotations(null);
     loadAnnotations(path).then(setAnnotations).catch(() => setAnnotations(null));
+    setUndoDepth(0);
+    // Drop the previous file's undo stack when switching files.
+    return () => {
+      invoke("hex_edit_discard", { path }).catch(() => {});
+    };
   }, [path]);
 
   // Scroll to initialOffset when it changes (e.g. from Disassembler "Follow in Hex").
@@ -500,9 +522,20 @@ export function HexViewer({
               onClick={editAtSelection}
               className="flex items-center gap-1 px-2 py-0.5 text-xs border border-border rounded hover:bg-hover"
             >
-              Edit
+              {t("hex.edit")}
             </button>
           </>
+        )}
+        {selectedByteOffset != null && (
+          <button
+            onClick={undoLastEdit}
+            disabled={undoDepth === 0}
+            className="flex items-center gap-1 px-2 py-0.5 text-xs border border-border rounded hover:bg-hover disabled:opacity-50"
+            title={undoDepth === 0 ? t("hex.nothingToUndo") : `${t("hex.undo")} (${undoDepth})`}
+          >
+            <Undo2 size={11} />
+            {t("hex.undo")}{undoDepth > 0 ? ` (${undoDepth})` : ""}
+          </button>
         )}
         {selectedByteOffset != null && onFollowInDisasm && (
           <button

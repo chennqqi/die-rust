@@ -39,6 +39,7 @@ import {
   Repeat,
   Grid3x3,
   Scissors,
+  FlaskConical,
 } from "lucide-react";
 import { setFollowInHexHandler } from "./follow";
 import { HexViewer } from "./components/HexViewer";
@@ -47,6 +48,7 @@ import { DemangleTool } from "./components/DemangleTool";
 import { SignatureBrowser } from "./components/SignatureBrowser";
 import { YaraScanner } from "./components/YaraScanner";
 import { PeidScanner } from "./components/PeidScanner";
+import { NfdPanel } from "./components/NfdPanel";
 import { OnlineTools } from "./components/OnlineTools";
 import { FileInfoPanel } from "./components/FileInfoPanel";
 import { StructPanel } from "./components/StructPanel";
@@ -201,7 +203,7 @@ const defaultSettings: AppSettings = {
   engine: { die_enabled: true, nfd_enabled: false, peid_enabled: false, yara_enabled: false },
 };
 
-type TabId = "scan" | "info" | "struct" | "hex" | "disasm" | "demangle" | "sigs" | "yara" | "peid" | "online" | "memmap" | "archive" | "converter" | "visualization" | "extractor" | "misc" | "search" | "strings";
+type TabId = "scan" | "info" | "struct" | "hex" | "disasm" | "demangle" | "sigs" | "yara" | "peid" | "nfd" | "online" | "memmap" | "archive" | "converter" | "visualization" | "extractor" | "misc" | "search" | "strings";
 
 const TAB_KEYS: { id: TabId; labelKey: string; icon: typeof FileSearch; advanced?: boolean }[] = [
   { id: "scan", labelKey: "tabs.scan", icon: ScanSearch },
@@ -215,6 +217,7 @@ const TAB_KEYS: { id: TabId; labelKey: string; icon: typeof FileSearch; advanced
   { id: "sigs", labelKey: "tabs.signatures", icon: Tags, advanced: true },
   { id: "yara", labelKey: "tabs.yara", icon: Shield, advanced: true },
   { id: "peid", labelKey: "tabs.peid", icon: ScanSearch, advanced: true },
+  { id: "nfd", labelKey: "tabs.nfd", icon: FlaskConical, advanced: true },
   { id: "memmap", labelKey: "tabs.memmap", icon: Map, advanced: true },
   { id: "archive", labelKey: "tabs.archive", icon: Archive, advanced: true },
   { id: "converter", labelKey: "tabs.converter", icon: Repeat, advanced: true },
@@ -1247,6 +1250,7 @@ export default function App() {
         {activeTab === "sigs" && <SignatureBrowser />}
         {activeTab === "yara" && filePath && <YaraScanner path={filePath} />}
         {activeTab === "peid" && filePath && <PeidScanner path={filePath} />}
+        {activeTab === "nfd" && filePath && <NfdPanel path={filePath} />}
         {activeTab === "online" && <OnlineTools filePath={filePath} />}
 
         {/* Memory map tab */}
