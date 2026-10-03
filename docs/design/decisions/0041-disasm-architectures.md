@@ -55,3 +55,35 @@ Both triggers checked; neither is met. **Decision upheld.**
 Partial pure-Rust coverage (MIPS via dormant yaxpeax + thin RISC-V,
 no PPC at all) would still produce three disjoint operand notations —
 the original rationale stands unchanged.
+
+## 2026-10-05 re-evaluation (Phase 39) — Decision REVERSED: Accepted via `capstone` crate
+
+Both blockers resolved; the maintainer mandated non-x86 coverage
+(Phases 36–40 batch), which is the second re-evaluation trigger.
+
+| v1/v2 concern | Resolution |
+|---------------|------------|
+| Native dependency unjustified | Upstream itself **is** capstone — `dep/XCapstone/3rdparty/Capstone` vendors the full capstone 5.0 source plus a prebuilt static lib. Using the same engine is the only path to genuine parity; documented as a native-dependency exception (build-time `cc` only, no system lib needed) |
+| No oracle for non-x86 | Oracle now exists: `tools/capstone-oracle/disasm_oracle` links the upstream-vendored `libcapstone-unix-x86_64.a` and replays `XCapstone::openHandle`'s DM→(arch,mode) table verbatim |
+| Disjoint pure-Rust notations | Avoided entirely — `capstone` crate 0.14 builds bundled capstone 5.x source; all new arches share one operand notation, the upstream one |
+
+### Implementation (accepted)
+
+- `capstone` 0.14 / `capstone-sys` 0.18 — bundled capstone 5.x built
+  from source at build time (C toolchain present; no runtime system
+  dependency).
+- `Arch` extended with 11 variants mirroring upstream DM names:
+  mips32le/be, mips64le/be, ppc32le/be, ppc64le/be, riscv32, riscv64,
+  riscvc (`DM_RISKVC` = `CS_MODE_RISCVC` alone — reproduced via
+  `new_raw` since `RiscVC` is an `ExtraMode`, not an `ArchMode`).
+- Differential corpus `corpus/disasm/*.bin` + `*.oracle.txt`:
+  77 instructions across 11 modes, byte-identical mnemonic/op_str/bytes.
+- x86 (iced-x86) and ARM (yaxpeax-arm) backends unchanged — they are
+  already-aligned implementations, not replaced.
+
+### Remaining gap (documented, out of Phase 39 scope)
+
+SPARC/M68K/SysZ/XCore/TMS320C64x/M680x/EVM/WASM/MOS65XX/BPF DM modes
+remain unexposed in the GUI arch list — the capstone backend covers
+them and they can be added as dropdown entries if corpus demand
+appears.

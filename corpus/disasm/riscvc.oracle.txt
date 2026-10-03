@@ -1,0 +1,7 @@
+1000	0100	c.nop 
+1002	0545	c.li a0, 1
+1004	8280	c.jr ra
+1006	f1bf	c.j -0x24
+1008	8501	c.addi gp, 1
+100a	8280	c.jr ra
+100c	0906	c.addi a2, 2

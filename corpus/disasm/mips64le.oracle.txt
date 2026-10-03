@@ -1,0 +1,6 @@
+1000	00000000	nop 
+1004	0800e003	jr $ra
+1008	e0ffbd67	daddiu $sp, $sp, -0x20
+100c	1800bfff	sd $ra, 0x18($sp)
+1010	404a0a00	sll $t1, $t2, 9
+1014	25080064	daddiu $zero, $zero, 0x825

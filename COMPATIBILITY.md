@@ -420,8 +420,11 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
   XHashWidget@`291e3ef6`）无 SSDeep，clean-room 实现规避 libfuzzy
   GPL-2.0，`ppdeep` 向量 oracle；TLSH 已由 `tlsh2` 提供（Phase 29）。
 - ADR 0040：BZ2/XZ/LZMA 纯 Rust 解码（本 Phase 已实现）。
-- ADR 0041：MIPS/PPC/RISC-V 反汇编 deferred——无完整纯 Rust 覆盖，
-  capstone native 绑定是唯一全架构路径但增加构建负担。
+- ADR 0041 v3：MIPS/PPC/RISC-V 反汇编**已实现**——`capstone` 0.14
+  bundled 构建（上游自身即 capstone 5.0，native 例外成立）；
+  oracle 为上游 vendor `libcapstone-unix-x86_64.a`，11 模式
+  77 指令逐字节 parity。剩余 SPARC/M68K 等 DM 模式可经由同一
+  capstone 后端按需扩展（见 ADR 0041 尾部）。
 
 ## Phase 19/20: InfoDB & Static Unpack（2026-10-07）
 

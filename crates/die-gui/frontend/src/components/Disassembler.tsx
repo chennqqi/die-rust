@@ -23,7 +23,22 @@ interface DisassemblyResult {
 }
 
 type Syntax = "intel" | "gas" | "nasm";
-type Arch = "x86" | "x64" | "arm" | "arm64";
+type Arch =
+  | "x86"
+  | "x64"
+  | "arm"
+  | "arm64"
+  | "mips32le"
+  | "mips32be"
+  | "mips64le"
+  | "mips64be"
+  | "ppc32le"
+  | "ppc32be"
+  | "ppc64le"
+  | "ppc64be"
+  | "riscv32"
+  | "riscv64"
+  | "riscvc";
 
 export function Disassembler({
   path,
@@ -128,6 +143,17 @@ export function Disassembler({
           <option value="x64">x86-64</option>
           <option value="arm">ARM</option>
           <option value="arm64">ARM64</option>
+          <option value="mips32le">MIPS32 LE</option>
+          <option value="mips32be">MIPS32 BE</option>
+          <option value="mips64le">MIPS64 LE</option>
+          <option value="mips64be">MIPS64 BE</option>
+          <option value="ppc32le">PPC32 LE</option>
+          <option value="ppc32be">PPC32 BE</option>
+          <option value="ppc64le">PPC64 LE</option>
+          <option value="ppc64be">PPC64 BE</option>
+          <option value="riscv32">RISC-V 32</option>
+          <option value="riscv64">RISC-V 64</option>
+          <option value="riscvc">RISC-V C</option>
         </select>
 
         {/* Syntax selector (x86/x64 only) */}

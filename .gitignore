@@ -39,3 +39,6 @@ __pycache__/
 /tools/nfd-oracle/build/
 /tools/nfd-oracle/rpms/
 /tools/nfd-oracle/qmake-root/
+
+# Compiled capstone oracle binary (rebuilt from disasm_oracle.c + upstream vendored lib)
+/tools/capstone-oracle/disasm_oracle

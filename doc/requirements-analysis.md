@@ -666,3 +666,7 @@ enigmavb/boxedapp fixture 后浮现；修复后 109 文件 0 差异验证无回�
 ## 2026-10-04 Phase 38（SSDeep）
 
 分析：先核查上游——`upstream/DIE-engine/dep/Formats/xbinary.h` 的 HASH 枚举仅 MD4/MD5/SHA1/SHA2 家族；临时检出 XHashWidget@291e3ef6 仅含 dialoghash/hashprocess 薄封装，无 fuzzy 代码。结论：ADR 0039 v1"上游实现有偏差"的前提不成立，改为 pin 之上扩展。GPL 阻断由 clean-room 实现规避（按 CTPH 算法描述编写，ppdeep 独立验证）；native `ssdeep` crate 维持拒绝（native+GPL 双重问题）。实现要点：7 字节滚动窗触发、双通道摘要（64/32 字符上限）、短摘要减半重试语义、rh==0 尾部 last_char 兜底——均从 ppdeep 语义镜像，9 组向量含块边界/高熵/halving 路径全 parity。
+
+## 2026-10-05 Phase 39（非 x86 反汇编）
+
+分析：ADR 0041 两项阻断均被解除——(1) native 依赖争议由"上游自身即 capstone"正当化（dep/XCapstone/3rdparty/Capstone 含 capstone 5.0 源码+预建静态库，diec-rules 已用 capstone 0.14 做 getDisasmString）；(2) 用户显式要求落地即"维护者决定"复审触发条件。capstone crate bundled 构建避免逐 ISA 的碎片化纯 Rust 移植（yaxpeax-mips 休眠、无 PPC 实现）。DM_RISKVC 是唯一非常规映射：上游只传 CS_MODE_RISCVC 不带 32/64 位，经 Capstone::new_raw+ExtraMode 逐位复刻。oracle 直接链接上游 vendor .a，模式位/端序任何接线漂移都会在 77 指令快照上显形。

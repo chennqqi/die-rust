@@ -2344,9 +2344,17 @@ oracle 失败而非能力缺失。全部剩余项重排：
   载荷由共享 LCG 配方重建。接入 `HASH_ALGORITHMS` +
   `compute_named_hash`；ADR 0039 v2 记录为 pin 基线之上的
   文档化扩展。
-- **Phase 39：非 x86 反汇编**（ADR 0041 修订，中型）
-  capstone（上游自带 `libcapstone` 已建，native 例外正当化）
-  vs yaxpeax 复审 → 落地 MIPS/PPC/RISC-V + ELF/PE 架构语料。
+- **Phase 39：非 x86 反汇编** — DONE（ADR 0041 v3 反转 Accepted）
+  采用 `capstone` crate 0.14（bundled capstone 5.x 源码构建，
+  `arch_mips/arch_powerpc/arch_riscv + full`，与 diec-rules
+  既有 native 例外同约定）。`Arch` 新增 11 变体逐位镜像上游
+  `XCapstone::openHandle` DM 表（mips32/64±LE/BE、ppc32/64±LE/BE、
+  riscv32/64/riscvc；`DM_RISKVC` 经 `new_raw`+`ExtraMode::RiscVC`
+  精确复刻单标志位模式）。oracle = `tools/capstone-oracle` 直接
+  链接上游 vendor `libcapstone-unix-x86_64.a`；语料
+  `corpus/disasm/*.bin`+`*.oracle.txt` 11 模式 77 指令逐字节
+  parity；畸形输入 fail-closed 测试；前端下拉补 11 项。x86
+  （iced-x86）/ARM（yaxpeax-arm）后端不变。
 - **Phase 40：GUI/i18n/杂项收尾**（小）
   i18n 全 locale 键位扫描补齐；GUI 归档视图确认二级格式
   入口（list_archive_members 已自动覆盖）；XStyles 决策

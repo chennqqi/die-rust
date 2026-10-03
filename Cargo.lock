@@ -1459,6 +1459,7 @@ dependencies = [
  "adler2",
  "blake2",
  "blake3",
+ "capstone",
  "cpp_demangle",
  "crc",
  "crc32fast",

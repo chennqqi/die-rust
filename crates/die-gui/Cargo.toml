@@ -59,6 +59,7 @@ whirlpool = "0.11.0"
 ripemd = "0.2.0"
 tiger = "0.3.0"
 gost94 = "0.11.0"
+capstone = { version = "0.14.0", default-features = false, features = ["arch_mips", "arch_powerpc", "arch_riscv", "std", "full"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

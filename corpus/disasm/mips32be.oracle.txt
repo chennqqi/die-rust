@@ -1,0 +1,10 @@
+1000	00000000	nop 
+1004	03e00008	jr $ra
+1008	27bdffe0	addiu $sp, $sp, -0x20
+100c	afbf001c	sw $ra, 0x1c($sp)
+1010	3c040000	lui $a0, 0
+1014	34840000	ori $a0, $a0, 0
+1018	10800002	beqz $a0, 0x1024
+101c	8fbf001c	lw $ra, 0x1c($sp)
+1020	27bd0020	addiu $sp, $sp, 0x20
+1024	00000000	nop 

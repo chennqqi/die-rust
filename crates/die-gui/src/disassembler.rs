@@ -34,17 +34,68 @@ pub enum Arch {
     Arm,
     /// ARM64/AArch64.
     Arm64,
+    /// MIPS32 little-endian (upstream `DM_MIPS_LE`).
+    Mips32le,
+    /// MIPS32 big-endian (upstream `DM_MIPS_BE`).
+    Mips32be,
+    /// MIPS64 little-endian (upstream `DM_MIPS64_LE`).
+    Mips64le,
+    /// MIPS64 big-endian (upstream `DM_MIPS64_BE`).
+    Mips64be,
+    /// PowerPC 32-bit little-endian (upstream `DM_PPC_LE`).
+    Ppc32le,
+    /// PowerPC 32-bit big-endian (upstream `DM_PPC_BE`).
+    Ppc32be,
+    /// PowerPC 64-bit little-endian (upstream `DM_PPC64_LE`).
+    Ppc64le,
+    /// PowerPC 64-bit big-endian (upstream `DM_PPC64_BE`).
+    Ppc64be,
+    /// RISC-V 32-bit (upstream `DM_RISKV32`).
+    Riscv32,
+    /// RISC-V 64-bit (upstream `DM_RISKV64`).
+    Riscv64,
+    /// RISC-V compressed instructions (upstream `DM_RISKVC`).
+    Riscvc,
 }
 
 impl Arch {
     /// Get the bitness for this architecture.
     fn bitness(&self) -> u32 {
         match self {
-            Arch::X86 => 32,
-            Arch::X64 => 64,
-            Arch::Arm => 32,
-            Arch::Arm64 => 64,
+            Arch::X86
+            | Arch::Arm
+            | Arch::Mips32le
+            | Arch::Mips32be
+            | Arch::Ppc32le
+            | Arch::Ppc32be
+            | Arch::Riscv32
+            | Arch::Riscvc => 32,
+            Arch::X64
+            | Arch::Arm64
+            | Arch::Mips64le
+            | Arch::Mips64be
+            | Arch::Ppc64le
+            | Arch::Ppc64be
+            | Arch::Riscv64 => 64,
         }
+    }
+
+    /// Whether this architecture is decoded through the capstone backend.
+    fn is_capstone(&self) -> bool {
+        matches!(
+            self,
+            Arch::Mips32le
+                | Arch::Mips32be
+                | Arch::Mips64le
+                | Arch::Mips64be
+                | Arch::Ppc32le
+                | Arch::Ppc32be
+                | Arch::Ppc64le
+                | Arch::Ppc64be
+                | Arch::Riscv32
+                | Arch::Riscv64
+                | Arch::Riscvc
+        )
     }
 }
 
@@ -99,6 +150,8 @@ pub fn disassemble_file(
 /// The architecture determines which disassembler engine is used:
 /// - X86/X64: iced-x86
 /// - Arm/Arm64: yaxpeax-arm
+/// - MIPS/PowerPC/RISC-V: capstone (same engine family as upstream
+///   XCapstone; mode flags mirror `XCapstone::openHandle`)
 pub fn disassemble_bytes(
     data: &[u8],
     base_address: u64,
@@ -109,6 +162,11 @@ pub fn disassemble_bytes(
         Arch::X86 | Arch::X64 => disassemble_x86(data, base_address, arch.bitness(), syntax),
         Arch::Arm => disassemble_arm(data, base_address),
         Arch::Arm64 => disassemble_arm64(data, base_address),
+        a if a.is_capstone() => disassemble_capstone(data, base_address, a),
+        // `Arch` is exhaustive above; unreachable, kept as a fail-closed
+        // guard if a new variant forgets its backend wiring.
+        #[allow(unreachable_patterns)]
+        _ => Err("unsupported disassembly architecture".to_string()),
     }
 }
 
@@ -338,6 +396,115 @@ fn disassemble_arm64(data: &[u8], base_address: u64) -> Result<DisassemblyResult
     })
 }
 
+/// Disassemble MIPS/PowerPC/RISC-V code via capstone — the same engine
+/// upstream XCapstone wraps. Arch/mode/endian triples mirror
+/// `XCapstone::openHandle` (DM_MIPS_*, DM_PPC_*, DM_RISKV*).
+fn disassemble_capstone(
+    data: &[u8],
+    base_address: u64,
+    arch: Arch,
+) -> Result<DisassemblyResult, String> {
+    use capstone::arch::{mips, ppc, riscv};
+    use capstone::prelude::*;
+
+    let cs = match arch {
+        Arch::Mips32le => Capstone::new()
+            .mips()
+            .mode(mips::ArchMode::Mips32)
+            .endian(capstone::Endian::Little)
+            .build(),
+        Arch::Mips32be => Capstone::new()
+            .mips()
+            .mode(mips::ArchMode::Mips32)
+            .endian(capstone::Endian::Big)
+            .build(),
+        Arch::Mips64le => Capstone::new()
+            .mips()
+            .mode(mips::ArchMode::Mips64)
+            .endian(capstone::Endian::Little)
+            .build(),
+        Arch::Mips64be => Capstone::new()
+            .mips()
+            .mode(mips::ArchMode::Mips64)
+            .endian(capstone::Endian::Big)
+            .build(),
+        Arch::Ppc32le => Capstone::new()
+            .ppc()
+            .mode(ppc::ArchMode::Mode32)
+            .endian(capstone::Endian::Little)
+            .build(),
+        Arch::Ppc32be => Capstone::new()
+            .ppc()
+            .mode(ppc::ArchMode::Mode32)
+            .endian(capstone::Endian::Big)
+            .build(),
+        Arch::Ppc64le => Capstone::new()
+            .ppc()
+            .mode(ppc::ArchMode::Mode64)
+            .endian(capstone::Endian::Little)
+            .build(),
+        Arch::Ppc64be => Capstone::new()
+            .ppc()
+            .mode(ppc::ArchMode::Mode64)
+            .endian(capstone::Endian::Big)
+            .build(),
+        Arch::Riscv32 => Capstone::new()
+            .riscv()
+            .mode(riscv::ArchMode::RiscV32)
+            .build(),
+        Arch::Riscv64 => Capstone::new()
+            .riscv()
+            .mode(riscv::ArchMode::RiscV64)
+            .build(),
+        // Upstream calls cs_open(CS_ARCH_RISCV, CS_MODE_RISCVC) — the
+        // compressed flag alone with no 32/64 mode bits. `Mode::Arm`
+        // maps to cs_mode(0) under the hood, so new_raw + ExtraMode
+        // reproduces that bitmask exactly.
+        Arch::Riscvc => Capstone::new_raw(
+            capstone::Arch::RISCV,
+            capstone::Mode::Arm,
+            [capstone::ExtraMode::RiscVC].into_iter(),
+            None,
+        ),
+        _ => return Err("not a capstone architecture".to_string()),
+    }
+    .map_err(|e| e.to_string())?;
+
+    let insns = cs
+        .disasm_all(data, base_address)
+        .map_err(|e| e.to_string())?;
+    let instructions: Vec<Instruction> = insns
+        .iter()
+        .map(|insn| {
+            let text = match insn.op_str() {
+                Some(ops) if !ops.is_empty() => {
+                    format!("{} {}", insn.mnemonic().unwrap_or(""), ops)
+                }
+                _ => insn.mnemonic().unwrap_or("").to_string(),
+            };
+            Instruction {
+                address: format!("{:x}", insn.address()),
+                bytes: insn
+                    .bytes()
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<Vec<_>>()
+                    .join(""),
+                mnemonic: text,
+                label: None,
+                comment: None,
+                jump_target: None,
+            }
+        })
+        .collect();
+    let count = instructions.len();
+    Ok(DisassemblyResult {
+        start_address: base_address,
+        instruction_count: count,
+        instructions,
+    })
+}
+
 /// Read a range of bytes from a file.
 fn read_file_range(path: &str, offset: u64, max_bytes: usize) -> Result<Vec<u8>, String> {
     use std::io::{Read, Seek, SeekFrom};
@@ -443,5 +610,66 @@ mod tests {
             "Expected more than 256 instructions, got {} (old 256-byte limit should be removed)",
             result.instruction_count
         );
+    }
+
+    /// Differential test against the upstream-vendored capstone 5.0
+    /// static lib (`dep/XCapstone/3rdparty/Capstone`). Snapshots are
+    /// produced by `tools/capstone-oracle/disasm_oracle`, which replays
+    /// `XCapstone::openHandle`'s DM->(arch,mode) table verbatim — so any
+    /// wiring drift (mode bits, endianness, output glue) shows up here.
+    #[test]
+    fn test_capstone_arches_oracle_parity() {
+        let cases: &[(&str, Arch)] = &[
+            ("mips32be", Arch::Mips32be),
+            ("mips32le", Arch::Mips32le),
+            ("mips64be", Arch::Mips64be),
+            ("mips64le", Arch::Mips64le),
+            ("ppc32be", Arch::Ppc32be),
+            ("ppc32le", Arch::Ppc32le),
+            ("ppc64be", Arch::Ppc64be),
+            ("ppc64le", Arch::Ppc64le),
+            ("riscv32", Arch::Riscv32),
+            ("riscv64", Arch::Riscv64),
+            ("riscvc", Arch::Riscvc),
+        ];
+        let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/disasm");
+        for (dm, arch) in cases {
+            let code = std::fs::read(corpus.join(format!("{dm}.bin")))
+                .unwrap_or_else(|e| panic!("missing fixture {dm}.bin: {e}"));
+            let oracle = std::fs::read_to_string(corpus.join(format!("{dm}.oracle.txt")))
+                .unwrap_or_else(|e| panic!("missing oracle {dm}.oracle.txt: {e}"));
+            let result = disassemble_bytes(&code, 0x1000, *arch, Syntax::Intel)
+                .unwrap_or_else(|e| panic!("{dm}: disassemble failed: {e}"));
+            let expected: Vec<&str> = oracle.lines().map(str::trim_end).collect();
+            assert_eq!(
+                result.instruction_count,
+                expected.len(),
+                "{dm}: instruction count mismatch"
+            );
+            for (i, (insn, want)) in result.instructions.iter().zip(expected.iter()).enumerate() {
+                let got = format!("{}\t{}\t{}", insn.address, insn.bytes, insn.mnemonic);
+                assert_eq!(got.trim_end(), *want, "{dm}: instruction {i} mismatch");
+            }
+        }
+    }
+
+    #[test]
+    fn test_capstone_garbage_input_no_panic() {
+        // Malformed byte streams must fail closed (short/zero decode),
+        // never panic.
+        let garbage: Vec<u8> = (0..255u8).cycle().take(97).collect();
+        for arch in [
+            Arch::Mips32be,
+            Arch::Mips32le,
+            Arch::Mips64be,
+            Arch::Ppc32be,
+            Arch::Ppc64le,
+            Arch::Riscv32,
+            Arch::Riscv64,
+            Arch::Riscvc,
+        ] {
+            let _ = disassemble_bytes(&garbage, 0x1000, arch, Syntax::Intel);
+            let _ = disassemble_bytes(&[], 0x1000, arch, Syntax::Intel);
+        }
     }
 }

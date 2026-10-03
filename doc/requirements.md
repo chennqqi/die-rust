@@ -1383,3 +1383,4 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
 ## 2026-10-04 Phase 38（SSDeep）
 
 需求：补齐 SSDeep 模糊哈希。事实修正：pin 基线（`XBinary::HASH`@`23fec32`、XHashWidget@`291e3ef6`）无任何 SSDeep 实现，无上游 oracle；落 clean-room 纯 Rust 实现（非 GPL fuzzy.c 翻译），`ppdeep`（Apache-2.0）向量 oracle，ADR 0039 v2 记录为 pin 之上扩展。
+- 2026-10-05：Phase 39——capstone 落地 MIPS/PPC/RISC-V 反汇编（ADR 0041 修订反转），11 DM 变体 + 上游 vendor libcapstone oracle 差分语料。
