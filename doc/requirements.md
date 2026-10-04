@@ -1460,3 +1460,11 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
 - 执行：ArchiveLimits 全链路可配置（engine ScanFlags / CLI flags /
   server body / GUI settings+DTO+设置面板）；TLSH 确认已由 tlsh2 落地
   并补参考实现 oracle 向量；ADR 0030 修订 + ADR 0042 #1/#11 更新。
+
+## 2026-10-12 规则库漂移重同步（"也需要同步"）
+- 用户要求执行 ADR 0042 #12：vendored 规则库对齐 pin submodule 并移除
+  `PE.isNET` 兼容别名。
+- 核验：vendor 树与 pin `8925358d` 检出逐字节一致（manifest 4,698 文件
+  0 哈希差异）；全规则树无 `PE.isNET()` 调用方。
+- 执行：移除 `PE.isNET` 别名；新增 conformance 回归断言
+  `typeof PE.isNET === "undefined"`（与上游一致，isNet 保留）。

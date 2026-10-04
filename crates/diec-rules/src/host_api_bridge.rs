@@ -3418,12 +3418,9 @@ impl HostApiBridge {
                         return _peGetBatch().isNet;
                     };
                     // Upstream @2550d2d removed `isNET` (only `isNet`
-                    // remains) and no upstream rule calls the uppercase
-                    // form. The alias is kept because five vendored
-                    // db_extra rules still call `PE.isNET()` — pending a
-                    // rules re-sync to the pinned ruleset (see
-                    // doc/requirements.md rules-sync gap entry).
-                    PE.isNET = PE.isNet;
+                    // remains). The vendored ruleset was re-synced to the
+                    // pinned `8925358d` ruleset, which has no `PE.isNET()`
+                    // callers, so no compatibility alias is installed.
                     // .NET methods: backed by pelite + native BSJB metadata parsing.
                     // isNetObjectPresent: search .NET ANSI strings (#Strings heap).
                     PE.isNetObjectPresent = function(s) {

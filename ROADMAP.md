@@ -2567,6 +2567,7 @@ Windows-only 实为 parity（上游 `registerContext` 同样
     （合成 guest 代码驱动 decrypt_stub_head/pet_run_embedded_decoder，
     含预算耗尽/陷阱 fail-closed）。
 - **Parity**：右键菜单 Windows-only（上游同样仅 Windows）。
-- **维护任务**：vendored `db/`/`db_extra/` 与上游 submodule pin
-  的漂移（vendored 中 10 条规则仍调已删的 `PE.isNET`，已加
-  compat 别名）——下次规则同步时重对齐并移除别名。
+- **规则库漂移**：✅ 已核验——vendor 树与 pin `8925358d` 的 submodule
+  检出逐字节一致（manifest 4,698 文件 0 哈希差异），全树无
+  `PE.isNET()` 调用方，兼容别名已移除（conformance 断言
+  `typeof PE.isNET === "undefined"`，与上游一致）。

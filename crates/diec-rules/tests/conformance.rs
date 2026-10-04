@@ -872,3 +872,33 @@ fn rule_with_multiple_rules_in_snapshot() {
         .unwrap();
     assert_eq!(results.len(), 1);
 }
+
+/// `PE.isNET` was removed upstream (@2550d2d) and the vendored ruleset was
+/// re-synced to pinned `8925358d`, which has no `PE.isNET()` callers. The
+/// compatibility alias was dropped for exact parity: `isNET` must be
+/// `undefined` while the canonical `isNet` remains a function.
+#[test]
+fn rule_pe_isnet_alias_absent_isnet_present() {
+    let snapshot = DatabaseSnapshot {
+        rules: vec![LoadedRule {
+            path: "test.sg".into(),
+            ordinal: 0,
+            file_type: "PE".into(),
+            source: r#"
+                meta("info", "IsNetSurface");
+                function detect() {
+                    if (typeof PE.isNET === "undefined" &&
+                        typeof PE.isNet === "function") {
+                        _setResult("info", "IsNetSurface", "1.0", "");
+                    }
+                }
+            "#
+            .to_string(),
+        }],
+        init_script: None,
+        type_init_scripts: Vec::new(),
+        include_scripts: BTreeMap::new(),
+    };
+    let results = run_rule(&snapshot, vec![0x4D, 0x5A]);
+    assert_eq!(results.len(), 1, "PE.isNET alias must be absent (parity)");
+}

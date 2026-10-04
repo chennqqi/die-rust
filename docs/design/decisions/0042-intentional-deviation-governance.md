@@ -46,7 +46,7 @@ explicit unblocking condition.
 | 9 | XStaticUnpacker packers (ADR 0036) | All non-emulator modules ported with oracle-verified parity: UPX (Phase 20), MEW/Petite/yoda/ASPack/NsPack (Phases 26–27), AutoIt/EnigmaVB/BoxedApp (Phase 28) | 10 modules; XEmulator needed only by xinstallsimple and the emulator fallback branches of xaspack/xpetite | **Complete** — InstallSimple + ASPack/Petite emulator branches delivered → Phase 50 ✅ | — |
 | 10 | InfoDB storage format (ADR 0037) | Sidecar JSON `<file>.diec.json` (Phase 19) | SQLite InfoDB | **Permanent** product difference (functionally delivered; no SQLite dependency) | — |
 | 11 | TLSH (ADR 0039) | ✅ `tlsh2` pure-Rust port since Phase 29; reference-impl oracle vectors added 2026-10-12 (trendmicro/tlsh `ebdec8fd`, 7 digests + 3 fail-closed cases) | Pin baseline has neither (XHashWidget `291e3ef6` lacks both) | **DONE** | — |
-| 12 | Vendored rule DB vs upstream submodule drift | Vendored `db/`/`db_extra/` snapshot; 10 rules still call upstream-removed `PE.isNET` (alias added to keep them working) | Upstream `db` submodule at a newer pin | **Conditional** maintenance task | Re-sync vendored DB to the pinned submodule SHA, then remove the `PE.isNET` compat alias |
+| 12 | Vendored rule DB vs upstream submodule drift | ✅ Vendored tree verified against `rule-source-manifest.json` (commit `8925358d`, 4,698 files, 0 hash mismatches) and byte-identical to the pinned submodule checkout; no rule calls `PE.isNET()` — alias removed 2026-10-12 | Upstream `db` submodule at pin `8925358d` | **DONE** | Re-sync future vendor updates to the submodule pin via `xtask sync-rules` + manifest regen; re-verify zero `PE.isNET()` callers before any alias change |
 
 ### Scheduled phases (Phase 45–47, Phase 50)
 

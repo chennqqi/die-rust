@@ -870,11 +870,11 @@ fn real_rule_pe_islibrarypresent_works_with_real_imports() {
 
 #[test]
 fn real_rule_pe_isnet_alias_no_type_error() {
-    // Regression test for Phase 14.2: rules call `PE.isNET()` (uppercase)
-    // but the bridge only registered `PE.isNet` (camelCase). JavaScript is
-    // case-sensitive, so `PE.isNET` threw TypeError: not a function.
-    // This affected cryptor_404crypter, cryptor_njCrypter, installer_Store,
-    // installer_DockerDesktopInstaller, protector_Adept_Protector, etc.
+    // Regression test for Phase 14.2: these rules used to call `PE.isNET()`
+    // (uppercase) but the bridge only registered `PE.isNet` (camelCase), so
+    // they threw TypeError: not a function. After the ruleset re-sync to
+    // pinned `8925358d`, upstream rules call `isNet` and the compat alias
+    // was removed — this test keeps asserting the real rules run clean.
     let (init_source, type_init_scripts, includes) = match load_upstream_framework_for_type("PE") {
         Some(x) => x,
         None => {
@@ -891,7 +891,7 @@ fn real_rule_pe_isnet_alias_no_type_error() {
         }
     };
 
-    // Rules that call PE.isNET() — must not throw TypeError.
+    // Rules that exercise the PE.isNet path — must not throw TypeError.
     // These rules live in db_extra, not db.
     let extra = db_extra_root();
     for rule_rel in [
@@ -909,7 +909,7 @@ fn real_rule_pe_isnet_alias_no_type_error() {
         );
         assert!(
             results.is_some(),
-            "{rule_rel} threw TypeError (expected PE.isNET to be defined)"
+            "{rule_rel} threw TypeError (expected PE.isNet to be defined)"
         );
     }
 }
