@@ -4,12 +4,10 @@ A Rust rewrite of [Detect It Easy](https://github.com/horsicq/DIE-engine) (DIE).
 
 [中文文档](README.zh-CN.md)
 
-> **⚠️ Work in Progress — Not Production Ready**
->
-> This project is under active development. Detection coverage, API
-> stability, and output formats may change between commits. Some PE
-> protector/packer rules that rely on disassembly (Capstone) are not
-> yet supported. Do not use in production environments.
+> **v1.0.0** — first stable release. Detection coverage and output
+> formats follow the pinned upstream baseline with documented
+> intentional deviations (see `docs/design/decisions/` and
+> `COMPATIBILITY.md`).
 
 ## Why
 
@@ -40,7 +38,20 @@ multi-language bindings.
 
 ## Known Limitations
 
-None at this time.
+Documented intentional deviations from upstream (each recorded in an
+ADR under `docs/design/decisions/`):
+
+- **NFD/SpecAbstract engine is partial**: core signature matching,
+  dispatch tables, and common handlers are implemented; the
+  version-resource FileDescription chain is explicitly deferred
+  (Phase 21).
+- **Disassembly architectures**: arch support beyond the aligned set is
+  deferred after review (Phase 30 / ADR).
+- **SSDeep**: rejected for parity use (ADR 0039); TLSH is implemented.
+- **Archive safety bounds**: extraction limits are intentionally
+  stricter than upstream and configurable (ADR 0030).
+- **XStyles / InfoDB**: platform theming differences and JSON sidecar
+  storage are permanent deviations (ADRs 0037+).
 
 ## Known Differences (Non-Defects)
 
@@ -77,7 +88,7 @@ python tools/benchmark/run_benchmarks.py --quick
 
 ## Compatibility
 
-**477 tests pass**, upstream rules loaded, 28 baseline + 20 edge-case
+**1056 tests pass**, upstream rules loaded, 28 baseline + 20 edge-case
 corpus files verified — no crashes, no spurious detections, no hangs.
 
 Differential testing against upstream DIE 3.21:

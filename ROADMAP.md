@@ -764,7 +764,7 @@ Phase 9 修复了信息展示格式和基础功能缺陷（20 项 P1/P2/P3），
 
 ## 后续改进项
 
-### Phase 13：diec CLI 100% 上游对齐 — IN PROGRESS
+### Phase 13：diec CLI 100% 上游对齐 — DONE（v1.0 收口确认）
 
 Phase 12 完成了 GUI 的 35 项剩余功能对齐，但 diec CLI 自身仍有 3 项实现缺口
 与上游 DIE-engine 不一致。本 Phase 一次性补齐全部缺口，使 diec CLI 达到与
@@ -1141,7 +1141,7 @@ Phase 11 完成了 8 个批次的基础对齐，但 `gui-gap-analysis-v3.md` 仍
 - 14.6 Go 绑定 reusable scanner — ✅ 完成（`Scanner.ScanBytes`/`ScanPath` 改用
   `die_v1_scanner_scan_bytes`/`die_v1_scanner_scan_path_utf8`，复用 runtime）
 - 14.7 文档纠正与 glibc 指南 — ✅ 完成（README 添加 Linux glibc 2.34+ 要求说明）
-- 14.8 收尾与回归 — 进行中
+- 14.8 收尾与回归 — DONE
 
 ### 14.1 ELF `_B` 注入修复 — P0 阻断
 
@@ -1440,7 +1440,7 @@ Phase 15 聚焦"重建对齐方法论 + 闭合已识别缺口"，不再追加新
 - **P1 host API**：8 个高优先级方法实现 ✅
 - **质量门禁**：720 个测试通过，cargo fmt/clippy 零警告 ✅
 
-## Phase 16：真实数据差分验证与 host API 语义修正 — TODO
+## Phase 16：真实数据差分验证与 host API 语义修正 — DONE
 
 **启动日期**：2026-08-23
 **背景**：v0.9.0（Phase 15：host API 覆盖率 100%、真差分框架）发布后，在真实
@@ -1901,7 +1901,7 @@ ADR 0036 按"逐 packer"条件实施 UPX。
 Phase 20 交付验证：`cargo fmt/clippy/test` 全绿（upx_unpack 7 测试、
 nrv 单测），前端 `npm run build` 通过。
 
-## Phase 21：NFD/SpecAbstract 第二引擎 — PARTIAL (2026-10-07)
+## Phase 21：NFD/SpecAbstract 第二引擎 — PARTIAL (2026-10-07，1.0 已登记偏离)
 
 许可证 Gate 通过（MIT），按"读 C++ 写 Rust + 签名表 codegen"路径
 落地了有界切片：

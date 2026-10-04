@@ -3,7 +3,7 @@
 This document tracks compatibility between die-rust and the upstream
 DIE-engine project. It is updated with each release.
 
-Last updated: 2026-08-15
+Last updated: 2026-10-04
 
 ## Baseline
 
@@ -226,13 +226,14 @@ for the full list. Key gaps by priority:
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Unit tests | 251 | ✅ all pass |
-| Integration tests | 182 | ✅ all pass (+14 Scanner/Database version/Server) |
-| FFI tests | 35 | ✅ all pass |
-| Edge corpus tests | 3 | ✅ all pass |
-| GUI differential tests | 2 | ✅ all pass (v0.4.0) |
-| Fuzz targets | 6 | ✅ compile |
-| **Total** | **684** | ✅ 0 failures |
+| Workspace tests (all binaries) | 1056 | ✅ all pass |
+| Fuzz seed replay | 7 | ✅ all pass |
+| C smoke test | 17 | ✅ all pass |
+| Python binding tests | 12 | ✅ all pass |
+| **Total** | **1092** | ✅ 0 failures |
+
+Historical per-category breakdown (v0.9.x era): 251 unit + 182
+integration + 35 FFI + 3 edge corpus + 2 GUI differential = 684.
 
 ## Phase 13: CLI Parity & Nested Scanning (2026-08-15)
 

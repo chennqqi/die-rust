@@ -1536,3 +1536,4 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
 - 2026-10-04: 按 rename-die-rust.md v3 实施 diec-rust → die-rust 三步改名（crate/ABI+绑定/项目身份），保留 diec CLI 名与 .diec.json 读兼容
 - 2026-10-04: README 双语新增'项目原则'声明（AI开发测试/尽力兼容/选择性PR）
 - 2026-10-04: 修 Windows CI annotations 测试 flake——temp_file 用 pid+nanos，Windows 时钟粒度 15.6ms 致并行测试路径碰撞被互删；加原子序号
+- 2026-10-04: v1.0.0 发版准备——版本号 bump（workspace/tauri.conf/frontend+lock）、RELEASE_NOTES v1.0.0、README 横幅与已知限制（双语）、ROADMAP 过期状态统一、COMPATIBILITY 刷新

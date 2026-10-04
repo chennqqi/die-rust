@@ -1,5 +1,47 @@
 # Release Notes
 
+## die-rust v1.0.0
+
+First stable release — project renamed to `die-rust`, all planned
+alignment phases closed, and the full public surface (C ABI, language
+bindings, environment variables, artifacts) moved to the `die-*` naming.
+
+### Highlights
+
+- **Project rename** `diec-rust` → `die-rust`: crates `die-*`, C ABI
+  `die.h`/`die_v1_*`/`DIE_*`, `libdie_ffi`, Python `import die`, Go
+  `package die`, `DIE_*` env vars, `die-*` release artifacts. The CLI
+  binary stays `diec` for upstream drop-in compatibility; GUI annotation
+  sidecars migrate to `.die.json` with `.diec.json` read fallback.
+- **XEmulator (Phase 50)**: bounded x86 emulation core + InstallSimple /
+  ASPack 2.11 / Petite emulator-driven unpacking branches; 491/491
+  instruction-level differential cases byte-identical to the pinned
+  upstream oracle.
+- **Static unpacking**: UPX, PE compressor groups (Phases 26-27),
+  container/script extractors (Phase 28), real packed-sample parity
+  verified against upstream oracle.
+- **NFD/SpecAbstract second engine (Phase 21, partial)**: pure-Rust
+  signature tables codegen'd from upstream; `--nfd` flag, records tagged
+  `engine=nfd`.
+- **Hashes**: TLSH implemented with reference vectors; BZ2/XZ/LZMA
+  pure-Rust decoders (ADR 0040).
+- **CLI parity**: `--struct`/`--showstructs`, upstream `-r` intra-file
+  recursive scan (directory recursion moved to `-R`), archive member
+  extraction recursion with configurable safety bounds (ADR 0030).
+- **GUI**: full header viewers, hex edit, annotations (XInfoDB parity,
+  JSON sidecars), demangle/disasm/NFD panels, i18n parity, Tauri
+  updater with production signing pipeline and `latest.json` manifest.
+- **Rules**: vendored database synchronized to upstream `8925358d`;
+  obsolete `PE.isNET` alias removed (upstream-conformant).
+
+### Verification
+
+- `cargo test --workspace --all-features`: all suites green
+- MSRV 1.88 clippy clean; fuzz seed replay 7/7
+- C smoke test 17/17, Python binding 12/12, Go build/vet clean
+- Differential corpus vs pinned upstream oracle: documented parity with
+  intentional deviations recorded in `docs/design/decisions/` ADRs
+
 ## die-rust v0.9.0
 
 Phase 15 alignment methodology release — host API 100% coverage, true

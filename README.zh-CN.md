@@ -4,11 +4,9 @@
 
 [English](README.md)
 
-> **⚠️ 开发中 — 不建议用于生产环境**
->
-> 本项目仍在积极开发中。检测覆盖率、API 稳定性和输出格式可能在提交间
-> 发生变化。部分依赖反汇编（Capstone）的 PE 保护器/打包器规则尚未支持。
-> 请勿在生产环境中使用。
+> **v1.0.0** — 首个稳定版本。检测覆盖率与输出格式对齐 pin 住的上游
+> 基线，有意偏离项均有 ADR 记录（见 `docs/design/decisions/` 与
+> `COMPATIBILITY.md`）。
 
 ## 为什么
 
@@ -33,7 +31,16 @@
 
 ## 已知限制
 
-无。
+已记录的有意偏离项（各 ADR 见 `docs/design/decisions/`）：
+
+- **NFD/SpecAbstract 引擎为部分实现**：签名匹配核心、dispatch 表与常用
+  handler 已实现；version-resource FileDescription 链显式 deferred
+  （Phase 21）。
+- **反汇编架构**：对齐集合之外的架构支持经复审后 deferred（Phase 30）。
+- **SSDeep**：parity 用途已否决（ADR 0039）；TLSH 已实现。
+- **归档安全上限**：提取限制有意比上游更严格，且可配置（ADR 0030）。
+- **XStyles / InfoDB**：平台主题差异与 JSON sidecar 存储为永久偏离
+  （ADR 0037+）。
 
 ## 已知差异（非缺陷）
 
@@ -66,7 +73,7 @@ python tools/benchmark/run_benchmarks.py --quick
 
 ## 兼容性
 
-**454 个测试通过**，上游规则加载，28 个基线 + 20 个边缘语料验证 —
+**1056 个测试通过**，上游规则加载，28 个基线 + 20 个边缘语料验证 —
 无崩溃、无误检、无挂起。
 
 与上游 DIE 3.21 差分测试：
