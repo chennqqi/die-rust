@@ -1502,3 +1502,27 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   - `upstream/Detect-It-Easy/.gitattributes` 的 `* text=auto` 改为 `* -text`（深层 attrs 覆盖根规则，不改则 .sg 会被归一 LF、破坏 manifest sha256）。
   - `git add --renormalize`：31 个自有 CRLF 文件归一 LF（workflows/3 个 .rs/docs/JSON），upstream 全部撤回。
   - autocrlf clone 验证：自有文件 LF、corpus LF、upstream .sg 保持 CRLF、manifest 4698/4698 MATCH、全套件 0 失败。
+
+## 2026-10-04 项目改名调研
+
+项目定位已超出"Rust 版 diec CLI"（现有 diec/died/die/FFI/绑定），
+拟将仓库名 diec-rust → die-rust。用户要求仅做分析设计不直接修改。
+产出 docs/design/rename-die-rust.md：盘点全部改名触点（仓库 URL、
+包名、CI、脚本、文档、对外 ABI），给出三方案，建议方案 B（仓库名+
+内部 crate 名统一 die-*，对外 ABI/env/lib 名不变）。
+（补充）用户确认未发布 1.0、无外部用户，对外 API 面同样纳入改名，
+彻底不留 diec_ 残留——设计文档更新为 v2 彻底方案。
+
+- 2026-10-04: 用户反馈 push 后 default (windows-2022) 仍失败并贴出
+  cargo test 日志：updater_flow.exe 进程启动即失败
+  (0xC0000139 STATUS_ENTRYPOINT_NOT_FOUND)。本地用 clang-cl/lld
+  shim 交叉构建 windows-msvc target 读取真实导入表定位根因：
+  `comctl32.dll!TaskDialogIndirect` 仅存在于 comctl32 v6（WinSxS），
+  需 manifest 激活；tauri-build 用 `rustc-link-arg-bins` 只为 bin
+  target 嵌 manifest，integration test exe 无 manifest → loader
+  绑定 System32 v5.82 缺导出即崩。die-xxx.exe（bin unittest，有
+  manifest）与其他两个集成测试（dialog 代码被 GC 无 comctl32 导入）
+  均通过，仅 updater_flow 引用 rfd 而挂。修复：build.rs 对 windows
+  target 输出 `cargo:rustc-link-arg-tests=resource.lib`，测试 exe
+  获得相同 v6 manifest。交叉构建验证 .rsrc/Common-Controls 6.0.0.0
+  已嵌入；Linux 本地 updater_flow 5/5 通过。
