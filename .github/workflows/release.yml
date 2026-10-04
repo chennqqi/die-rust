@@ -15,9 +15,43 @@ permissions:
   contents: write
 
 jobs:
+  # Cheap preflight: fail in seconds (not after a 60-min matrix build) if
+  # the updater signing secrets are missing or tauri.conf.json still
+  # contains the dev fixture pubkey — releasing with the dev key would
+  # silently break the auto-update trust chain.
+  preflight:
+    name: Preflight (updater signing)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Verify updater signing configuration
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "::error::secret TAURI_SIGNING_PRIVATE_KEY is not set."
+            echo "Generate a production keypair: cargo tauri signer generate -w ~/.tauri/diec.key"
+            echo "Then base64 -w0 ~/.tauri/diec.key into this secret."
+            exit 1
+          fi
+          DEV_PUBKEY="dW50cnVzdGVkIGNvbW1lbnQ6IGRpZWMtcnVzdCBkZXYgdXBkYXRlciBrZXkKUldSa2FXVmpaR1YyTWZNazhSZWZvMXRpaWZqTUVyNmRvdk85WVBKb1RhTEt5WW1IWUhhVUhZd1YK"
+          if grep -q "$DEV_PUBKEY" crates/die-gui/tauri.conf.json; then
+            echo "::error::tauri.conf.json still contains the DEV fixture pubkey."
+            echo "Replace plugins.updater.pubkey with the public key from 'cargo tauri signer generate'."
+            exit 1
+          fi
+          echo "updater signing configuration OK"
+
   # Build CLI binary and FFI libraries for each platform.
   build:
     name: Build (${{ matrix.target }})
+    needs: preflight
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -192,6 +226,7 @@ jobs:
   # archives (zip/tar.gz) for each platform.
   build-gui:
     name: Build GUI (${{ matrix.os }})
+    needs: preflight
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -201,12 +236,15 @@ jobs:
           - os: windows-2022
             portable_name: die-gui-windows-x86_64-portable
             installer_name: die-gui-windows-x86_64-installers
+            updater_name: die-gui-updater-windows
           - os: ubuntu-24.04
             portable_name: die-gui-linux-x86_64-portable
             installer_name: die-gui-linux-x86_64-installers
+            updater_name: die-gui-updater-linux
           - os: macos-14
             portable_name: die-gui-macos-arm64-portable
             installer_name: die-gui-macos-arm64-installers
+            updater_name: die-gui-updater-macos
 
     steps:
       - name: Check out
@@ -285,15 +323,23 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         working-directory: crates/die-gui
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           # Generate MSI + NSIS installers.
           # tauri bundler requires the frontend dist to already exist.
+          # With the signing env set, updater artifacts + .sig files are
+          # produced alongside the bundles.
           cargo tauri build --bundles msi,nsis 2>&1 || echo "WARN: bundle build may need WiX"
 
       - name: Build GUI bundles (Linux)
         if: runner.os == 'Linux'
         shell: bash
         working-directory: crates/die-gui
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           # Generate DEB + RPM + AppImage.
           cargo tauri build --bundles deb,rpm,appimage 2>&1 || echo "WARN: some bundles may fail"
@@ -302,6 +348,9 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         working-directory: crates/die-gui
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           # Generate DMG + app bundle.
           cargo tauri build --bundles dmg,app 2>&1 || echo "WARN: bundle build may fail"
@@ -415,6 +464,50 @@ jobs:
             echo "No installer artifacts found"
           fi
 
+      # --- Collect updater artifacts ---
+      # Raw signed updater payloads (not zipped): the release job turns
+      # these into the latest.json manifest whose URLs point at the
+      # individual release assets.
+      - name: Collect updater artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $staging = "die-gui-updater-windows"
+          New-Item -ItemType Directory -Force -Path "$staging" | Out-Null
+          foreach ($pat in @("*.nsis.zip", "*-setup.exe")) {
+            Get-ChildItem "target/release/bundle/nsis/$pat" -ErrorAction SilentlyContinue | ForEach-Object {
+              Copy-Item $_.FullName "$staging/"
+              if (Test-Path "$($_.FullName).sig") { Copy-Item "$($_.FullName).sig" "$staging/" }
+            }
+          }
+
+      - name: Collect updater artifacts (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          staging="die-gui-updater-linux"
+          mkdir -p "$staging"
+          for f in target/release/bundle/appimage/*.AppImage.tar.gz*; do
+            [ -f "$f" ] && cp "$f" "$staging/"
+          done
+
+      - name: Collect updater artifacts (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          staging="die-gui-updater-macos"
+          mkdir -p "$staging"
+          for f in target/release/bundle/macos/*.app.tar.gz*; do
+            [ -f "$f" ] && cp "$f" "$staging/"
+          done
+
+      - name: Upload updater artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ matrix.updater_name }}
+          path: ${{ matrix.updater_name }}
+          retention-days: 30
+
       # --- Upload artifacts ---
       - name: Upload portable artifact
         uses: actions/upload-artifact@v5
@@ -466,6 +559,16 @@ jobs:
           find artifacts -type f
           ls -la artifacts/*/ || true
 
+      - name: Generate updater manifest (latest.json)
+        shell: bash
+        run: |
+          tag="${{ inputs.version || github.ref_name }}"
+          # Builds the Tauri updater manifest from the per-OS updater
+          # artifacts collected in build-gui. Missing platforms are
+          # warned but tolerated; no artifacts at all fails the step.
+          python3 tools/updater/gen_latest_json.py artifacts "$tag" \
+            "${{ github.repository }}" latest.json
+
       - name: Extract changelog for this version
         shell: bash
         run: |
@@ -508,10 +611,11 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists, uploading artifacts"
             gh release upload "$tag" artifacts/*/* --clobber
+            [ -f latest.json ] && gh release upload "$tag" latest.json --clobber
           else
             echo "Creating release $tag"
             gh release create "$tag" \
               --title "diec-rust $version" \
               --notes-file release_notes_current.md \
-              artifacts/*/*
+              artifacts/*/* latest.json
           fi

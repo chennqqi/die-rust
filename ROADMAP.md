@@ -2235,9 +2235,10 @@ name/size/packed/dir/mtime + 提取字节 parity；上游提取失败的
   horsicq 库组件（非独立 app）——**Blocked → Scheduled**
   （ADR 0042 #4），Phase 50 立项：pin XEmulator 为 tools-only
   oracle + 有界模拟器移植。
-- **tauri 自动更新**（ADR 0019）：代码侧已交付（Phase 48 ✅）；
-  生产签名密钥/更新服务器/CI 签名管线仍属产品/分发决策，
-  dev fixture 密钥不可用于发布。
+- **tauri 自动更新**（ADR 0019）：✅ 全链路交付——Phase 48 代码 +
+  2026-10-12 生产管线（release.yml：preflight 密钥/dev-pubkey 守卫 →
+  `cargo tauri build` 签名 → `latest.json` 生成上传；生产 minisign
+  密钥由维护者持有于 GitHub secret）。
 - **XStyles 主题生态**：上游 Qt 样式体系（QSS），**Permanent**
   平台差异；Tauri-native CSS 变量方案已交付（Phase 49 ✅，
   6 个代表主题 + 自定义覆盖入口）。
@@ -2497,8 +2498,8 @@ Windows-only 实为 parity（上游 `registerContext` 同样
   保留为哈希清单 fallback——生成流已被 oracle 接受，fallback
   不再必要）。
 
-- **Phase 48：Tauri 自动更新** — ✅ DONE（2026-10-12，代码侧；
-  生产签名 infra 仍待部署决策）
+- **Phase 48：Tauri 自动更新** — ✅ DONE（2026-10-12 全链路：
+  代码 + 生产签名管线）
   `tauri-plugin-updater` v2.12.0 + `tauri.conf.json` plugins.updater
   （pubkey/endpoints 占位 dev fixture）+ `src/updater.rs` IPC
   命令（check/download_and_install）+ 设置页 "Check for Updates"
@@ -2509,8 +2510,14 @@ Windows-only 实为 parity（上游 `registerContext` 同样
   嵌入真实 conf + 本地 HTTP mock + `updater_builder` 覆盖
   endpoints）：有效签名更新发现/下载验签、篡改签名拒绝、
   离线端点 fail-closed、降级不提示、签名元数据版本不符拒绝。
-  残留条件项：生产 endpoint/公钥/CI 私钥签名管线 = 部署决策
-  （ADR 0019 更新）。
+  生产管线（2026-10-12 决策：自动更新启用）：生产 minisign 密钥对
+  `tauri signer generate` 生成（私钥维护者本机 + GitHub secret
+  `TAURI_SIGNING_PRIVATE_KEY`，无密码）；`plugins.updater.pubkey`
+  已换生产公钥，endpoint = Releases `latest.json`；`release.yml`
+  加 preflight（secret 缺失或 dev pubkey 残留即 fail-fast）+
+  三平台 `cargo tauri build` 签名 env + updater artifacts 收集 +
+  `tools/updater/gen_latest_json.py` 生成 `latest.json` 随 release
+  上传；`createUpdaterArtifacts: true`（ADR 0019 更新）。
 - **Phase 49：Tauri-native 主题扩展** — ✅ DONE（2026-10-12）
   XStyles pin `948dd85` 检出审阅 50+ QSS 后选 6 个代表主题翻译为
   CSS 变量集（`theme-solarized-dark`/`film-noir`/`midnight-elegance`/

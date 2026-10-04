@@ -1480,3 +1480,13 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   自身全部 init_unpack:false（这些变体上游同样不支持），parity 落在
   失败路径。产出 corpus/real-unpack manifest + fetch 脚本（不入库）+
   real_unpack_parity.rs 回归。
+
+## 2026-10-12 Updater 生产管线（用户决策落地）
+- 用户决策：启用自动更新；私钥由本人管控、存 GitHub secret，其他人
+  无推送权限，PR 走安全 review。
+- 执行：`tauri signer generate`（@tauri-apps/cli v2）生成生产
+  minisign 密钥对（仓库外 ~/.tauri/）；`plugins.updater.pubkey` 换
+  生产公钥；endpoint 已是 Releases `latest.json`；`release.yml` 加
+  preflight（secret 缺失/dev pubkey 残留 fail-fast）+ 三平台签名 env +
+  updater artifacts 收集上传 + `tools/updater/gen_latest_json.py`
+  生成 manifest 随 release 上传；`createUpdaterArtifacts: true`。

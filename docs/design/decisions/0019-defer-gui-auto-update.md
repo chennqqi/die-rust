@@ -1,8 +1,36 @@
 # ADR 0019: Defer GUI Auto-Update to Post-Phase-8
 
 **Date**: 2026-08-06  
-**Status**: Accepted — **code delivered in Phase 48 (2026-10-12)**;
-production release infrastructure remains a deployment decision.
+**Status**: Accepted — **fully delivered**: code in Phase 48 (2026-10-12),
+production signing pipeline wired 2026-10-12 (user decision: auto-update
+enabled, private key held in GitHub secret under maintainer control).
+
+## Revision (2026-10-12, production pipeline)
+
+The deployment prerequisites listed below are now satisfied:
+
+1. **Production Ed25519 keypair** — generated with
+   `tauri signer generate` (`@tauri-apps/cli` v2), stored outside the
+   repo on the maintainer's machine; the base64-encoded secret file goes
+   into GitHub secret `TAURI_SIGNING_PRIVATE_KEY`
+   (password: `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, empty). The public
+   key is embedded in `plugins.updater.pubkey`.
+2. **Production endpoint** — `plugins.updater.endpoints` points at
+   `releases/latest/download/latest.json` on this repository.
+3. **CI signing pipeline** — `release.yml` now:
+   - `preflight` job: fails fast if `TAURI_SIGNING_PRIVATE_KEY` is unset
+     or `tauri.conf.json` still carries the dev fixture pubkey
+   - `build-gui`: `cargo tauri build` runs with the signing env so the
+     bundler emits updater artifacts (`*.app.tar.gz`,
+     `*.AppImage.tar.gz`, NSIS `*-setup.exe`/`*.nsis.zip`) + `.sig`
+     sidecars, collected raw as `die-gui-updater-<os>` artifacts
+   - `release`: `tools/updater/gen_latest_json.py` builds `latest.json`
+     (signature = base64 of the entire `.sig` file text, the format
+     `tauri-plugin-updater` parses) and uploads it as a release asset
+   - `bundle.createUpdaterArtifacts: true` set in `tauri.conf.json`
+
+The `corpus/updater` dev keypair remains for tests only — the preflight
+guard hard-fails if the dev pubkey ever lands in `tauri.conf.json`.
 
 ## Revision (2026-10-12, Phase 48)
 
