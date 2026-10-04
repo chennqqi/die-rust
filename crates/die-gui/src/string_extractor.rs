@@ -472,7 +472,7 @@ mod tests {
 
     #[test]
     fn test_edit_bytes_at_offset() {
-        let dir = std::env::temp_dir().join(format!("diec_edit_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("die_edit_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("t.bin");
         std::fs::write(&p, [0u8; 16]).unwrap();

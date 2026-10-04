@@ -127,7 +127,7 @@ mod tests {
         // Per-test subdirectory: tests run in parallel and each cleans up
         // its own dir, so they must not share a parent.
         let dir = std::env::temp_dir().join(format!(
-            "diec_hexedit_{}_{}",
+            "die_hexedit_{}_{}",
             std::process::id(),
             SEQ.fetch_add(1, Ordering::Relaxed)
         ));

@@ -31,7 +31,7 @@ VALIDATOR = (
 )
 REPORT_NAME = "database-cache-harness-build-candidate.json"
 BINARY_NAME = "database-cache-harness-candidate"
-PATCHED_MAKEFILE_NAME = "Makefile.DiecDatabaseCacheHarness"
+PATCHED_MAKEFILE_NAME = "Makefile.DieDatabaseCacheHarness"
 ADMISSION_REASON = (
     "database-cache engine harness build candidate only; no macOS "
     "runtime capability evidence is admitted"

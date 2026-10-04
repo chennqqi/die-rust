@@ -554,17 +554,17 @@ Rust error 与 C ABI 的初始映射如下；C 数值以 `c-abi.md` 为准：
 
 | Rust outcome/error | C ABI status |
 | --- | --- |
-| `Ok(Complete)` / `Ok(Limited)` | `DIEC_STATUS_OK` |
-| invalid request/argument | `DIEC_STATUS_INVALID_ARGUMENT` |
-| input/path error | `DIEC_STATUS_IO` |
-| database build/init | `DIEC_STATUS_DATABASE` |
-| unsupported feature/syntax | `DIEC_STATUS_UNSUPPORTED` |
-| 无可用 report 的 hard limit | `DIEC_STATUS_LIMIT_EXCEEDED` |
-| cancelled | `DIEC_STATUS_CANCELLED` |
-| deadline | `DIEC_STATUS_TIMEOUT` |
-| scan-level script failure | `DIEC_STATUS_SCRIPT` |
-| allocation failure | `DIEC_STATUS_ALLOCATION_FAILED` |
-| internal invariant | `DIEC_STATUS_INTERNAL` |
+| `Ok(Complete)` / `Ok(Limited)` | `DIE_STATUS_OK` |
+| invalid request/argument | `DIE_STATUS_INVALID_ARGUMENT` |
+| input/path error | `DIE_STATUS_IO` |
+| database build/init | `DIE_STATUS_DATABASE` |
+| unsupported feature/syntax | `DIE_STATUS_UNSUPPORTED` |
+| 无可用 report 的 hard limit | `DIE_STATUS_LIMIT_EXCEEDED` |
+| cancelled | `DIE_STATUS_CANCELLED` |
+| deadline | `DIE_STATUS_TIMEOUT` |
+| scan-level script failure | `DIE_STATUS_SCRIPT` |
+| allocation failure | `DIE_STATUS_ALLOCATION_FAILED` |
+| internal invariant | `DIE_STATUS_INTERNAL` |
 
 `WRONG_THREAD`、`BUSY`、`ABI_MISMATCH` 和 `PANIC` 是 C adapter/boundary 状态，
 不伪造为正常 Rust engine error。

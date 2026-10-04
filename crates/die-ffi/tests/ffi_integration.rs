@@ -25,19 +25,19 @@ fn seven_zip_header() -> Vec<u8> {
 
 #[test]
 fn ffi_abi_version_is_v1() {
-    let version = unsafe { diec_abi_version() };
+    let version = unsafe { die_abi_version() };
     assert_eq!(version, 0x0001_0000);
 }
 
 #[test]
 fn ffi_abi_compatible_with_v1_0() {
-    let compatible = unsafe { diec_abi_is_compatible(0x0001_0000) };
+    let compatible = unsafe { die_abi_is_compatible(0x0001_0000) };
     assert_eq!(compatible, 1);
 }
 
 #[test]
 fn ffi_abi_incompatible_with_v2() {
-    let compatible = unsafe { diec_abi_is_compatible(0x0002_0000) };
+    let compatible = unsafe { die_abi_is_compatible(0x0002_0000) };
     assert_eq!(compatible, 0);
 }
 
@@ -46,7 +46,7 @@ fn ffi_status_name_ok() {
     let mut data: *const u8 = core::ptr::null();
     let mut length: u64 = 0;
     let status =
-        unsafe { diec_v1_status_name(0, &mut data as *mut *const u8, &mut length as *mut u64) };
+        unsafe { die_v1_status_name(0, &mut data as *mut *const u8, &mut length as *mut u64) };
     assert_eq!(status, 0);
     assert_eq!(length, 2);
     // The bytes should be "OK".
@@ -59,7 +59,7 @@ fn ffi_status_name_unknown() {
     let mut data: *const u8 = core::ptr::null();
     let mut length: u64 = 0;
     let status =
-        unsafe { diec_v1_status_name(99, &mut data as *mut *const u8, &mut length as *mut u64) };
+        unsafe { die_v1_status_name(99, &mut data as *mut *const u8, &mut length as *mut u64) };
     assert_eq!(status, 0);
     let bytes = unsafe { core::slice::from_raw_parts(data, length as usize) };
     assert_eq!(bytes, b"UNKNOWN");
@@ -67,9 +67,9 @@ fn ffi_status_name_unknown() {
 
 #[test]
 fn ffi_null_pointer_returns_invalid_argument() {
-    let mut error: *mut DiecError = core::ptr::null_mut();
+    let mut error: *mut DieError = core::ptr::null_mut();
     let status = unsafe {
-        diec_v1_database_builder_new(core::ptr::null_mut(), &mut error as *mut *mut DiecError)
+        die_v1_database_builder_new(core::ptr::null_mut(), &mut error as *mut *mut DieError)
     };
     assert_eq!(status, 1); // INVALID_ARGUMENT
     // Error should be null on invalid argument (out_value was null).
@@ -78,14 +78,14 @@ fn ffi_null_pointer_returns_invalid_argument() {
 
 #[test]
 fn ffi_database_builder_lifecycle() {
-    let mut builder: *mut DiecDatabaseBuilder = core::ptr::null_mut();
-    let mut error: *mut DiecError = core::ptr::null_mut();
+    let mut builder: *mut DieDatabaseBuilder = core::ptr::null_mut();
+    let mut error: *mut DieError = core::ptr::null_mut();
 
     // Create builder.
     let status = unsafe {
-        diec_v1_database_builder_new(
-            &mut builder as *mut *mut DiecDatabaseBuilder,
-            &mut error as *mut *mut DiecError,
+        die_v1_database_builder_new(
+            &mut builder as *mut *mut DieDatabaseBuilder,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0);
@@ -94,36 +94,36 @@ fn ffi_database_builder_lifecycle() {
 
     // Free builder.
     let status =
-        unsafe { diec_v1_database_builder_free(&mut builder as *mut *mut DiecDatabaseBuilder) };
+        unsafe { die_v1_database_builder_free(&mut builder as *mut *mut DieDatabaseBuilder) };
     assert_eq!(status, 0);
     assert!(builder.is_null());
 
     // Double free is safe.
     let status =
-        unsafe { diec_v1_database_builder_free(&mut builder as *mut *mut DiecDatabaseBuilder) };
+        unsafe { die_v1_database_builder_free(&mut builder as *mut *mut DieDatabaseBuilder) };
     assert_eq!(status, 0);
 }
 
 #[test]
 fn ffi_cancel_lifecycle() {
-    let mut cancel: *mut DiecCancel = core::ptr::null_mut();
-    let mut error: *mut DiecError = core::ptr::null_mut();
+    let mut cancel: *mut DieCancel = core::ptr::null_mut();
+    let mut error: *mut DieError = core::ptr::null_mut();
 
     let status = unsafe {
-        diec_v1_cancel_new(
-            &mut cancel as *mut *mut DiecCancel,
-            &mut error as *mut *mut DiecError,
+        die_v1_cancel_new(
+            &mut cancel as *mut *mut DieCancel,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0);
     assert!(!cancel.is_null());
 
     // Request cancellation.
-    let status = unsafe { diec_v1_cancel_request(cancel) };
+    let status = unsafe { die_v1_cancel_request(cancel) };
     assert_eq!(status, 0);
 
     // Free.
-    let status = unsafe { diec_v1_cancel_free(&mut cancel as *mut *mut DiecCancel) };
+    let status = unsafe { die_v1_cancel_free(&mut cancel as *mut *mut DieCancel) };
     assert_eq!(status, 0);
     assert!(cancel.is_null());
 }
@@ -136,13 +136,13 @@ fn ffi_scan_bytes_full_lifecycle() {
     }
 
     // Build database.
-    let mut builder: *mut DiecDatabaseBuilder = core::ptr::null_mut();
-    let mut error: *mut DiecError = core::ptr::null_mut();
+    let mut builder: *mut DieDatabaseBuilder = core::ptr::null_mut();
+    let mut error: *mut DieError = core::ptr::null_mut();
 
     let status = unsafe {
-        diec_v1_database_builder_new(
-            &mut builder as *mut *mut DiecDatabaseBuilder,
-            &mut error as *mut *mut DiecError,
+        die_v1_database_builder_new(
+            &mut builder as *mut *mut DieDatabaseBuilder,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0);
@@ -150,24 +150,24 @@ fn ffi_scan_bytes_full_lifecycle() {
     // Add main database path.
     let path_bytes = DB_PATH.as_bytes();
     let status = unsafe {
-        diec_v1_database_builder_add_path_utf8(
+        die_v1_database_builder_add_path_utf8(
             builder,
             0, // DATABASE_KIND_MAIN
             path_bytes.as_ptr(),
             path_bytes.len() as u64,
             0,
-            &mut error as *mut *mut DiecError,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0, "add_path should succeed");
 
     // Build database.
-    let mut database: *mut DiecDatabase = core::ptr::null_mut();
+    let mut database: *mut DieDatabase = core::ptr::null_mut();
     let status = unsafe {
-        diec_v1_database_builder_build(
+        die_v1_database_builder_build(
             builder,
-            &mut database as *mut *mut DiecDatabase,
-            &mut error as *mut *mut DiecError,
+            &mut database as *mut *mut DieDatabase,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0, "build should succeed");
@@ -175,21 +175,21 @@ fn ffi_scan_bytes_full_lifecycle() {
 
     // Free builder (database is independent).
     unsafe {
-        diec_v1_database_builder_free(&mut builder as *mut *mut DiecDatabaseBuilder);
+        die_v1_database_builder_free(&mut builder as *mut *mut DieDatabaseBuilder);
     }
 
     // Scan 7-Zip header.
     let data = seven_zip_header();
-    let mut result: *mut DiecResult = core::ptr::null_mut();
+    let mut result: *mut DieResult = core::ptr::null_mut();
     let status = unsafe {
-        diec_v1_scan_bytes(
+        die_v1_scan_bytes(
             database,
             data.as_ptr(),
             data.len() as u64,
             core::ptr::null(), // default options
             core::ptr::null(), // no cancel
-            &mut result as *mut *mut DiecResult,
-            &mut error as *mut *mut DiecError,
+            &mut result as *mut *mut DieResult,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0, "scan should succeed");
@@ -199,7 +199,7 @@ fn ffi_scan_bytes_full_lifecycle() {
     let mut json_data: *const u8 = core::ptr::null();
     let mut json_length: u64 = 0;
     let status = unsafe {
-        diec_v1_result_json(
+        die_v1_result_json(
             result,
             &mut json_data as *mut *const u8,
             &mut json_length as *mut u64,
@@ -216,17 +216,17 @@ fn ffi_scan_bytes_full_lifecycle() {
 
     // Get detection count.
     let mut count: u64 = 0;
-    let status = unsafe { diec_v1_result_detection_count(result, &mut count as *mut u64) };
+    let status = unsafe { die_v1_result_detection_count(result, &mut count as *mut u64) };
     assert_eq!(status, 0);
     assert!(count > 0);
 
     // Free result.
-    let status = unsafe { diec_v1_result_free(&mut result as *mut *mut DiecResult) };
+    let status = unsafe { die_v1_result_free(&mut result as *mut *mut DieResult) };
     assert_eq!(status, 0);
     assert!(result.is_null());
 
     // Free database.
-    let status = unsafe { diec_v1_database_free(&mut database as *mut *mut DiecDatabase) };
+    let status = unsafe { die_v1_database_free(&mut database as *mut *mut DieDatabase) };
     assert_eq!(status, 0);
     assert!(database.is_null());
 }
@@ -239,47 +239,47 @@ fn ffi_reusable_scanner_lifecycle() {
     }
 
     // Build database.
-    let mut builder: *mut DiecDatabaseBuilder = core::ptr::null_mut();
-    let mut error: *mut DiecError = core::ptr::null_mut();
+    let mut builder: *mut DieDatabaseBuilder = core::ptr::null_mut();
+    let mut error: *mut DieError = core::ptr::null_mut();
 
     unsafe {
-        diec_v1_database_builder_new(
-            &mut builder as *mut *mut DiecDatabaseBuilder,
-            &mut error as *mut *mut DiecError,
+        die_v1_database_builder_new(
+            &mut builder as *mut *mut DieDatabaseBuilder,
+            &mut error as *mut *mut DieError,
         )
     };
 
     let path_bytes = DB_PATH.as_bytes();
     unsafe {
-        diec_v1_database_builder_add_path_utf8(
+        die_v1_database_builder_add_path_utf8(
             builder,
             0,
             path_bytes.as_ptr(),
             path_bytes.len() as u64,
             0,
-            &mut error as *mut *mut DiecError,
+            &mut error as *mut *mut DieError,
         )
     };
 
-    let mut database: *mut DiecDatabase = core::ptr::null_mut();
+    let mut database: *mut DieDatabase = core::ptr::null_mut();
     unsafe {
-        diec_v1_database_builder_build(
+        die_v1_database_builder_build(
             builder,
-            &mut database as *mut *mut DiecDatabase,
-            &mut error as *mut *mut DiecError,
+            &mut database as *mut *mut DieDatabase,
+            &mut error as *mut *mut DieError,
         )
     };
     unsafe {
-        diec_v1_database_builder_free(&mut builder as *mut *mut DiecDatabaseBuilder);
+        die_v1_database_builder_free(&mut builder as *mut *mut DieDatabaseBuilder);
     }
 
     // Create scanner.
-    let mut scanner: *mut DiecScanner = core::ptr::null_mut();
+    let mut scanner: *mut DieScanner = core::ptr::null_mut();
     let status = unsafe {
-        diec_v1_scanner_new(
+        die_v1_scanner_new(
             database,
-            &mut scanner as *mut *mut DiecScanner,
-            &mut error as *mut *mut DiecError,
+            &mut scanner as *mut *mut DieScanner,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0);
@@ -287,16 +287,16 @@ fn ffi_reusable_scanner_lifecycle() {
 
     // Scan with scanner.
     let data = seven_zip_header();
-    let mut result: *mut DiecResult = core::ptr::null_mut();
+    let mut result: *mut DieResult = core::ptr::null_mut();
     let status = unsafe {
-        diec_v1_scanner_scan_bytes(
+        die_v1_scanner_scan_bytes(
             scanner,
             data.as_ptr(),
             data.len() as u64,
             core::ptr::null(),
             core::ptr::null(),
-            &mut result as *mut *mut DiecResult,
-            &mut error as *mut *mut DiecError,
+            &mut result as *mut *mut DieResult,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0);
@@ -306,7 +306,7 @@ fn ffi_reusable_scanner_lifecycle() {
     let mut json_data: *const u8 = core::ptr::null();
     let mut json_length: u64 = 0;
     unsafe {
-        diec_v1_result_json(
+        die_v1_result_json(
             result,
             &mut json_data as *mut *const u8,
             &mut json_length as *mut u64,
@@ -318,9 +318,9 @@ fn ffi_reusable_scanner_lifecycle() {
 
     // Cleanup.
     unsafe {
-        diec_v1_result_free(&mut result as *mut *mut DiecResult);
-        diec_v1_scanner_free(&mut scanner as *mut *mut DiecScanner);
-        diec_v1_database_free(&mut database as *mut *mut DiecDatabase);
+        die_v1_result_free(&mut result as *mut *mut DieResult);
+        die_v1_scanner_free(&mut scanner as *mut *mut DieScanner);
+        die_v1_database_free(&mut database as *mut *mut DieDatabase);
     }
     assert!(scanner.is_null());
     assert!(database.is_null());
@@ -329,22 +329,22 @@ fn ffi_reusable_scanner_lifecycle() {
 #[test]
 fn ffi_error_handle_lifecycle() {
     // Force an error by passing null out_value to a builder function.
-    let mut error: *mut DiecError = core::ptr::null_mut();
+    let mut error: *mut DieError = core::ptr::null_mut();
 
     // Create builder with null out_builder to trigger error.
     let status = unsafe {
-        diec_v1_database_builder_new(core::ptr::null_mut(), &mut error as *mut *mut DiecError)
+        die_v1_database_builder_new(core::ptr::null_mut(), &mut error as *mut *mut DieError)
     };
     assert_eq!(status, 1); // INVALID_ARGUMENT
 
     // Free error (should be safe even if null).
-    let status = unsafe { diec_v1_error_free(&mut error as *mut *mut DiecError) };
+    let status = unsafe { die_v1_error_free(&mut error as *mut *mut DieError) };
     assert_eq!(status, 0);
 }
 
 #[test]
 fn ffi_scan_options_init_works() {
-    let mut options = die_ffi::DiecScanOptions {
+    let mut options = die_ffi::DieScanOptions {
         struct_size: 0,
         flags: 0,
         max_input_bytes: 0,
@@ -361,9 +361,9 @@ fn ffi_scan_options_init_works() {
     };
 
     let status = unsafe {
-        diec_v1_scan_options_init(
+        die_v1_scan_options_init(
             &mut options as *mut _,
-            core::mem::size_of::<die_ffi::DiecScanOptions>() as u32,
+            core::mem::size_of::<die_ffi::DieScanOptions>() as u32,
         )
     };
     assert_eq!(status, 0);
@@ -373,53 +373,53 @@ fn ffi_scan_options_init_works() {
 #[test]
 fn ffi_scan_flag_no_dedup_bit() {
     // Verify that the 0x40 bit maps to no_dedup in the engine.
-    // We test this by constructing DiecScanOptions with flags=0x40 and
+    // We test this by constructing DieScanOptions with flags=0x40 and
     // verifying the scan completes successfully.
     if !db_available() {
         eprintln!("Skipping: upstream database not found");
         return;
     }
 
-    let mut builder: *mut DiecDatabaseBuilder = core::ptr::null_mut();
-    let mut error: *mut DiecError = core::ptr::null_mut();
+    let mut builder: *mut DieDatabaseBuilder = core::ptr::null_mut();
+    let mut error: *mut DieError = core::ptr::null_mut();
 
     let status = unsafe {
-        diec_v1_database_builder_new(
-            &mut builder as *mut *mut DiecDatabaseBuilder,
-            &mut error as *mut *mut DiecError,
+        die_v1_database_builder_new(
+            &mut builder as *mut *mut DieDatabaseBuilder,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0);
 
     let path_bytes = DB_PATH.as_bytes();
     let status = unsafe {
-        diec_v1_database_builder_add_path_utf8(
+        die_v1_database_builder_add_path_utf8(
             builder,
             0,
             path_bytes.as_ptr(),
             path_bytes.len() as u64,
             0,
-            &mut error as *mut *mut DiecError,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0);
 
-    let mut database: *mut DiecDatabase = core::ptr::null_mut();
+    let mut database: *mut DieDatabase = core::ptr::null_mut();
     let status = unsafe {
-        diec_v1_database_builder_build(
+        die_v1_database_builder_build(
             builder,
-            &mut database as *mut *mut DiecDatabase,
-            &mut error as *mut *mut DiecError,
+            &mut database as *mut *mut DieDatabase,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0);
 
     unsafe {
-        diec_v1_database_builder_free(&mut builder as *mut *mut DiecDatabaseBuilder);
+        die_v1_database_builder_free(&mut builder as *mut *mut DieDatabaseBuilder);
     }
 
     // Build options with ALL_TYPES (0x04) + NO_DEDUP (0x40) = 0x44.
-    let mut options = die_ffi::DiecScanOptions {
+    let mut options = die_ffi::DieScanOptions {
         struct_size: 0,
         flags: 0,
         max_input_bytes: 0,
@@ -436,9 +436,9 @@ fn ffi_scan_flag_no_dedup_bit() {
     };
 
     let status = unsafe {
-        diec_v1_scan_options_init(
+        die_v1_scan_options_init(
             &mut options as *mut _,
-            core::mem::size_of::<die_ffi::DiecScanOptions>() as u32,
+            core::mem::size_of::<die_ffi::DieScanOptions>() as u32,
         )
     };
     assert_eq!(status, 0);
@@ -452,16 +452,16 @@ fn ffi_scan_flag_no_dedup_bit() {
         d
     };
 
-    let mut result: *mut DiecResult = core::ptr::null_mut();
+    let mut result: *mut DieResult = core::ptr::null_mut();
     let status = unsafe {
-        diec_v1_scan_bytes(
+        die_v1_scan_bytes(
             database,
             data.as_ptr(),
             data.len() as u64,
             &options as *const _,
             core::ptr::null(),
-            &mut result as *mut *mut DiecResult,
-            &mut error as *mut *mut DiecError,
+            &mut result as *mut *mut DieResult,
+            &mut error as *mut *mut DieError,
         )
     };
     assert_eq!(status, 0, "scan with no_dedup flag should succeed");
@@ -469,7 +469,7 @@ fn ffi_scan_flag_no_dedup_bit() {
 
     // Free result and database.
     unsafe {
-        diec_v1_result_free(&mut result as *mut *mut DiecResult);
-        diec_v1_database_free(&mut database as *mut *mut DiecDatabase);
+        die_v1_result_free(&mut result as *mut *mut DieResult);
+        die_v1_database_free(&mut database as *mut *mut DieDatabase);
     }
 }

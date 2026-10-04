@@ -215,8 +215,8 @@ async fn run_server(args: &[String]) {
 
 /// Find the database path from environment variables or common locations.
 fn find_db_path() -> String {
-    // Try DIEC_DB_PATH environment variable.
-    if let Ok(env_path) = std::env::var("DIEC_DB_PATH")
+    // Try DIE_DB_PATH environment variable.
+    if let Ok(env_path) = std::env::var("DIE_DB_PATH")
         && std::path::Path::new(&env_path).is_dir()
     {
         return env_path;
@@ -246,7 +246,7 @@ fn find_db_path() -> String {
     }
 
     eprintln!("error: database directory not found.");
-    eprintln!("  Set DIEC_DB_PATH or use --db <path>");
+    eprintln!("  Set DIE_DB_PATH or use --db <path>");
     std::process::exit(3);
 }
 

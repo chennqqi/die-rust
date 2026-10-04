@@ -48,19 +48,19 @@ class CAbiDesignTests(unittest.TestCase):
     def test_design_uses_versioned_symbols_not_spike_symbols(self):
         text = DESIGN.read_text(encoding="utf-8")
         for symbol in (
-            "diec_v1_database_builder_new",
-            "diec_v1_scanner_new",
-            "diec_v1_scanner_scan_bytes",
-            "diec_v1_scan_bytes",
-            "diec_v1_cancel_request",
-            "diec_v1_result_json",
-            "diec_v1_result_free",
-            "diec_v1_error_free",
+            "die_v1_database_builder_new",
+            "die_v1_scanner_new",
+            "die_v1_scanner_scan_bytes",
+            "die_v1_scan_bytes",
+            "die_v1_cancel_request",
+            "die_v1_result_json",
+            "die_v1_result_free",
+            "die_v1_error_free",
         ):
             with self.subTest(symbol=symbol):
                 self.assertIn(symbol, text)
         self.assertIn(
-            "不得直接复制 spike 的\n`diec_spike_*` 名称",
+            "不得直接复制 spike 的\n`die_spike_*` 名称",
             text,
         )
 

@@ -462,7 +462,7 @@ def make_iso9660() -> bytes:
     image = bytearray(18 * sector)
     pvd = 16 * sector
     image[pvd : pvd + 7] = b"\x01CD001\x01"
-    image[pvd + 8 : pvd + 40] = b"DIEC_RUST".ljust(32, b" ")
+    image[pvd + 8 : pvd + 40] = b"DIE_RUST".ljust(32, b" ")
     image[pvd + 40 : pvd + 72] = b"DETERMINISTIC_CORPUS".ljust(
         32, b" "
     )

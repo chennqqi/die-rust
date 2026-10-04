@@ -82,7 +82,7 @@ If using a pre-built binary without a package:
 
 ```bash
 # Generate a systemd unit template
-died install --db /usr/share/diec/db --bind 127.0.0.1:18080 > /tmp/died.service
+died install --db /usr/share/die/db --bind 127.0.0.1:18080 > /tmp/died.service
 
 # Install and start
 sudo cp /tmp/died.service /etc/systemd/system/died.service
@@ -94,7 +94,7 @@ sudo systemctl enable --now died
 
 The service looks for the database in this order:
 1. `--db <path>` command-line argument
-2. `DIEC_DB_PATH` environment variable
+2. `DIE_DB_PATH` environment variable
 3. `db/` directory adjacent to the executable
 4. Development paths (`upstream/Detect-It-Easy/db`, etc.)
 

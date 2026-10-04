@@ -35,7 +35,7 @@ fn evaluate() -> Result<i32, u32> {
 /// # Safety
 ///
 /// `out_value` must be writable for one `i32`.
-pub unsafe extern "C" fn diec_rquickjs_spike_eval(out_value: *mut i32) -> u32 {
+pub unsafe extern "C" fn die_rquickjs_spike_eval(out_value: *mut i32) -> u32 {
     ffi_boundary(|| {
         if out_value.is_null() {
             return Err(STATUS_INVALID_ARGUMENT);
@@ -50,7 +50,7 @@ pub unsafe extern "C" fn diec_rquickjs_spike_eval(out_value: *mut i32) -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn diec_rquickjs_spike_force_panic() -> u32 {
+pub extern "C" fn die_rquickjs_spike_force_panic() -> u32 {
     ffi_boundary(|| -> Result<(), u32> {
         panic!("intentional rquickjs static-link containment probe");
     })
@@ -59,8 +59,8 @@ pub extern "C" fn diec_rquickjs_spike_force_panic() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        STATUS_INVALID_ARGUMENT, STATUS_OK, STATUS_PANIC, diec_rquickjs_spike_eval,
-        diec_rquickjs_spike_force_panic,
+        STATUS_INVALID_ARGUMENT, STATUS_OK, STATUS_PANIC, die_rquickjs_spike_eval,
+        die_rquickjs_spike_force_panic,
     };
     use std::ptr;
 
@@ -69,7 +69,7 @@ mod tests {
         for _ in 0..16 {
             let mut value = 0;
             // SAFETY: `value` is writable for the duration of the call.
-            let status = unsafe { diec_rquickjs_spike_eval(&mut value) };
+            let status = unsafe { die_rquickjs_spike_eval(&mut value) };
             assert_eq!(status, STATUS_OK);
             assert_eq!(value, 42);
         }
@@ -78,8 +78,8 @@ mod tests {
     #[test]
     fn ffi_boundary_rejects_null_and_contains_panic() {
         // SAFETY: Null intentionally exercises argument validation.
-        let status = unsafe { diec_rquickjs_spike_eval(ptr::null_mut()) };
+        let status = unsafe { die_rquickjs_spike_eval(ptr::null_mut()) };
         assert_eq!(status, STATUS_INVALID_ARGUMENT);
-        assert_eq!(diec_rquickjs_spike_force_panic(), STATUS_PANIC);
+        assert_eq!(die_rquickjs_spike_force_panic(), STATUS_PANIC);
     }
 }

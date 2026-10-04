@@ -1,157 +1,157 @@
-// Package diec provides Go bindings for the diec-rust C ABI.
+// Package die provides Go bindings for the die-rust C ABI.
 //
-// This package wraps the opaque handle API defined in include/diec.h.
+// This package wraps the opaque handle API defined in include/die.h.
 // It exposes a Database, Scanner, and one-shot Scan functions with
 // automatic resource cleanup via runtime finalizers and explicit Close.
 //
 // Usage:
 //
-//	db, err := diec.NewDatabase("../../upstream/Detect-It-Easy/db")
+//	db, err := die.NewDatabase("../../upstream/Detect-It-Easy/db")
 //	if err != nil { panic(err) }
 //	defer db.Close()
 //
-//	result, err := diec.ScanBytes(db, sevenZipHeader)
+//	result, err := die.ScanBytes(db, sevenZipHeader)
 //	if err != nil { panic(err) }
 //	defer result.Close()
 //
 //	fmt.Println(result.JSON())
-package diec
+package die
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../../include
 
 #include <stdlib.h>
 #include <stdint.h>
-#include "diec.h"
+#include "die.h"
 
 // Helper: call scan_bytes and return the result handle directly.
 // cgo cannot easily pass ** pointers, so we use these wrappers.
-static diec_v1_result* cgo_scan_bytes(
-    diec_v1_database *db,
+static die_v1_result* cgo_scan_bytes(
+    die_v1_database *db,
     const uint8_t *data, uint64_t length,
     uint32_t flags,
-    diec_v1_error **out_error)
+    die_v1_error **out_error)
 {
-    diec_v1_result *result = NULL;
-    diec_v1_scan_options opts;
-    diec_v1_scan_options_init(&opts, sizeof(opts));
+    die_v1_result *result = NULL;
+    die_v1_scan_options opts;
+    die_v1_scan_options_init(&opts, sizeof(opts));
     opts.flags = flags;
-    uint32_t status = diec_v1_scan_bytes(db, data, length, &opts, NULL, &result, out_error);
-    if (status != DIEC_STATUS_OK) {
-        if (result) diec_v1_result_free(&result);
+    uint32_t status = die_v1_scan_bytes(db, data, length, &opts, NULL, &result, out_error);
+    if (status != DIE_STATUS_OK) {
+        if (result) die_v1_result_free(&result);
         return NULL;
     }
     return result;
 }
 
-static diec_v1_result* cgo_scan_path(
-    diec_v1_database *db,
+static die_v1_result* cgo_scan_path(
+    die_v1_database *db,
     const char *path, uint64_t length,
     uint32_t flags,
-    diec_v1_error **out_error)
+    die_v1_error **out_error)
 {
-    diec_v1_result *result = NULL;
-    diec_v1_scan_options opts;
-    diec_v1_scan_options_init(&opts, sizeof(opts));
+    die_v1_result *result = NULL;
+    die_v1_scan_options opts;
+    die_v1_scan_options_init(&opts, sizeof(opts));
     opts.flags = flags;
-    uint32_t status = diec_v1_scan_path_utf8(db, (const uint8_t*)path, length, &opts, NULL, &result, out_error);
-    if (status != DIEC_STATUS_OK) {
-        if (result) diec_v1_result_free(&result);
+    uint32_t status = die_v1_scan_path_utf8(db, (const uint8_t*)path, length, &opts, NULL, &result, out_error);
+    if (status != DIE_STATUS_OK) {
+        if (result) die_v1_result_free(&result);
         return NULL;
     }
     return result;
 }
 
-static diec_v1_database* cgo_build_database(
+static die_v1_database* cgo_build_database(
     const char *path, uint64_t length,
-    diec_v1_error **out_error)
+    die_v1_error **out_error)
 {
-    diec_v1_database_builder *builder = NULL;
-    uint32_t status = diec_v1_database_builder_new(&builder, out_error);
-    if (status != DIEC_STATUS_OK) return NULL;
+    die_v1_database_builder *builder = NULL;
+    uint32_t status = die_v1_database_builder_new(&builder, out_error);
+    if (status != DIE_STATUS_OK) return NULL;
 
-    status = diec_v1_database_builder_add_path_utf8(builder, 0,
+    status = die_v1_database_builder_add_path_utf8(builder, 0,
         (const uint8_t*)path, length, 0, out_error);
-    if (status != DIEC_STATUS_OK) {
-        diec_v1_database_builder_free(&builder);
+    if (status != DIE_STATUS_OK) {
+        die_v1_database_builder_free(&builder);
         return NULL;
     }
 
-    diec_v1_database *db = NULL;
-    status = diec_v1_database_builder_build(builder, &db, out_error);
-    diec_v1_database_builder_free(&builder);
-    if (status != DIEC_STATUS_OK) return NULL;
+    die_v1_database *db = NULL;
+    status = die_v1_database_builder_build(builder, &db, out_error);
+    die_v1_database_builder_free(&builder);
+    if (status != DIE_STATUS_OK) return NULL;
     return db;
 }
 
-static const uint8_t* cgo_result_json(diec_v1_result *r, uint64_t *len) {
+static const uint8_t* cgo_result_json(die_v1_result *r, uint64_t *len) {
     const uint8_t *data = NULL;
     *len = 0;
-    diec_v1_result_json(r, &data, len);
+    die_v1_result_json(r, &data, len);
     return data;
 }
 
-static const uint8_t* cgo_result_path(diec_v1_result *r, uint64_t *len) {
+static const uint8_t* cgo_result_path(die_v1_result *r, uint64_t *len) {
     const uint8_t *data = NULL;
     *len = 0;
-    diec_v1_result_path_utf8(r, &data, len);
+    die_v1_result_path_utf8(r, &data, len);
     return data;
 }
 
-static uint64_t cgo_result_count(diec_v1_result *r) {
+static uint64_t cgo_result_count(die_v1_result *r) {
     uint64_t count = 0;
-    diec_v1_result_detection_count(r, &count);
+    die_v1_result_detection_count(r, &count);
     return count;
 }
 
-static const uint8_t* cgo_error_message(diec_v1_error *e, uint64_t *len) {
+static const uint8_t* cgo_error_message(die_v1_error *e, uint64_t *len) {
     const uint8_t *data = NULL;
     *len = 0;
-    diec_v1_error_message(e, &data, len);
+    die_v1_error_message(e, &data, len);
     return data;
 }
 
-static uint32_t cgo_error_status(diec_v1_error *e) {
+static uint32_t cgo_error_status(die_v1_error *e) {
     uint32_t status = 0;
-    diec_v1_error_status(e, &status);
+    die_v1_error_status(e, &status);
     return status;
 }
 
 // Helper: call scanner_scan_bytes (reusable scanner API).
 // This reuses the scanner's internal runtime across multiple scans,
 // avoiding the per-scan runtime construction cost of the one-shot API.
-static diec_v1_result* cgo_scanner_scan_bytes(
-    diec_v1_scanner *scanner,
+static die_v1_result* cgo_scanner_scan_bytes(
+    die_v1_scanner *scanner,
     const uint8_t *data, uint64_t length,
     uint32_t flags,
-    diec_v1_error **out_error)
+    die_v1_error **out_error)
 {
-    diec_v1_result *result = NULL;
-    diec_v1_scan_options opts;
-    diec_v1_scan_options_init(&opts, sizeof(opts));
+    die_v1_result *result = NULL;
+    die_v1_scan_options opts;
+    die_v1_scan_options_init(&opts, sizeof(opts));
     opts.flags = flags;
-    uint32_t status = diec_v1_scanner_scan_bytes(scanner, data, length, &opts, NULL, &result, out_error);
-    if (status != DIEC_STATUS_OK) {
-        if (result) diec_v1_result_free(&result);
+    uint32_t status = die_v1_scanner_scan_bytes(scanner, data, length, &opts, NULL, &result, out_error);
+    if (status != DIE_STATUS_OK) {
+        if (result) die_v1_result_free(&result);
         return NULL;
     }
     return result;
 }
 
 // Helper: call scanner_scan_path_utf8 (reusable scanner API).
-static diec_v1_result* cgo_scanner_scan_path(
-    diec_v1_scanner *scanner,
+static die_v1_result* cgo_scanner_scan_path(
+    die_v1_scanner *scanner,
     const char *path, uint64_t length,
     uint32_t flags,
-    diec_v1_error **out_error)
+    die_v1_error **out_error)
 {
-    diec_v1_result *result = NULL;
-    diec_v1_scan_options opts;
-    diec_v1_scan_options_init(&opts, sizeof(opts));
+    die_v1_result *result = NULL;
+    die_v1_scan_options opts;
+    die_v1_scan_options_init(&opts, sizeof(opts));
     opts.flags = flags;
-    uint32_t status = diec_v1_scanner_scan_path_utf8(scanner, (const uint8_t*)path, length, &opts, NULL, &result, out_error);
-    if (status != DIEC_STATUS_OK) {
-        if (result) diec_v1_result_free(&result);
+    uint32_t status = die_v1_scanner_scan_path_utf8(scanner, (const uint8_t*)path, length, &opts, NULL, &result, out_error);
+    if (status != DIE_STATUS_OK) {
+        if (result) die_v1_result_free(&result);
         return NULL;
     }
     return result;
@@ -164,7 +164,7 @@ import (
 	"unsafe"
 )
 
-// Status codes matching diec.h.
+// Status codes matching die.h.
 const (
 	StatusOK               = 0
 	StatusInvalidArgument  = 1
@@ -196,17 +196,17 @@ const (
 
 // Database holds a loaded rule database.
 type Database struct {
-	handle *C.diec_v1_database
+	handle *C.die_v1_database
 }
 
 // Result holds a scan result.
 type Result struct {
-	handle *C.diec_v1_result
+	handle *C.die_v1_result
 }
 
 // Scanner is a reusable scanner.
 type Scanner struct {
-	handle *C.diec_v1_scanner
+	handle *C.die_v1_scanner
 }
 
 // NewDatabase builds a database from the given directory path.
@@ -214,50 +214,50 @@ func NewDatabase(path string) (*Database, error) {
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
 
-	var err *C.diec_v1_error
+	var err *C.die_v1_error
 	db := C.cgo_build_database(cPath, C.uint64_t(len(path)), &err)
 	if db == nil {
 		return nil, makeGoError(err)
 	}
-	C.diec_v1_error_free(&err)
+	C.die_v1_error_free(&err)
 	return &Database{handle: db}, nil
 }
 
 // Close releases the database.
 func (db *Database) Close() {
 	if db.handle != nil {
-		C.diec_v1_database_free(&db.handle)
+		C.die_v1_database_free(&db.handle)
 		db.handle = nil
 	}
 }
 
 // NewScanner creates a reusable scanner from the database.
 func (db *Database) NewScanner() (*Scanner, error) {
-	var err *C.diec_v1_error
-	var scanner *C.diec_v1_scanner
-	status := C.diec_v1_scanner_new(db.handle, &scanner, &err)
+	var err *C.die_v1_error
+	var scanner *C.die_v1_scanner
+	status := C.die_v1_scanner_new(db.handle, &scanner, &err)
 	if uint32(status) != StatusOK {
 		return nil, makeGoError(err)
 	}
-	C.diec_v1_error_free(&err)
+	C.die_v1_error_free(&err)
 	return &Scanner{handle: scanner}, nil
 }
 
 // Close releases the scanner.
 func (s *Scanner) Close() {
 	if s.handle != nil {
-		C.diec_v1_scanner_free(&s.handle)
+		C.die_v1_scanner_free(&s.handle)
 		s.handle = nil
 	}
 }
 
 // ScanBytes scans a byte buffer with the reusable scanner.
 //
-// This uses the reusable scanner API (diec_v1_scanner_scan_bytes) which
+// This uses the reusable scanner API (die_v1_scanner_scan_bytes) which
 // reuses the internal JavaScript runtime across scans, avoiding the
 // per-scan runtime construction cost of the one-shot ScanBytes function.
 func (s *Scanner) ScanBytes(data []byte, flags uint32) (*Result, error) {
-	var err *C.diec_v1_error
+	var err *C.die_v1_error
 	var ptr *C.uint8_t
 	var length C.uint64_t
 	if len(data) > 0 {
@@ -268,29 +268,29 @@ func (s *Scanner) ScanBytes(data []byte, flags uint32) (*Result, error) {
 	if r == nil {
 		return nil, makeGoError(err)
 	}
-	C.diec_v1_error_free(&err)
+	C.die_v1_error_free(&err)
 	return &Result{handle: r}, nil
 }
 
 // ScanPath scans a file path with the reusable scanner.
 //
-// This uses the reusable scanner API (diec_v1_scanner_scan_path_utf8)
+// This uses the reusable scanner API (die_v1_scanner_scan_path_utf8)
 // which reuses the internal JavaScript runtime across scans.
 func (s *Scanner) ScanPath(path string, flags uint32) (*Result, error) {
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
-	var err *C.diec_v1_error
+	var err *C.die_v1_error
 	r := C.cgo_scanner_scan_path(s.handle, cPath, C.uint64_t(len(path)), C.uint32_t(flags), &err)
 	if r == nil {
 		return nil, makeGoError(err)
 	}
-	C.diec_v1_error_free(&err)
+	C.die_v1_error_free(&err)
 	return &Result{handle: r}, nil
 }
 
 // ScanBytes performs a one-shot scan of a byte buffer.
 func ScanBytes(db *Database, data []byte, flags uint32) (*Result, error) {
-	var err *C.diec_v1_error
+	var err *C.die_v1_error
 	var ptr *C.uint8_t
 	var length C.uint64_t
 	if len(data) > 0 {
@@ -301,7 +301,7 @@ func ScanBytes(db *Database, data []byte, flags uint32) (*Result, error) {
 	if r == nil {
 		return nil, makeGoError(err)
 	}
-	C.diec_v1_error_free(&err)
+	C.die_v1_error_free(&err)
 	return &Result{handle: r}, nil
 }
 
@@ -309,19 +309,19 @@ func ScanBytes(db *Database, data []byte, flags uint32) (*Result, error) {
 func ScanPath(db *Database, path string, flags uint32) (*Result, error) {
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
-	var err *C.diec_v1_error
+	var err *C.die_v1_error
 	r := C.cgo_scan_path(db.handle, cPath, C.uint64_t(len(path)), C.uint32_t(flags), &err)
 	if r == nil {
 		return nil, makeGoError(err)
 	}
-	C.diec_v1_error_free(&err)
+	C.die_v1_error_free(&err)
 	return &Result{handle: r}, nil
 }
 
 // Close releases the result.
 func (r *Result) Close() {
 	if r.handle != nil {
-		C.diec_v1_result_free(&r.handle)
+		C.die_v1_result_free(&r.handle)
 		r.handle = nil
 	}
 }
@@ -352,11 +352,11 @@ func (r *Result) DetectionCount() uint64 {
 }
 
 // makeGoError converts a C error handle to a Go error.
-func makeGoError(err *C.diec_v1_error) error {
+func makeGoError(err *C.die_v1_error) error {
 	if err == nil {
 		return errors.New("unknown error")
 	}
-	defer C.diec_v1_error_free(&err)
+	defer C.die_v1_error_free(&err)
 	status := uint32(C.cgo_error_status(err))
 	var length C.uint64_t
 	data := C.cgo_error_message(err, &length)
@@ -364,15 +364,15 @@ func makeGoError(err *C.diec_v1_error) error {
 	if data != nil && length > 0 {
 		msg = C.GoStringN((*C.char)(unsafe.Pointer(data)), C.int(length))
 	}
-	return fmt.Errorf("diec status %d: %s", status, msg)
+	return fmt.Errorf("die status %d: %s", status, msg)
 }
 
 // AbiVersion returns the library ABI version.
 func AbiVersion() uint32 {
-	return uint32(C.diec_abi_version())
+	return uint32(C.die_abi_version())
 }
 
 // AbiCompatible checks if the library is compatible with the requested version.
 func AbiCompatible(requested uint32) bool {
-	return C.diec_abi_is_compatible(C.uint32_t(requested)) != 0
+	return C.die_abi_is_compatible(C.uint32_t(requested)) != 0
 }

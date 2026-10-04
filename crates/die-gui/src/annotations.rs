@@ -2,8 +2,9 @@
 //!
 //! Upstream persists bookmarks/comments/labels in a SQLite database next to
 //! the analyzed file. This implementation stores a sidecar JSON file at
-//! `<file>.diec.json`: same user-visible behavior, pure-Rust, diffable, and
-//! free of native dependencies (ADR 0037).
+//! `<file>.die.json`: same user-visible behavior, pure-Rust, diffable, and
+//! free of native dependencies (ADR 0037). Legacy `<file>.diec.json`
+//! sidecars are still read for backward compatibility.
 //!
 //! Entries are keyed by file offset (or RVA for labels) and content-anchored:
 //! the file's SHA-256 is recorded at write time, and readers flag `stale`
@@ -26,7 +27,7 @@ pub struct AnnotationEntry {
     pub created: u64,
 }
 
-/// On-disk sidecar schema (`<file>.diec.json`).
+/// On-disk sidecar schema (`<file>.die.json`).
 #[derive(Debug, Serialize, Deserialize)]
 struct AnnotationsFile {
     /// Schema version, currently `1`.
@@ -53,8 +54,13 @@ pub struct AnnotationsDto {
     pub labels: Vec<AnnotationEntry>,
 }
 
-/// Sidecar path for `path` (`<file>.diec.json`).
+/// Sidecar path for `path` (`<file>.die.json`).
 fn sidecar_path(path: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(format!("{}.die.json", path))
+}
+
+/// Legacy sidecar path (`<file>.diec.json`, pre-rename format).
+fn legacy_sidecar_path(path: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(format!("{}.diec.json", path))
 }
 
@@ -66,9 +72,13 @@ fn file_hash(path: &str) -> Result<String, String> {
 }
 
 /// Load the sidecar for `path`; returns `None` when absent or unparseable
-/// (corrupt sidecars are ignored rather than fatal).
+/// (corrupt sidecars are ignored rather than fatal). Falls back to the
+/// legacy `<file>.diec.json` name so existing annotations survive the
+/// rename.
 fn load_sidecar(path: &str) -> Option<AnnotationsFile> {
-    let data = std::fs::read(sidecar_path(path)).ok()?;
+    let data = std::fs::read(sidecar_path(path))
+        .or_else(|_| std::fs::read(legacy_sidecar_path(path)))
+        .ok()?;
     serde_json::from_slice(&data).ok()
 }
 
@@ -188,15 +198,17 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let p = std::env::temp_dir().join(format!("diec_ann_{}_{}", std::process::id(), nanos));
+        let p = std::env::temp_dir().join(format!("die_ann_{}_{}", std::process::id(), nanos));
         std::fs::write(&p, data).unwrap();
         // Clean up a stale sidecar from a previous run.
         let _ = std::fs::remove_file(sidecar_path(p.to_str().unwrap()));
+        let _ = std::fs::remove_file(legacy_sidecar_path(p.to_str().unwrap()));
         p.to_str().unwrap().to_string()
     }
 
     fn cleanup(path: &str) {
         let _ = std::fs::remove_file(sidecar_path(path));
+        let _ = std::fs::remove_file(legacy_sidecar_path(path));
         let _ = std::fs::remove_file(path);
     }
 
@@ -243,6 +255,34 @@ mod tests {
         let dto = list(&path).unwrap();
         assert!(dto.comments.is_empty());
         assert!(!dto.stale);
+        cleanup(&path);
+    }
+
+    #[test]
+    fn legacy_sidecar_still_read() {
+        let path = temp_file(b"legacy data");
+        // Write a sidecar under the old `.diec.json` name; list() must
+        // pick it up via the fallback, and the next save migrates it.
+        let legacy = AnnotationsFile {
+            version: 1,
+            file_sha256: file_hash(&path).unwrap(),
+            bookmarks: vec![],
+            comments: vec![AnnotationEntry {
+                offset: 0,
+                text: "old".into(),
+                color: "".into(),
+                created: 1,
+            }],
+            labels: vec![],
+        };
+        std::fs::write(
+            legacy_sidecar_path(&path),
+            serde_json::to_vec(&legacy).unwrap(),
+        )
+        .unwrap();
+        let dto = list(&path).unwrap();
+        assert_eq!(dto.comments.len(), 1);
+        assert_eq!(dto.comments[0].text, "old");
         cleanup(&path);
     }
 

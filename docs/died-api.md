@@ -329,7 +329,7 @@ died uninstall
 
 ```bash
 # Generate a systemd unit template
-died install --db /usr/share/diec/db --bind 127.0.0.1:18080 > /tmp/died.service
+died install --db /usr/share/die/db --bind 127.0.0.1:18080 > /tmp/died.service
 
 # Install and start
 sudo cp /tmp/died.service /etc/systemd/system/died.service

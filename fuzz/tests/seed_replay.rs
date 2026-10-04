@@ -274,22 +274,22 @@ fn harness_scan_engine(data: &[u8]) {
 // signatures and keeps the rlib member alive so the linker does not strip
 // the `#[no_mangle]` symbols.
 use die_ffi::{
-    diec_v1_database_builder_add_path_utf8, diec_v1_database_builder_build,
-    diec_v1_database_builder_free, diec_v1_database_builder_new, diec_v1_error_free,
-    diec_v1_result_free, diec_v1_scan_bytes, DiecDatabase, DiecDatabaseBuilder, DiecError,
-    DiecResult,
+    die_v1_database_builder_add_path_utf8, die_v1_database_builder_build,
+    die_v1_database_builder_free, die_v1_database_builder_new, die_v1_error_free,
+    die_v1_result_free, die_v1_scan_bytes, DieDatabase, DieDatabaseBuilder, DieError,
+    DieResult,
 };
 
 /// Wrapper that makes the raw database pointer `Send + Sync`. The handle
-/// is only mutated through `diec_v1_scan_bytes` which uses panic
+/// is only mutated through `die_v1_scan_bytes` which uses panic
 /// containment and is documented as thread-neutral.
-struct SendPtr(*mut DiecDatabase);
+struct SendPtr(*mut DieDatabase);
 unsafe impl Send for SendPtr {}
 unsafe impl Sync for SendPtr {}
 
 static FFI_DB: OnceLock<SendPtr> = OnceLock::new();
 
-fn ffi_database() -> *mut DiecDatabase {
+fn ffi_database() -> *mut DieDatabase {
     let ptr = FFI_DB.get_or_init(|| {
         let db_path = Path::new(FUZZ_DIR)
             .parent()
@@ -298,13 +298,13 @@ fn ffi_database() -> *mut DiecDatabase {
             .unwrap_or_else(|| PathBuf::from("upstream/Detect-It-Easy/db"));
         let s = db_path.to_str().unwrap_or("upstream/Detect-It-Easy/db");
         let path_bytes = s.as_bytes();
-        let mut builder: *mut DiecDatabaseBuilder = std::ptr::null_mut();
-        let mut error: *mut DiecError = std::ptr::null_mut();
+        let mut builder: *mut DieDatabaseBuilder = std::ptr::null_mut();
+        let mut error: *mut DieError = std::ptr::null_mut();
         unsafe {
-            if diec_v1_database_builder_new(&mut builder, &mut error) != 0 {
+            if die_v1_database_builder_new(&mut builder, &mut error) != 0 {
                 return SendPtr(std::ptr::null_mut());
             }
-            if diec_v1_database_builder_add_path_utf8(
+            if die_v1_database_builder_add_path_utf8(
                 builder,
                 0,
                 path_bytes.as_ptr(),
@@ -313,12 +313,12 @@ fn ffi_database() -> *mut DiecDatabase {
                 &mut error,
             ) != 0
             {
-                diec_v1_database_builder_free(&mut builder);
+                die_v1_database_builder_free(&mut builder);
                 return SendPtr(std::ptr::null_mut());
             }
-            let mut database: *mut DiecDatabase = std::ptr::null_mut();
-            let status = diec_v1_database_builder_build(builder, &mut database, &mut error);
-            diec_v1_database_builder_free(&mut builder);
+            let mut database: *mut DieDatabase = std::ptr::null_mut();
+            let status = die_v1_database_builder_build(builder, &mut database, &mut error);
+            die_v1_database_builder_free(&mut builder);
             if status != 0 {
                 return SendPtr(std::ptr::null_mut());
             }
@@ -333,10 +333,10 @@ fn harness_scan_ffi(data: &[u8]) {
     if db.is_null() {
         return;
     }
-    let mut result: *mut DiecResult = std::ptr::null_mut();
-    let mut error: *mut DiecError = std::ptr::null_mut();
+    let mut result: *mut DieResult = std::ptr::null_mut();
+    let mut error: *mut DieError = std::ptr::null_mut();
     let status = unsafe {
-        diec_v1_scan_bytes(
+        die_v1_scan_bytes(
             db,
             data.as_ptr(),
             data.len() as u64,
@@ -348,16 +348,16 @@ fn harness_scan_ffi(data: &[u8]) {
     };
     assert!(status <= 15, "invalid status code from FFI: {status}");
     if !result.is_null() {
-        unsafe { diec_v1_result_free(&mut result) };
+        unsafe { die_v1_result_free(&mut result) };
         assert!(result.is_null(), "result not nulled after free");
     }
     if !error.is_null() {
-        unsafe { diec_v1_error_free(&mut error) };
+        unsafe { die_v1_error_free(&mut error) };
         assert!(error.is_null(), "error not nulled after free");
     }
     unsafe {
-        diec_v1_result_free(&mut result);
-        diec_v1_error_free(&mut error);
+        die_v1_result_free(&mut result);
+        die_v1_error_free(&mut error);
     }
 }
 

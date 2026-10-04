@@ -1278,7 +1278,7 @@ pub async fn nfd_scan(
 
 // --- Annotations (XInfoDB parity, Phase 19; see annotations.rs) ---
 
-/// List bookmarks/comments/labels for a file (sidecar `<file>.diec.json`).
+/// List bookmarks/comments/labels for a file (sidecar `<file>.die.json`).
 #[tauri::command]
 pub async fn list_annotations(
     path: String,

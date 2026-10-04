@@ -1,9 +1,9 @@
 //! Status code definitions and name lookup.
 
-/// Status codes matching `diec.h` definitions.
+/// Status codes matching `die.h` definitions.
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum DiecStatus {
+pub enum DieStatus {
     /// Success.
     Ok = 0,
     /// Invalid pointer, length, flag or state.
@@ -38,8 +38,8 @@ pub enum DiecStatus {
     AllocationFailed = 15,
 }
 
-impl DiecStatus {
-    /// Convert a raw u32 status to DiecStatus, or None if unknown.
+impl DieStatus {
+    /// Convert a raw u32 status to DieStatus, or None if unknown.
     pub fn from_u32(value: u32) -> Option<Self> {
         match value {
             0 => Some(Self::Ok),
@@ -85,8 +85,8 @@ impl DiecStatus {
     }
 }
 
-impl From<DiecStatus> for u32 {
-    fn from(s: DiecStatus) -> u32 {
+impl From<DieStatus> for u32 {
+    fn from(s: DieStatus) -> u32 {
         s as u32
     }
 }
@@ -98,21 +98,21 @@ mod tests {
     #[test]
     fn status_round_trip() {
         for i in 0..=15u32 {
-            let s = DiecStatus::from_u32(i).unwrap();
+            let s = DieStatus::from_u32(i).unwrap();
             assert_eq!(u32::from(s), i);
         }
     }
 
     #[test]
     fn unknown_status_is_none() {
-        assert!(DiecStatus::from_u32(16).is_none());
-        assert!(DiecStatus::from_u32(100).is_none());
+        assert!(DieStatus::from_u32(16).is_none());
+        assert!(DieStatus::from_u32(100).is_none());
     }
 
     #[test]
     fn status_names_are_nonempty() {
         for i in 0..=15u32 {
-            let s = DiecStatus::from_u32(i).unwrap();
+            let s = DieStatus::from_u32(i).unwrap();
             assert!(!s.name().is_empty());
         }
     }

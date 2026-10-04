@@ -65,9 +65,9 @@ for diec-rust. Every item must be verified before publishing a release.
 - [x] CLI binary: `base/diec` (or `base/diec.exe` on Windows)
 - [x] Server binary: `base/died` (or `base/died.exe` on Windows)
 - [x] Top-level launcher: `diec` (Unix) / `diec.cmd` (Windows)
-- [x] Static library: `lib/libdiec_ffi.a` (Unix) / `lib/diec_ffi.lib` (Windows)
-- [x] Dynamic library: `lib/libdiec_ffi.so` / `.dylib` / `lib/diec_ffi.dll`
-- [x] C header: `include/diec.h`
+- [x] Static library: `lib/libdie_ffi.a` (Unix) / `lib/die_ffi.lib` (Windows)
+- [x] Dynamic library: `lib/libdie_ffi.so` / `.dylib` / `lib/die_ffi.dll`
+- [x] C header: `include/die.h`
 - [x] Rule database: `base/db`, `base/db_extra`, `base/db_custom`
 - [x] Go binding: `bindings/go/diec/diec.go`
 - [x] Python binding: `bindings/python/diec.py`

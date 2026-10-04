@@ -207,21 +207,21 @@ rquickjs 后端 + Binary host API bridge + 签名解析器 + 完整 PE/ELF/Mach-
 - 提供 C、Go/cgo 和 Python ctypes/cffi 集成测试或最小示例。
 
 **完成项**：
-- 公共头文件 `include/diec.h` 完成（ABI 版本协商、状态码、opaque handle、scan options）
+- 公共头文件 `include/die.h` 完成（ABI 版本协商、状态码、opaque handle、scan options）
 - `diec-ffi` crate 实现完整 C ABI：
-  - ABI 版本协商：`diec_abi_version`、`diec_abi_is_compatible`
-  - 状态码查询：`diec_v1_status_name`
-  - Scan options：`diec_v1_scan_options_init`（repr(C) 结构体，additive extension）
-  - Database builder：`diec_v1_database_builder_new/add_path_utf8/build/free`
-  - Database：`diec_v1_database_metadata_json/free`
-  - Cancel token：`diec_v1_cancel_new/request/free`
-  - One-shot scan：`diec_v1_scan_bytes/scan_path_utf8`（thread-neutral）
-  - Reusable scanner：`diec_v1_scanner_new/scan_bytes/scan_path_utf8/free`
-  - Result accessors：`diec_v1_result_json/path_utf8/detection_count/free`
-  - Error accessors：`diec_v1_error_status/message/free`
+  - ABI 版本协商：`die_abi_version`、`die_abi_is_compatible`
+  - 状态码查询：`die_v1_status_name`
+  - Scan options：`die_v1_scan_options_init`（repr(C) 结构体，additive extension）
+  - Database builder：`die_v1_database_builder_new/add_path_utf8/build/free`
+  - Database：`die_v1_database_metadata_json/free`
+  - Cancel token：`die_v1_cancel_new/request/free`
+  - One-shot scan：`die_v1_scan_bytes/scan_path_utf8`（thread-neutral）
+  - Reusable scanner：`die_v1_scanner_new/scan_bytes/scan_path_utf8/free`
+  - Result accessors：`die_v1_result_json/path_utf8/detection_count/free`
+  - Error accessors：`die_v1_error_status/message/free`
   - Panic containment：所有 FFI 函数通过 `catch_unwind` 捕获 panic
   - Pointer-to-pointer free：配对释放，double-free 安全
-- 构建产物：`diec_ffi.lib`（staticlib）+ `diec_ffi.dll`（cdylib）
+- 构建产物：`die_ffi.lib`（staticlib）+ `die_ffi.dll`（cdylib）
 - 语言绑定：
   - Go/cgo 绑定 (`bindings/go/diec/`)：Database、Scanner、Result、ScanBytes、ScanPath，5 个测试通过
   - Python ctypes 绑定 (`bindings/python/diec.py`)：Database、Result、scan_bytes、scan_path，9 个测试通过
@@ -327,8 +327,8 @@ rquickjs 后端 + Binary host API bridge + 签名解析器 + 完整 PE/ELF/Mach-
   - 4 个构建目标：Linux x86_64、Windows x86_64、macOS arm64、macOS x86_64
   - tag 触发自动构建并发布到 GitHub Releases
   - 发布物包含 CLI、FFI 库、C 头文件、规则数据库、语言绑定
-- 规则分发策略 ADR 0012：打包固定快照 + `--customdb`/`DIEC_DB_PATH` 覆盖
-- CLI 数据库搜索路径增强：`DIEC_DB_PATH` 环境变量 + 可执行文件相邻 `db/` 目录
+- 规则分发策略 ADR 0012：打包固定快照 + `--customdb`/`DIE_DB_PATH` 覆盖
+- CLI 数据库搜索路径增强：`DIE_DB_PATH` 环境变量 + 可执行文件相邻 `db/` 目录
 - 发布说明模板 `RELEASE_NOTES.md`
 
 ## Phase 7：维护与上游同步 — 进行中
@@ -540,9 +540,9 @@ Phase 9 完成后，README.md "Known Limitations" 节列出三个已知问题。
 - `crates/diec-engine/src/scanner.rs` 第 603-747 行（Scanner::scan_bytes 缓存版）
 - `crates/diec-engine/src/scanner.rs` 第 224-246 行（all_rule_types 全类型列表）
 - `crates/diec-engine/src/host.rs` 第 22-39 行（ScanFlags 结构体）
-- `crates/diec-ffi/src/scan.rs` 第 70-99 行（DiecScanOptions C ABI 结构体）
+- `crates/diec-ffi/src/scan.rs` 第 70-99 行（DieScanOptions C ABI 结构体）
 - `crates/diec-ffi/src/scan.rs` 第 136-159 行（options_to_flags 位映射）
-- `include/diec.h` 第 51-58 行（DIEC_SCAN_FLAG_* 宏定义，已用 6 位 0x01-0x20）
+- `include/die.h` 第 51-58 行（DIE_SCAN_FLAG_* 宏定义，已用 6 位 0x01-0x20）
 - `crates/diec-cli/src/main.rs` 第 35-39 行（CLI flags 帮助文本）
 - `crates/diec-cli/src/main.rs` 第 153-158 行（CLI flags 解析）
 - `crates/diec-server/src/handlers.rs` 第 14-49 行（ScanFlagsRequest DTO）
@@ -623,7 +623,7 @@ bug"，但条目仍残留在 "Known Limitations" 节中，应清理或移至正�
 保留策略：保留首次出现的检测，丢弃后续重复项。规则按 file_type 字典序
 执行（BTreeMap 迭代顺序），首次出现来自更精确的格式特定规则组。
 
-默认行为：**默认去重**，`--no-dedup` / `DIEC_SCAN_FLAG_NO_DEDUP` 可关闭
+默认行为：**默认去重**，`--no-dedup` / `DIE_SCAN_FLAG_NO_DEDUP` 可关闭
 以匹配上游原始行为。此为对上游的主动改进（上游 `--alltypes` 输出含重复
 条目），需 ADR 0027 记录偏离理由。
 
@@ -635,8 +635,8 @@ bug"，但条目仍残留在 "Known Limitations" 节中，应清理或移至正�
    第 740 行前）：在 `hide_unknown` 过滤后、构造 `ScanResult` 前插入去重步骤
 3. **CLI**（`crates/diec-cli/src/main.rs`）：新增 `--no-dedup` 参数解析
    + 帮助文本
-4. **FFI C ABI**（`crates/diec-ffi/src/scan.rs` + `include/diec.h`）：
-   新增 `DIEC_SCAN_FLAG_NO_DEDUP = 0x40`（第 7 位，当前已用 0x01-0x20），
+4. **FFI C ABI**（`crates/diec-ffi/src/scan.rs` + `include/die.h`）：
+   新增 `DIE_SCAN_FLAG_NO_DEDUP = 0x40`（第 7 位，当前已用 0x01-0x20），
    `options_to_flags` 函数新增 `0x40` 分支
 5. **Server DTO**（`crates/diec-server/src/handlers.rs` 第 16-35 行）：
    `ScanFlagsRequest` 新增 `no_dedup: bool` 字段 + `From` impl 映射
@@ -653,7 +653,7 @@ bug"，但条目仍残留在 "Known Limitations" 节中，应清理或移至正�
    - 在 `scan_bytes` 和 `Scanner::scan_bytes` 的 `hide_unknown` 过滤后调用
    - `no_dedup == false` 时执行去重，`true` 时跳过
 4. CLI 新增 `--no-dedup` 参数（`crates/diec-cli/src/main.rs`）
-5. FFI 新增 `DIEC_SCAN_FLAG_NO_DEDUP = 0x40`（`include/diec.h` + `scan.rs`）
+5. FFI 新增 `DIE_SCAN_FLAG_NO_DEDUP = 0x40`（`include/die.h` + `scan.rs`）
 6. Server `ScanFlagsRequest` 新增 `no_dedup` 字段（`handlers.rs`）
 7. GUI `ScanFlagsDto` 新增 `no_dedup` 字段（`commands.rs`）
 8. README.md "Known Limitations" 节移除 `--alltypes` 重复条目
@@ -668,8 +668,8 @@ bug"，但条目仍残留在 "Known Limitations" 节中，应清理或移至正�
 - **风险 R2：与上游差分测试不匹配**。默认去重使 `--alltypes` 输出
   与上游不同（上游有重复，我们没有）。**缓解**：差分测试使用
   `--no-dedup` 标志匹配上游行为；默认去重行为有独立测试覆盖。
-- **风险 R3：FFI ABI 兼容性**。新增 `DIEC_SCAN_FLAG_NO_DEDUP = 0x40`
-  不改变 `DiecScanOptions` 结构体布局（仅用未使用的 flag bit），
+- **风险 R3：FFI ABI 兼容性**。新增 `DIE_SCAN_FLAG_NO_DEDUP = 0x40`
+  不改变 `DieScanOptions` 结构体布局（仅用未使用的 flag bit），
   `struct_size` 不变，向后兼容。**缓解**：现有 FFI 测试验证。
 
 **测试计划**：
@@ -691,7 +691,7 @@ bug"，但条目仍残留在 "Known Limitations" 节中，应清理或移至正�
   - `--alltypes --no-dedup` 模式下与上游输出对比（匹配上游原始行为）
   - 规则版本差异除外（COMPATIBILITY.md 已记录的 4 个差异）
 - **FFI 测试**（`crates/diec-ffi/tests/`）：
-  - 验证 `DIEC_SCAN_FLAG_NO_DEDUP` 位正确映射到 `ScanFlags.no_dedup`
+  - 验证 `DIE_SCAN_FLAG_NO_DEDUP` 位正确映射到 `ScanFlags.no_dedup`
 - **回归测试**：
   - 现有 506 个测试全部通过
   - GUI-CLI 差分测试 2/2 通过
@@ -1103,7 +1103,7 @@ Phase 11 完成了 8 个批次的基础对齐，但 `gui-gap-analysis-v3.md` 仍
 ### CI/CD 维护
 
 - ~~**升级 GitHub Actions 到 Node.js 24**~~：已完成。`actions/checkout@v5`、`actions/upload-artifact@v5`、`actions/download-artifact@v5` 已升级，支持 Node.js 24。
-- ~~**Windows FFI C smoke test 链接**~~：已完成。改用 DLL import library（`diec_ffi.dll.lib`）替代 staticlib（`diec_ffi.lib`），避免手动指定大量 Windows 系统库。移除 `continue-on-error`，Windows smoke test 现在在 CI 中正常运行。
+- ~~**Windows FFI C smoke test 链接**~~：已完成。改用 DLL import library（`die_ffi.dll.lib`）替代 staticlib（`die_ffi.lib`），避免手动指定大量 Windows 系统库。移除 `continue-on-error`，Windows smoke test 现在在 CI 中正常运行。
 - ~~**macOS x86_64 构建矩阵**~~：已完成。使用 `macos-14`（arm64 runner）交叉编译 `x86_64-apple-darwin` 目标，避免使用费用较高的 `macos-13` Intel runner。交叉编译构建跳过原生测试（arm64 无法运行 x86_64 二进制），arm64 原生构建仍运行完整测试。
 
 ## Phase 14：兼容性阻断修复与差分基线重建 — DONE (2026-08-23)
@@ -1139,7 +1139,7 @@ Phase 11 完成了 8 个批次的基础对齐，但 `gui-gap-analysis-v3.md` 仍
 - 14.5 上游兼容 JSON 输出 — ✅ 完成（`--json-upstream` 选项 + `render_json_upstream`
   renderer，输出 `[{fileType,name,string,info,version,offset}]` 格式）
 - 14.6 Go 绑定 reusable scanner — ✅ 完成（`Scanner.ScanBytes`/`ScanPath` 改用
-  `diec_v1_scanner_scan_bytes`/`diec_v1_scanner_scan_path_utf8`，复用 runtime）
+  `die_v1_scanner_scan_bytes`/`die_v1_scanner_scan_path_utf8`，复用 runtime）
 - 14.7 文档纠正与 glibc 指南 — ✅ 完成（README 添加 Linux glibc 2.34+ 要求说明）
 - 14.8 收尾与回归 — 进行中
 
@@ -1286,7 +1286,7 @@ Class/Python bytecode 等大量格式误报，`--alltypes` 不可用于生产。
 **修复**：
 - `crates/diec-output/src/json.rs` 新增 `render_json_die_compat()` 函数
 - `crates/diec-cli/src/main.rs` 新增 `json-die` 输出格式选项
-- FFI `diec_v1_result_json` 可考虑新增 `json_die` 变体（可选，ADR 决定）
+- FFI `die_v1_result_json` 可考虑新增 `json_die` 变体（可选，ADR 决定）
 
 ### 14.6 Go 绑定 reusable scanner — P1
 
@@ -1295,7 +1295,7 @@ Class/Python bytecode 等大量格式误报，`--alltypes` 不可用于生产。
 
 **修复**：
 - 新增 `cgo_scanner_scan_bytes` / `cgo_scanner_scan_path_utf8` cgo helper
-  （包装 `diec_v1_scanner_scan_bytes` / `diec_v1_scanner_scan_path_utf8`）
+  （包装 `die_v1_scanner_scan_bytes` / `die_v1_scanner_scan_path_utf8`）
 - `Scanner.ScanBytes` / `Scanner.ScanPath` 改用新 helper
 - Go 绑定测试：验证 Scanner 复用 database 加载上下文，性能优于 one-shot
 

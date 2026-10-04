@@ -20,7 +20,7 @@ export interface AnnotationsDto {
 
 export type AnnotationKind = "bookmark" | "comment" | "label";
 
-/** Load the annotation store for a file (sidecar `<file>.diec.json`). */
+/** Load the annotation store for a file (sidecar `<file>.die.json`). */
 export async function loadAnnotations(path: string): Promise<AnnotationsDto> {
   return invoke<AnnotationsDto>("list_annotations", { path });
 }

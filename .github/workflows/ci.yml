@@ -170,16 +170,16 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Build diec-ffi (release)
+      - name: Build die-ffi (release)
         shell: bash
-        run: cargo build -p diec-ffi --release --locked
+        run: cargo build -p die-ffi --release --locked
 
       - name: Build C smoke test (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           cc -I include tests/c/smoke.c \
-            -L target/release -ldiec_ffi \
+            -L target/release -ldie_ffi \
             -o target/smoke -lpthread -ldl -lm
 
       - name: Build C smoke test (Windows)
@@ -187,7 +187,7 @@ jobs:
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          cl /I include tests/c/smoke.c /Fe:target\smoke.exe /link /NODEFAULTLIB:MSVCRT target\release\diec_ffi.dll.lib
+          cl /I include tests/c/smoke.c /Fe:target\smoke.exe /link /NODEFAULTLIB:MSVCRT target\release\die_ffi.dll.lib
 
       - name: Run C smoke test
         shell: bash
@@ -196,7 +196,7 @@ jobs:
             echo "SKIP: upstream database not found"
             exit 0
           fi
-          export DIEC_DB_PATH="$PWD/upstream/Detect-It-Easy/db"
+          export DIE_DB_PATH="$PWD/upstream/Detect-It-Easy/db"
           if [ "${{ runner.os }}" = "Windows" ]; then
             export PATH="$PWD/target/release:$PATH"
             target/smoke.exe
@@ -221,9 +221,9 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Build diec-ffi (release cdylib)
+      - name: Build die-ffi (release cdylib)
         shell: bash
-        run: cargo build -p diec-ffi --release --locked
+        run: cargo build -p die-ffi --release --locked
 
       - name: Run Python tests
         shell: bash
@@ -233,10 +233,10 @@ jobs:
             exit 0
           fi
           if [ "${{ runner.os }}" = "Windows" ]; then
-            export DIEC_LIB_PATH="$PWD/target/release/diec_ffi.dll"
+            export DIE_LIB_PATH="$PWD/target/release/die_ffi.dll"
           elif [ "${{ runner.os }}" = "macOS" ]; then
-            export DIEC_LIB_PATH="$PWD/target/release/libdiec_ffi.dylib"
+            export DIE_LIB_PATH="$PWD/target/release/libdie_ffi.dylib"
           else
-            export DIEC_LIB_PATH="$PWD/target/release/libdiec_ffi.so"
+            export DIE_LIB_PATH="$PWD/target/release/libdie_ffi.so"
           fi
-          python3 bindings/python/test_diec.py
+          python3 bindings/python/test_die.py

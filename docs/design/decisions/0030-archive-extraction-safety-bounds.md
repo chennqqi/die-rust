@@ -104,7 +104,7 @@ higher thresholds.
   archives (zip bombs). These are expected and documented, not bugs.
 - The `ScanLimits` struct gains a `max_compression_ratio` field. Since it's a
   Rust struct with `#[derive(Default)]`, this is a source-level change.
-- FFI `DiecScanOptions` may need an extension mechanism for custom limits;
+- FFI `DieScanOptions` may need an extension mechanism for custom limits;
   current design uses `struct_size` for additive extension.
 
 ## Evidence

@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use diec_signature_parser_spike::{
+use die_signature_parser_spike::{
     Endian, FileType, MemoryMap, MemoryRecord, NATIVE_CHECKPOINT_INTERVAL, Pattern,
 };
 

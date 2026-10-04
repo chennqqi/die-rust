@@ -212,7 +212,7 @@ resource。Overlay 从 header/section 最大末端到文件末尾。
 | `-a` / `--aggressivescan` | `flags.aggressive = true` | nLimit 2000，扫描不可识别 resource |
 
 **FFI/server/GUI 传播**：
-- FFI: `DIEC_SCAN_FLAG_RECURSIVE = 0x80`（bit 8），`DIEC_SCAN_FLAG_RECURSIVE_DIR = 0x100`（bit 9）
+- FFI: `DIE_SCAN_FLAG_RECURSIVE = 0x80`（bit 8），`DIE_SCAN_FLAG_RECURSIVE_DIR = 0x100`（bit 9）
 - Server: `ScanFlagsRequest` 新增 `recursive`、`recursive_dir` 字段
 - GUI: `ScanFlagsDto` 新增对应字段
 

@@ -1,4 +1,4 @@
-// Package diec_test verifies the Go bindings against the diec-rust C ABI.
+// Package die_test verifies the Go bindings against the die-rust C ABI.
 //
 // This test builds the database, scans a 7-Zip header, and verifies
 // the result JSON contains "7-Zip".
@@ -9,17 +9,17 @@
 //
 // The static library must be built first:
 //
-//	cargo build -p diec-ffi --release
+//	cargo build -p die-ffi --release
 //
-// On Windows, link against target/release/diec_ffi.lib.
-// On Linux/macOS, link against target/release/libdiec_ffi.a.
-package diec_test
+// On Windows, link against target/release/die_ffi.lib.
+// On Linux/macOS, link against target/release/libdie_ffi.a.
+package die_test
 
 import (
 	"strings"
 	"testing"
 
-	diec "github.com/chennqqi/diec-rust/bindings/go/diec"
+	die "github.com/chennqqi/die-rust/bindings/go/die"
 )
 
 // sevenZipHeader returns a minimal 7-Zip file header (64 bytes).
@@ -34,29 +34,29 @@ func sevenZipHeader() []byte {
 const dbPath = "../../../upstream/Detect-It-Easy/db"
 
 func TestAbiVersion(t *testing.T) {
-	ver := diec.AbiVersion()
+	ver := die.AbiVersion()
 	if ver != 0x00010000 {
 		t.Fatalf("ABI version = 0x%08x, want 0x00010000", ver)
 	}
 }
 
 func TestAbiCompatible(t *testing.T) {
-	if !diec.AbiCompatible(0x00010000) {
+	if !die.AbiCompatible(0x00010000) {
 		t.Fatal("library should be compatible with v1.0")
 	}
-	if diec.AbiCompatible(0x00020000) {
+	if die.AbiCompatible(0x00020000) {
 		t.Fatal("library should not be compatible with v2.0")
 	}
 }
 
 func TestScanBytes(t *testing.T) {
-	db, err := diec.NewDatabase(dbPath)
+	db, err := die.NewDatabase(dbPath)
 	if err != nil {
 		t.Skipf("Skipping: cannot load database: %v", err)
 	}
 	defer db.Close()
 
-	result, err := diec.ScanBytes(db, sevenZipHeader(), 0)
+	result, err := die.ScanBytes(db, sevenZipHeader(), 0)
 	if err != nil {
 		t.Fatalf("ScanBytes failed: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestScanBytes(t *testing.T) {
 }
 
 func TestScanPath(t *testing.T) {
-	db, err := diec.NewDatabase(dbPath)
+	db, err := die.NewDatabase(dbPath)
 	if err != nil {
 		t.Skipf("Skipping: cannot load database: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestScanPath(t *testing.T) {
 	// Write a temp file with 7-Zip header.
 	// (In a real test we'd use t.TempDir, but for simplicity we scan
 	// an existing corpus file if available.)
-	result, err := diec.ScanPath(db, "../../../corpus/payload.zip", 0)
+	result, err := die.ScanPath(db, "../../../corpus/payload.zip", 0)
 	if err != nil {
 		t.Skipf("Skipping: cannot scan corpus file: %v", err)
 	}
@@ -96,17 +96,17 @@ func TestScanPath(t *testing.T) {
 }
 
 func TestNullDatabasePath(t *testing.T) {
-	_, err := diec.NewDatabase("/nonexistent/path/that/does/not/exist")
+	_, err := die.NewDatabase("/nonexistent/path/that/does/not/exist")
 	if err == nil {
 		t.Fatal("expected error for nonexistent path")
 	}
 }
 
 // TestReusableScannerScanBytes verifies that the reusable Scanner's
-// ScanBytes method uses the reusable scanner API (diec_v1_scanner_scan_bytes)
+// ScanBytes method uses the reusable scanner API (die_v1_scanner_scan_bytes)
 // and produces correct results across multiple scans.
 func TestReusableScannerScanBytes(t *testing.T) {
-	db, err := diec.NewDatabase(dbPath)
+	db, err := die.NewDatabase(dbPath)
 	if err != nil {
 		t.Skipf("Skipping: cannot load database: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestReusableScannerScanBytes(t *testing.T) {
 // TestReusableScannerScanPath verifies that the reusable Scanner's
 // ScanPath method uses the reusable scanner API.
 func TestReusableScannerScanPath(t *testing.T) {
-	db, err := diec.NewDatabase(dbPath)
+	db, err := die.NewDatabase(dbPath)
 	if err != nil {
 		t.Skipf("Skipping: cannot load database: %v", err)
 	}

@@ -39,7 +39,7 @@ if errorlevel 1 exit /b %errorlevel%
 if not exist "%BUILD_DIR%\c-smoke" mkdir "%BUILD_DIR%\c-smoke"
 if errorlevel 1 exit /b %errorlevel%
 
-cl /nologo /W4 /WX /std:c11 %C_CRT% "c\smoke.c" /Fo"%BUILD_DIR%\c-smoke\smoke.obj" /Fe"%BUILD_DIR%\c-smoke\smoke.exe" "%BUILD_DIR%\release\diec_rquickjs_static_link_spike.lib" /link kernel32.lib ntdll.lib userenv.lib ws2_32.lib dbghelp.lib %NATIVE_CRT%
+cl /nologo /W4 /WX /std:c11 %C_CRT% "c\smoke.c" /Fo"%BUILD_DIR%\c-smoke\smoke.obj" /Fe"%BUILD_DIR%\c-smoke\smoke.exe" "%BUILD_DIR%\release\die_rquickjs_static_link_spike.lib" /link kernel32.lib ntdll.lib userenv.lib ws2_32.lib dbghelp.lib %NATIVE_CRT%
 if errorlevel 1 exit /b %errorlevel%
 
 "%BUILD_DIR%\c-smoke\smoke.exe"

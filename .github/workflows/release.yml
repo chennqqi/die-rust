@@ -118,7 +118,7 @@ jobs:
           mkdir -p "$staging/lib"
           mkdir -p "$staging/include"
           mkdir -p "$staging/bindings/python"
-          mkdir -p "$staging/bindings/go/diec"
+          mkdir -p "$staging/bindings/go/die"
 
           # CLI binary lives in base/, matching upstream portable tree.
           cp "target/${{ matrix.target }}/release/diec" "$staging/base/"
@@ -138,14 +138,14 @@ jobs:
           fi
 
           # FFI libraries and header.
-          cp "target/${{ matrix.target }}/release/libdiec_ffi.a" "$staging/lib/" 2>/dev/null || true
-          cp "target/${{ matrix.target }}/release/libdiec_ffi.so" "$staging/lib/" 2>/dev/null || true
-          cp "target/${{ matrix.target }}/release/libdiec_ffi.dylib" "$staging/lib/" 2>/dev/null || true
-          cp "include/diec.h" "$staging/include/"
+          cp "target/${{ matrix.target }}/release/libdie_ffi.a" "$staging/lib/" 2>/dev/null || true
+          cp "target/${{ matrix.target }}/release/libdie_ffi.so" "$staging/lib/" 2>/dev/null || true
+          cp "target/${{ matrix.target }}/release/libdie_ffi.dylib" "$staging/lib/" 2>/dev/null || true
+          cp "include/die.h" "$staging/include/"
 
           # Language bindings.
-          cp "bindings/python/diec.py" "$staging/bindings/python/"
-          cp "bindings/go/diec/diec.go" "$staging/bindings/go/diec/"
+          cp "bindings/python/die.py" "$staging/bindings/python/"
+          cp "bindings/go/die/die.go" "$staging/bindings/go/die/"
           cp "bindings/go/go.mod" "$staging/bindings/go/"
 
           # Documentation and attribution.
@@ -173,7 +173,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$staging/lib" | Out-Null
           New-Item -ItemType Directory -Force -Path "$staging/include" | Out-Null
           New-Item -ItemType Directory -Force -Path "$staging/bindings/python" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$staging/bindings/go/diec" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$staging/bindings/go/die" | Out-Null
 
           # CLI binary lives in base/, matching upstream portable tree.
           Copy-Item "target/${{ matrix.target }}/release/diec.exe" "$staging/base/"
@@ -193,13 +193,13 @@ jobs:
           }
 
           # FFI libraries and header.
-          Copy-Item "target/${{ matrix.target }}/release/diec_ffi.lib" "$staging/lib/" -ErrorAction SilentlyContinue
-          Copy-Item "target/${{ matrix.target }}/release/diec_ffi.dll" "$staging/lib/" -ErrorAction SilentlyContinue
-          Copy-Item "include/diec.h" "$staging/include/"
+          Copy-Item "target/${{ matrix.target }}/release/die_ffi.lib" "$staging/lib/" -ErrorAction SilentlyContinue
+          Copy-Item "target/${{ matrix.target }}/release/die_ffi.dll" "$staging/lib/" -ErrorAction SilentlyContinue
+          Copy-Item "include/die.h" "$staging/include/"
 
           # Language bindings.
-          Copy-Item "bindings/python/diec.py" "$staging/bindings/python/"
-          Copy-Item "bindings/go/diec/diec.go" "$staging/bindings/go/diec/"
+          Copy-Item "bindings/python/die.py" "$staging/bindings/python/"
+          Copy-Item "bindings/go/die/die.go" "$staging/bindings/go/die/"
           Copy-Item "bindings/go/go.mod" "$staging/bindings/go/"
 
           # Documentation and attribution.

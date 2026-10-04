@@ -110,7 +110,7 @@ worker pool。
 - [`../c-abi.md`](../c-abi.md)
 - [`../../research/c-static-link-spike.md`](../../research/c-static-link-spike.md)
 - [`../../research/source-analysis.md`](../../research/source-analysis.md)
-- `spikes/c-static-link/include/diec_spike.h`
+- `spikes/c-static-link/include/die_spike.h`
 - `spikes/c-static-link/c/smoke.c`
 
 ## Decision acceptance

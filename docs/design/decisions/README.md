@@ -65,7 +65,7 @@
   理由：属于发布基础设施而非核心 GUI 功能，需签名密钥管理（Accepted, 2026-08-06）。
 - [`0027-result-deduplication.md`](0027-result-deduplication.md)：
   `--alltypes` 模式默认结果层去重，去重键排除 `file_type`，
-  `--no-dedup` / `DIEC_SCAN_FLAG_NO_DEDUP=0x40` 可关闭以匹配上游行为
+  `--no-dedup` / `DIE_SCAN_FLAG_NO_DEDUP=0x40` 可关闭以匹配上游行为
   （Accepted, 2026-08-08）。
 - [`0028-r-semantic-alignment.md`](0028-r-semantic-alignment.md)：
   `-r`/`--recursivescan` 语义对齐上游（文件内部 resource/overlay 递归），

@@ -252,45 +252,45 @@ otool_tmp="$(mktemp "${TMPDIR:-/tmp}/diec-macos-otool.XXXXXX")"
 trap 'rm -f "$report_tmp" "$otool_tmp"' EXIT
 otool -L "$artifact" >"$otool_tmp"
 
-export DIEC_MAC_SOURCE_DIR="$source_dir"
-export DIEC_MAC_QT_DIR="$qt_dir"
-export DIEC_MAC_BUILD_DIR="$build_dir"
-export DIEC_MAC_ROOT_COMMIT="$root_commit"
-export DIEC_MAC_RULES_COMMIT="$rules_commit"
-export DIEC_MAC_SUBMODULE_COUNT="$submodule_count"
-export DIEC_MAC_QT_VERSION="$qt_version"
-export DIEC_MAC_QMAKE_SPEC="$qmake_spec"
-export DIEC_MAC_QMAKE_SHA256="$qmake_sha256"
-export DIEC_MAC_QTCORE_SHA256="$qt_core_sha256"
-export DIEC_MAC_QTSCRIPT_SHA256="$qt_script_sha256"
-export DIEC_MAC_JOBS="$jobs"
-export DIEC_MAC_ELAPSED_SECONDS="$elapsed_seconds"
-export DIEC_MAC_ARTIFACT="$artifact"
-export DIEC_MAC_ARTIFACT_SHA256="$(sha256_file "$artifact")"
-export DIEC_MAC_ARTIFACT_SIZE="$(stat -f %z "$artifact")"
-export DIEC_MAC_ARTIFACT_ARCHS="$artifact_archs"
-export DIEC_MAC_ARTIFACT_FILE="$(file -b "$artifact")"
-export DIEC_MAC_VERSION_STDOUT="$version_stdout"
-export DIEC_MAC_VERSION_EXIT_CODE="$version_exit_code"
-export DIEC_MAC_OTOOL_PATH="$otool_tmp"
-export DIEC_MAC_SW_VERS="$(sw_vers)"
-export DIEC_MAC_UNAME="$(uname -a)"
-export DIEC_MAC_CPU_BRAND="$(sysctl -n machdep.cpu.brand_string)"
-export DIEC_MAC_LOGICAL_CPU="$(sysctl -n hw.logicalcpu)"
-export DIEC_MAC_XCODE_VERSION="$(xcodebuild -version 2>/dev/null || echo 'CommandLineTools only (no full Xcode)')"
-export DIEC_MAC_CLANG_VERSION="$(clang --version)"
-export DIEC_MAC_CMAKE_VERSION="$(cmake --version | head -n 1)"
-export DIEC_MAC_QMAKE_VERSION="$("$qmake" -v 2>&1)"
-export DIEC_MAC_BUILD_MAC_SHA256="$(sha256_file "$source_dir/build_mac.sh")"
-export DIEC_MAC_WORKFLOW_SHA256="$(
+export DIE_MAC_SOURCE_DIR="$source_dir"
+export DIE_MAC_QT_DIR="$qt_dir"
+export DIE_MAC_BUILD_DIR="$build_dir"
+export DIE_MAC_ROOT_COMMIT="$root_commit"
+export DIE_MAC_RULES_COMMIT="$rules_commit"
+export DIE_MAC_SUBMODULE_COUNT="$submodule_count"
+export DIE_MAC_QT_VERSION="$qt_version"
+export DIE_MAC_QMAKE_SPEC="$qmake_spec"
+export DIE_MAC_QMAKE_SHA256="$qmake_sha256"
+export DIE_MAC_QTCORE_SHA256="$qt_core_sha256"
+export DIE_MAC_QTSCRIPT_SHA256="$qt_script_sha256"
+export DIE_MAC_JOBS="$jobs"
+export DIE_MAC_ELAPSED_SECONDS="$elapsed_seconds"
+export DIE_MAC_ARTIFACT="$artifact"
+export DIE_MAC_ARTIFACT_SHA256="$(sha256_file "$artifact")"
+export DIE_MAC_ARTIFACT_SIZE="$(stat -f %z "$artifact")"
+export DIE_MAC_ARTIFACT_ARCHS="$artifact_archs"
+export DIE_MAC_ARTIFACT_FILE="$(file -b "$artifact")"
+export DIE_MAC_VERSION_STDOUT="$version_stdout"
+export DIE_MAC_VERSION_EXIT_CODE="$version_exit_code"
+export DIE_MAC_OTOOL_PATH="$otool_tmp"
+export DIE_MAC_SW_VERS="$(sw_vers)"
+export DIE_MAC_UNAME="$(uname -a)"
+export DIE_MAC_CPU_BRAND="$(sysctl -n machdep.cpu.brand_string)"
+export DIE_MAC_LOGICAL_CPU="$(sysctl -n hw.logicalcpu)"
+export DIE_MAC_XCODE_VERSION="$(xcodebuild -version 2>/dev/null || echo 'CommandLineTools only (no full Xcode)')"
+export DIE_MAC_CLANG_VERSION="$(clang --version)"
+export DIE_MAC_CMAKE_VERSION="$(cmake --version | head -n 1)"
+export DIE_MAC_QMAKE_VERSION="$("$qmake" -v 2>&1)"
+export DIE_MAC_BUILD_MAC_SHA256="$(sha256_file "$source_dir/build_mac.sh")"
+export DIE_MAC_WORKFLOW_SHA256="$(
     sha256_file "$source_dir/.github/workflows/builder.yml"
 )"
-export DIEC_MAC_BUILD_PRI_SHA256="$(sha256_file "$source_dir/build.pri")"
-export DIEC_MAC_CONSOLE_PRO_SHA256="$(
+export DIE_MAC_BUILD_PRI_SHA256="$(sha256_file "$source_dir/build.pri")"
+export DIE_MAC_CONSOLE_PRO_SHA256="$(
     sha256_file "$source_dir/console_source/console_source.pro"
 )"
-export DIEC_MAC_DIE_PRO_SHA256="$(sha256_file "$source_dir/die_source.pro")"
-export DIEC_MAC_BUILD_PATCH_APPLIED="$patch_applied"
+export DIE_MAC_DIE_PRO_SHA256="$(sha256_file "$source_dir/die_source.pro")"
+export DIE_MAC_BUILD_PATCH_APPLIED="$patch_applied"
 
 python3 - "$report_tmp" <<'PY'
 import json
@@ -306,7 +306,7 @@ def env(name: str) -> str:
     return value
 
 
-otool_lines = Path(env("DIEC_MAC_OTOOL_PATH")).read_text(
+otool_lines = Path(env("DIE_MAC_OTOOL_PATH")).read_text(
     encoding="utf-8"
 ).splitlines()
 report = {
@@ -315,52 +315,52 @@ report = {
     "platform": "macos-x86_64-qt5",
     "source": {
         "repository": "https://github.com/horsicq/DIE-engine",
-        "commit": env("DIEC_MAC_ROOT_COMMIT"),
-        "rules_commit": env("DIEC_MAC_RULES_COMMIT"),
+        "commit": env("DIE_MAC_ROOT_COMMIT"),
+        "rules_commit": env("DIE_MAC_RULES_COMMIT"),
         "recursive_submodule_count": int(
-            env("DIEC_MAC_SUBMODULE_COUNT")
+            env("DIE_MAC_SUBMODULE_COUNT")
         ),
         "tracked_files_clean_before_and_after": True,
     },
     "source_files": {
         ".github/workflows/builder.yml": env(
-            "DIEC_MAC_WORKFLOW_SHA256"
+            "DIE_MAC_WORKFLOW_SHA256"
         ),
-        "build.pri": env("DIEC_MAC_BUILD_PRI_SHA256"),
-        "build_mac.sh": env("DIEC_MAC_BUILD_MAC_SHA256"),
+        "build.pri": env("DIE_MAC_BUILD_PRI_SHA256"),
+        "build_mac.sh": env("DIE_MAC_BUILD_MAC_SHA256"),
         "console_source/console_source.pro": env(
-            "DIEC_MAC_CONSOLE_PRO_SHA256"
+            "DIE_MAC_CONSOLE_PRO_SHA256"
         ),
-        "die_source.pro": env("DIEC_MAC_DIE_PRO_SHA256"),
+        "die_source.pro": env("DIE_MAC_DIE_PRO_SHA256"),
     },
     "host": {
-        "sw_vers": env("DIEC_MAC_SW_VERS").splitlines(),
-        "uname": env("DIEC_MAC_UNAME"),
-        "cpu_brand": env("DIEC_MAC_CPU_BRAND"),
-        "logical_cpu_count": int(env("DIEC_MAC_LOGICAL_CPU")),
-        "xcode_version": env("DIEC_MAC_XCODE_VERSION").splitlines(),
-        "clang_version": env("DIEC_MAC_CLANG_VERSION").splitlines(),
-        "cmake_version": env("DIEC_MAC_CMAKE_VERSION"),
+        "sw_vers": env("DIE_MAC_SW_VERS").splitlines(),
+        "uname": env("DIE_MAC_UNAME"),
+        "cpu_brand": env("DIE_MAC_CPU_BRAND"),
+        "logical_cpu_count": int(env("DIE_MAC_LOGICAL_CPU")),
+        "xcode_version": env("DIE_MAC_XCODE_VERSION").splitlines(),
+        "clang_version": env("DIE_MAC_CLANG_VERSION").splitlines(),
+        "cmake_version": env("DIE_MAC_CMAKE_VERSION"),
     },
     "qt": {
-        "version": env("DIEC_MAC_QT_VERSION"),
-        "qmake_spec": env("DIEC_MAC_QMAKE_SPEC"),
-        "qmake_version": env("DIEC_MAC_QMAKE_VERSION").splitlines(),
-        "qmake_sha256": env("DIEC_MAC_QMAKE_SHA256"),
-        "qtcore_sha256": env("DIEC_MAC_QTCORE_SHA256"),
-        "qtscript_sha256": env("DIEC_MAC_QTSCRIPT_SHA256"),
+        "version": env("DIE_MAC_QT_VERSION"),
+        "qmake_spec": env("DIE_MAC_QMAKE_SPEC"),
+        "qmake_version": env("DIE_MAC_QMAKE_VERSION").splitlines(),
+        "qmake_sha256": env("DIE_MAC_QMAKE_SHA256"),
+        "qtcore_sha256": env("DIE_MAC_QTCORE_SHA256"),
+        "qtscript_sha256": env("DIE_MAC_QTSCRIPT_SHA256"),
     },
     "build": {
         "system": "qmake",
         "configuration": "release",
-        "jobs": int(env("DIEC_MAC_JOBS")),
+        "jobs": int(env("DIE_MAC_JOBS")),
         "targets": [
             "sub-build_libs-make_first",
             "sub-console_source-make_first",
         ],
-        "elapsed_seconds": int(env("DIEC_MAC_ELAPSED_SECONDS")),
+        "elapsed_seconds": int(env("DIE_MAC_ELAPSED_SECONDS")),
         "macos_build_fix": {
-            "applied": env("DIEC_MAC_BUILD_PATCH_APPLIED") == "true",
+            "applied": env("DIE_MAC_BUILD_PATCH_APPLIED") == "true",
             "file": "Formats/xbinary.h",
             "line": 114,
             "original": "#include <CoreFoundation/CoreFoundation.h>  // Check",
@@ -372,13 +372,13 @@ report = {
         },
     },
     "artifact": {
-        "size": int(env("DIEC_MAC_ARTIFACT_SIZE")),
-        "sha256": env("DIEC_MAC_ARTIFACT_SHA256"),
-        "architectures": env("DIEC_MAC_ARTIFACT_ARCHS").split(),
-        "file_description": env("DIEC_MAC_ARTIFACT_FILE"),
+        "size": int(env("DIE_MAC_ARTIFACT_SIZE")),
+        "sha256": env("DIE_MAC_ARTIFACT_SHA256"),
+        "architectures": env("DIE_MAC_ARTIFACT_ARCHS").split(),
+        "file_description": env("DIE_MAC_ARTIFACT_FILE"),
         "otool_l": otool_lines,
-        "version_stdout": env("DIEC_MAC_VERSION_STDOUT"),
-        "version_exit_code": int(env("DIEC_MAC_VERSION_EXIT_CODE")),
+        "version_stdout": env("DIE_MAC_VERSION_STDOUT"),
+        "version_exit_code": int(env("DIE_MAC_VERSION_EXIT_CODE")),
     },
     "admission": {
         "platform_admitted": False,
@@ -388,10 +388,10 @@ report = {
         ),
     },
     "local_paths": {
-        "source_dir": env("DIEC_MAC_SOURCE_DIR"),
-        "qt_dir": env("DIEC_MAC_QT_DIR"),
-        "build_dir": env("DIEC_MAC_BUILD_DIR"),
-        "artifact": env("DIEC_MAC_ARTIFACT"),
+        "source_dir": env("DIE_MAC_SOURCE_DIR"),
+        "qt_dir": env("DIE_MAC_QT_DIR"),
+        "build_dir": env("DIE_MAC_BUILD_DIR"),
+        "artifact": env("DIE_MAC_ARTIFACT"),
     },
 }
 Path(sys.argv[1]).write_text(

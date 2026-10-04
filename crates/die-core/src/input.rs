@@ -910,7 +910,7 @@ mod tests {
     #[test]
     fn file_source_read_exact() {
         let dir = std::env::temp_dir();
-        let path = dir.join("diec_test_file_source.bin");
+        let path = dir.join("die_test_file_source.bin");
         std::fs::write(&path, [0x01, 0x02, 0x03, 0x04]).unwrap();
         let src = FileSource::open(&path).unwrap();
         assert_eq!(src.len(), 4);

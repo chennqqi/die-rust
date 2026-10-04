@@ -15,7 +15,7 @@ const MAX_INPUT_BYTES: u64 = 16 * 1024 * 1024;
 compile_error!("the C static-link spike requires panic=unwind");
 
 #[repr(C)]
-pub struct DiecSpikeResult {
+pub struct DieSpikeResult {
     json: Box<[u8]>,
 }
 
@@ -38,7 +38,7 @@ fn status_bytes(status: u32) -> Option<&'static [u8]> {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn diec_spike_abi_version() -> u32 {
+pub extern "C" fn die_spike_abi_version() -> u32 {
     ABI_VERSION
 }
 
@@ -49,10 +49,10 @@ pub extern "C" fn diec_spike_abi_version() -> u32 {
 ///
 /// `out_result` must be writable. When `length` is nonzero, `data` must
 /// address at least `length` readable bytes for the duration of this call.
-pub unsafe extern "C" fn diec_spike_scan(
+pub unsafe extern "C" fn die_spike_scan(
     data: *const u8,
     length: u64,
-    out_result: *mut *mut DiecSpikeResult,
+    out_result: *mut *mut DieSpikeResult,
 ) -> u32 {
     ffi_boundary(|| {
         if out_result.is_null() {
@@ -89,7 +89,7 @@ pub unsafe extern "C" fn diec_spike_scan(
         )
         .into_bytes()
         .into_boxed_slice();
-        let result = Box::into_raw(Box::new(DiecSpikeResult { json }));
+        let result = Box::into_raw(Box::new(DieSpikeResult { json }));
 
         // SAFETY: `out_result` was checked above and the newly allocated
         // result transfers exactly one ownership reference to the caller.
@@ -105,10 +105,10 @@ pub unsafe extern "C" fn diec_spike_scan(
 ///
 /// # Safety
 ///
-/// `result` must be null or a live handle returned by `diec_spike_scan`.
+/// `result` must be null or a live handle returned by `die_spike_scan`.
 /// Both output pointers must be writable when non-null.
-pub unsafe extern "C" fn diec_spike_result_json(
-    result: *const DiecSpikeResult,
+pub unsafe extern "C" fn die_spike_result_json(
+    result: *const DieSpikeResult,
     out_data: *mut *const u8,
     out_length: *mut u64,
 ) -> u32 {
@@ -127,7 +127,7 @@ pub unsafe extern "C" fn diec_spike_result_json(
         }
 
         // SAFETY: A non-null opaque result must originate from
-        // `diec_spike_scan` and remain owned by the caller.
+        // `die_spike_scan` and remain owned by the caller.
         let result = unsafe { &*result };
         let length = u64::try_from(result.json.len()).map_err(|_| STATUS_INPUT_TOO_LARGE)?;
 
@@ -147,8 +147,8 @@ pub unsafe extern "C" fn diec_spike_result_json(
 /// # Safety
 ///
 /// `in_out_result` must be writable. Its pointee must be null or the unique
-/// live handle returned by `diec_spike_scan`.
-pub unsafe extern "C" fn diec_spike_result_free(in_out_result: *mut *mut DiecSpikeResult) -> u32 {
+/// live handle returned by `die_spike_scan`.
+pub unsafe extern "C" fn die_spike_result_free(in_out_result: *mut *mut DieSpikeResult) -> u32 {
     ffi_boundary(|| {
         if in_out_result.is_null() {
             return Err(STATUS_INVALID_ARGUMENT);
@@ -162,7 +162,7 @@ pub unsafe extern "C" fn diec_spike_result_free(in_out_result: *mut *mut DiecSpi
         };
         if !result.is_null() {
             // SAFETY: A non-null pointer must be the unique allocation
-            // returned by `diec_spike_scan`. It is nulled before destruction,
+            // returned by `die_spike_scan`. It is nulled before destruction,
             // making a second call with the same C variable idempotent.
             unsafe {
                 drop(Box::from_raw(result));
@@ -178,7 +178,7 @@ pub unsafe extern "C" fn diec_spike_result_free(in_out_result: *mut *mut DiecSpi
 /// # Safety
 ///
 /// Both output pointers must be writable when non-null.
-pub unsafe extern "C" fn diec_spike_status_message(
+pub unsafe extern "C" fn die_spike_status_message(
     status: u32,
     out_data: *mut *const u8,
     out_length: *mut u64,
@@ -207,7 +207,7 @@ pub unsafe extern "C" fn diec_spike_status_message(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn diec_spike_force_panic() -> u32 {
+pub extern "C" fn die_spike_force_panic() -> u32 {
     ffi_boundary(|| -> Result<(), u32> {
         panic!("intentional C ABI containment probe");
     })
@@ -216,9 +216,9 @@ pub extern "C" fn diec_spike_force_panic() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        ABI_VERSION, DiecSpikeResult, MAX_INPUT_BYTES, STATUS_INPUT_TOO_LARGE,
-        STATUS_INVALID_ARGUMENT, STATUS_OK, diec_spike_abi_version, diec_spike_result_free,
-        diec_spike_result_json, diec_spike_scan, diec_spike_status_message,
+        ABI_VERSION, DieSpikeResult, MAX_INPUT_BYTES, STATUS_INPUT_TOO_LARGE,
+        STATUS_INVALID_ARGUMENT, STATUS_OK, die_spike_abi_version, die_spike_result_free,
+        die_spike_result_json, die_spike_scan, die_spike_status_message,
     };
     use std::ptr;
     use std::slice;
@@ -230,7 +230,7 @@ mod tests {
         // SAFETY: Input and output ranges remain valid for the calls.
         unsafe {
             assert_eq!(
-                diec_spike_scan(input.as_ptr(), input.len() as u64, &mut result),
+                die_spike_scan(input.as_ptr(), input.len() as u64, &mut result),
                 STATUS_OK
             );
         }
@@ -241,7 +241,7 @@ mod tests {
         // SAFETY: `result` is live and both output pointers are writable.
         unsafe {
             assert_eq!(
-                diec_spike_result_json(result, &mut json_data, &mut json_length),
+                die_spike_result_json(result, &mut json_data, &mut json_length),
                 STATUS_OK
             );
         }
@@ -250,20 +250,20 @@ mod tests {
         assert_eq!(json, br#"{"schema_version":1,"size":4,"sum":10}"#);
 
         // SAFETY: The handle variable is writable and owns the live result.
-        assert_eq!(unsafe { diec_spike_result_free(&mut result) }, STATUS_OK);
+        assert_eq!(unsafe { die_spike_result_free(&mut result) }, STATUS_OK);
         assert!(result.is_null());
         // SAFETY: A writable null handle is accepted and remains null.
-        assert_eq!(unsafe { diec_spike_result_free(&mut result) }, STATUS_OK);
+        assert_eq!(unsafe { die_spike_result_free(&mut result) }, STATUS_OK);
     }
 
     #[test]
     fn invalid_inputs_clear_output_and_return_status() {
-        let mut result = ptr::dangling_mut::<DiecSpikeResult>();
+        let mut result = ptr::dangling_mut::<DieSpikeResult>();
         // SAFETY: The output pointer is writable; invalid input is the case
         // under test and is rejected before dereference.
         unsafe {
             assert_eq!(
-                diec_spike_scan(ptr::null(), 1, &mut result),
+                die_spike_scan(ptr::null(), 1, &mut result),
                 STATUS_INVALID_ARGUMENT
             );
         }
@@ -274,7 +274,7 @@ mod tests {
         // rejected before the one-byte input could be read.
         unsafe {
             assert_eq!(
-                diec_spike_scan(&byte, MAX_INPUT_BYTES + 1, &mut result),
+                die_spike_scan(&byte, MAX_INPUT_BYTES + 1, &mut result),
                 STATUS_INPUT_TOO_LARGE
             );
         }
@@ -282,7 +282,7 @@ mod tests {
         // SAFETY: Null pointers intentionally exercise argument validation.
         unsafe {
             assert_eq!(
-                diec_spike_scan(ptr::null(), 0, ptr::null_mut()),
+                die_spike_scan(ptr::null(), 0, ptr::null_mut()),
                 STATUS_INVALID_ARGUMENT
             );
         }
@@ -290,13 +290,13 @@ mod tests {
 
     #[test]
     fn version_and_static_status_message_are_stable() {
-        assert_eq!(diec_spike_abi_version(), ABI_VERSION);
+        assert_eq!(die_spike_abi_version(), ABI_VERSION);
         let mut data = ptr::null();
         let mut length = 0;
         // SAFETY: Both output pointers are writable.
         unsafe {
             assert_eq!(
-                diec_spike_status_message(STATUS_INPUT_TOO_LARGE, &mut data, &mut length),
+                die_spike_status_message(STATUS_INPUT_TOO_LARGE, &mut data, &mut length),
                 STATUS_OK
             );
         }

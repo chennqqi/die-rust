@@ -6,22 +6,22 @@
  * lifecycle: builder -> database -> scan -> result -> cleanup.
  *
  * Build (Windows MSVC):
- *   cl /I..\..\include smoke.c /link ..\..\target\debug\diec_ffi.lib
+ *   cl /I..\..\include smoke.c /link ..\..\target\debug\die_ffi.lib
  *
  * Build (Linux/macOS):
- *   cc -I../../include smoke.c -L../../target/debug -ldiec_ffi -o smoke
+ *   cc -I../../include smoke.c -L../../target/debug -ldie_ffi -o smoke
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "diec.h"
+#include "die.h"
 
 static int check_status(const char *label, uint32_t status) {
-    if (status != DIEC_STATUS_OK) {
+    if (status != DIE_STATUS_OK) {
         const uint8_t *name = NULL;
         uint64_t len = 0;
-        diec_v1_status_name(status, &name, &len);
+        die_v1_status_name(status, &name, &len);
         fprintf(stderr, "FAIL: %s status=%u (%.*s)\n", label, status, (int)len, name);
         return 1;
     }
@@ -33,41 +33,41 @@ int main(void) {
     int failures = 0;
 
     /* ABI version check */
-    uint32_t ver = diec_abi_version();
-    if (ver != DIEC_ABI_V1_0) {
+    uint32_t ver = die_abi_version();
+    if (ver != DIE_ABI_V1_0) {
         fprintf(stderr, "FAIL: ABI version mismatch: %u\n", ver);
         return 1;
     }
     printf("PASS: ABI version = 0x%08x\n", ver);
 
-    if (!diec_abi_is_compatible(DIEC_ABI_V1_0)) {
+    if (!die_abi_is_compatible(DIE_ABI_V1_0)) {
         fprintf(stderr, "FAIL: ABI not compatible with v1.0\n");
         return 1;
     }
     printf("PASS: ABI compatible with v1.0\n");
 
     /* Database builder */
-    diec_v1_database_builder *builder = NULL;
-    diec_v1_error *error = NULL;
+    die_v1_database_builder *builder = NULL;
+    die_v1_error *error = NULL;
     failures += check_status("database_builder_new",
-        diec_v1_database_builder_new(&builder, &error));
+        die_v1_database_builder_new(&builder, &error));
 
-    const char *db_path = getenv("DIEC_DB_PATH");
+    const char *db_path = getenv("DIE_DB_PATH");
     if (!db_path || !*db_path) {
         db_path = "../../upstream/Detect-It-Easy/db";
     }
     uint64_t path_len = strlen(db_path);
     failures += check_status("database_builder_add_path",
-        diec_v1_database_builder_add_path_utf8(builder, DIEC_DATABASE_KIND_MAIN,
+        die_v1_database_builder_add_path_utf8(builder, DIE_DATABASE_KIND_MAIN,
             (const uint8_t *)db_path, path_len, 0, &error));
 
     /* Build database */
-    diec_v1_database *database = NULL;
+    die_v1_database *database = NULL;
     failures += check_status("database_build",
-        diec_v1_database_builder_build(builder, &database, &error));
+        die_v1_database_builder_build(builder, &database, &error));
 
     /* Free builder (database is independent) */
-    diec_v1_database_builder_free(&builder);
+    die_v1_database_builder_free(&builder);
 
     /* Scan 7-Zip header */
     uint8_t data[] = {
@@ -81,9 +81,9 @@ int main(void) {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
 
-    diec_v1_result *result = NULL;
+    die_v1_result *result = NULL;
     failures += check_status("scan_bytes",
-        diec_v1_scan_bytes(database, data, sizeof(data), NULL, NULL,
+        die_v1_scan_bytes(database, data, sizeof(data), NULL, NULL,
             &result, &error));
 
     if (result) {
@@ -91,7 +91,7 @@ int main(void) {
         const uint8_t *json = NULL;
         uint64_t json_len = 0;
         failures += check_status("result_json",
-            diec_v1_result_json(result, &json, &json_len));
+            die_v1_result_json(result, &json, &json_len));
 
         if (json && json_len > 0) {
             /* Check if JSON contains "7-Zip" */
@@ -114,7 +114,7 @@ int main(void) {
         /* Get detection count */
         uint64_t count = 0;
         failures += check_status("result_detection_count",
-            diec_v1_result_detection_count(result, &count));
+            die_v1_result_detection_count(result, &count));
         if (count > 0) {
             printf("PASS: detection count = %llu\n", (unsigned long long)count);
         } else {
@@ -122,25 +122,25 @@ int main(void) {
             failures++;
         }
 
-        diec_v1_result_free(&result);
+        die_v1_result_free(&result);
     }
 
     /* Reusable scanner test: multiple scans sharing one runtime. */
-    diec_v1_scanner *scanner = NULL;
+    die_v1_scanner *scanner = NULL;
     failures += check_status("scanner_new",
-        diec_v1_scanner_new(database, &scanner, &error));
+        die_v1_scanner_new(database, &scanner, &error));
 
     if (scanner) {
         /* First scan via reusable scanner. */
-        diec_v1_result *scan1 = NULL;
+        die_v1_result *scan1 = NULL;
         failures += check_status("scanner_scan_bytes (1)",
-            diec_v1_scanner_scan_bytes(scanner, data, sizeof(data), NULL, NULL,
+            die_v1_scanner_scan_bytes(scanner, data, sizeof(data), NULL, NULL,
                 &scan1, &error));
 
         if (scan1) {
             const uint8_t *json1 = NULL;
             uint64_t json1_len = 0;
-            diec_v1_result_json(scan1, &json1, &json1_len);
+            die_v1_result_json(scan1, &json1, &json1_len);
             if (json1 && json1_len > 0) {
                 int found1 = 0;
                 for (uint64_t i = 0; i + 5 <= json1_len; i++) {
@@ -156,18 +156,18 @@ int main(void) {
                     failures++;
                 }
             }
-            diec_v1_result_free(&scan1);
+            die_v1_result_free(&scan1);
         }
 
         /* Second scan (runtime reused). */
-        diec_v1_result *scan2 = NULL;
+        die_v1_result *scan2 = NULL;
         failures += check_status("scanner_scan_bytes (2)",
-            diec_v1_scanner_scan_bytes(scanner, data, sizeof(data), NULL, NULL,
+            die_v1_scanner_scan_bytes(scanner, data, sizeof(data), NULL, NULL,
                 &scan2, &error));
 
         if (scan2) {
             uint64_t count2 = 0;
-            diec_v1_result_detection_count(scan2, &count2);
+            die_v1_result_detection_count(scan2, &count2);
             if (count2 > 0) {
                 printf("PASS: scanner scan 2 count = %llu\n",
                     (unsigned long long)count2);
@@ -175,17 +175,17 @@ int main(void) {
                 fprintf(stderr, "FAIL: scanner scan 2 count is 0\n");
                 failures++;
             }
-            diec_v1_result_free(&scan2);
+            die_v1_result_free(&scan2);
         }
 
-        diec_v1_scanner_free(&scanner);
+        die_v1_scanner_free(&scanner);
     }
 
     /* Cleanup */
-    diec_v1_database_free(&database);
+    die_v1_database_free(&database);
 
     if (error) {
-        diec_v1_error_free(&error);
+        die_v1_error_free(&error);
     }
 
     if (failures > 0) {

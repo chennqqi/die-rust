@@ -124,8 +124,8 @@ The `-r`/`--recursivescan` flag now matches upstream semantics:
   compatibility.
 - **`--resources`**: Scan only PE resources.
 - **`--overlays`**: Scan only PE overlay.
-- **FFI flags**: `DIEC_SCAN_FLAG_RECURSIVE` (0x80),
-  `DIEC_SCAN_FLAG_RESOURCES` (0x100), `DIEC_SCAN_FLAG_OVERLAYS` (0x200).
+- **FFI flags**: `DIE_SCAN_FLAG_RECURSIVE` (0x80),
+  `DIE_SCAN_FLAG_RESOURCES` (0x100), `DIE_SCAN_FLAG_OVERLAYS` (0x200).
 
 #### 13.5: Archive Member Extraction (ADR 0029/0030)
 
@@ -139,7 +139,7 @@ scanning:
   - Compression ratio limit: 100:1
   - Member count: 20 (default), 100000 (aggressive)
 - **RAR library**: `rars` 0.6.0 (MIT/Apache-2.0, pure Rust)
-- **FFI flag**: `DIEC_SCAN_FLAG_ARCHIVES` (0x400)
+- **FFI flag**: `DIE_SCAN_FLAG_ARCHIVES` (0x400)
 
 #### 13.6-13.8: Platform, Corpus, Documentation
 
@@ -422,7 +422,7 @@ that failed due to dead code elimination removing diec-ffi's
 - **Force-link diec-ffi symbols**: fuzz_scan_ffi.rs uses `extern "C"`
   to declare diec-ffi's C ABI functions, but the Rust linker removes
   unreferenced `#[no_mangle]` symbols during dead code elimination.
-  Added a `const _: ()` block that references `diec_ffi::scan::`
+  Added a `const _: ()` block that references `die_ffi::scan::`
   functions to force the linker to retain them, allowing the
   `extern "C"` declarations to resolve at link time.
 
@@ -612,8 +612,8 @@ packages and CLI auto-loading of extra rule databases.
 **CLI** (4 platforms, unchanged from v0.3.0):
 - `diec` / `diec.exe` — CLI binary
 - `died` / `died.exe` — HTTP/JSON scan service
-- `libdiec_ffi.*` — static and dynamic libraries
-- `include/diec.h` — C header
+- `libdie_ffi.*` — static and dynamic libraries
+- `include/die.h` — C header
 - `db/` + `db_extra/` + `db_custom/` — rule databases
 - `bindings/python/diec.py` + `bindings/go/diec/diec.go`
 
@@ -748,8 +748,8 @@ First public release of diec-rust, a Rust reimplementation of Detect It Easy.
 
 Each platform archive contains:
 - `bin/diec` — CLI binary
-- `lib/libdiec_ffi.*` — static and dynamic libraries
-- `include/diec.h` — C header
+- `lib/libdie_ffi.*` — static and dynamic libraries
+- `include/die.h` — C header
 - `db/` — pinned rule database (MIT licensed)
 - `bindings/python/diec.py` — Python binding
 - `bindings/go/diec/diec.go` — Go binding
@@ -763,7 +763,7 @@ fixed commit (c2c17dfa). To use a different or updated database:
 diec --customdb /path/to/rules/ file.exe
 ```
 
-Or set the `DIEC_DB_PATH` environment variable.
+Or set the `DIE_DB_PATH` environment variable.
 
 ### Compatibility
 

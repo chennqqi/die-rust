@@ -8,32 +8,32 @@ use die_engine::{Database, DatabaseBuilder, ScanResult};
 use std::sync::Arc;
 
 /// Opaque database builder handle.
-pub struct DiecDatabaseBuilder {
+pub struct DieDatabaseBuilder {
     /// The inner Rust builder.
     pub builder: DatabaseBuilder,
 }
 
 /// Opaque database handle.
 /// Wrapped in Arc so scanner can share ownership.
-pub struct DiecDatabase {
+pub struct DieDatabase {
     /// The inner Rust database, shared with scanners.
     pub database: Arc<Database>,
 }
 
 /// Opaque scanner handle.
-pub struct DiecScanner {
+pub struct DieScanner {
     /// Shared database reference.
     pub database: Arc<Database>,
 }
 
 /// Opaque cancel token handle.
-pub struct DiecCancel {
+pub struct DieCancel {
     /// The inner cancellation token.
     pub token: CancellationToken,
 }
 
 /// Opaque result handle.
-pub struct DiecResult {
+pub struct DieResult {
     /// The inner scan result.
     pub result: ScanResult,
     /// Pre-rendered canonical JSON.
@@ -41,14 +41,14 @@ pub struct DiecResult {
 }
 
 /// Opaque error handle.
-pub struct DiecError {
+pub struct DieError {
     /// The status code.
     pub status: u32,
     /// Human-readable error message (UTF-8).
     pub message: String,
 }
 
-impl DiecError {
+impl DieError {
     /// Create a new error handle from a status and message.
     pub fn new(status: u32, message: impl Into<String>) -> Self {
         Self {

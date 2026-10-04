@@ -524,8 +524,8 @@ fn main() -> ExitCode {
 
     // Find the database directory.
     if db_path.is_empty() {
-        // 1. DIEC_DB_PATH environment variable (highest priority).
-        if let Ok(env_path) = std::env::var("DIEC_DB_PATH")
+        // 1. DIE_DB_PATH environment variable (highest priority).
+        if let Ok(env_path) = std::env::var("DIE_DB_PATH")
             && std::path::Path::new(&env_path).is_dir()
         {
             db_path = env_path;
@@ -545,9 +545,9 @@ fn main() -> ExitCode {
         // 3. System-wide install paths.
         if db_path.is_empty() {
             let system_paths = [
-                "/usr/share/diec/db",
-                "/usr/local/share/diec/db",
-                "/opt/diec/db",
+                "/usr/share/die/db",
+                "/usr/local/share/die/db",
+                "/opt/die/db",
             ];
             for c in &system_paths {
                 if std::path::Path::new(c).is_dir() {
@@ -575,7 +575,7 @@ fn main() -> ExitCode {
 
         if db_path.is_empty() {
             eprintln!("error: database directory not found.");
-            eprintln!("  Set DIEC_DB_PATH or use --db <path>");
+            eprintln!("  Set DIE_DB_PATH or use --db <path>");
             eprintln!("  Or place rules in a 'db/' directory next to the executable.");
             return ExitCode::from(EXIT_DATABASE);
         }

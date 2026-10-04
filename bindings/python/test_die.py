@@ -1,13 +1,13 @@
-"""Tests for the diec Python bindings.
+"""Tests for the die Python bindings.
 
 Run with::
 
-    cargo build -p diec-ffi --release
-    python -m pytest bindings/python/test_diec.py -v
+    cargo build -p die-ffi --release
+    python -m pytest bindings/python/test_die.py -v
 
 Or directly::
 
-    python bindings/python/test_diec.py
+    python bindings/python/test_die.py
 """
 
 from __future__ import annotations
@@ -17,10 +17,10 @@ import pathlib
 import sys
 import unittest
 
-# Add this directory to path so we can import diec without installation.
+# Add this directory to path so we can import die without installation.
 sys.path.insert(0, os.path.dirname(__file__))
 
-import diec  # noqa: E402
+import die  # noqa: E402
 
 DB_PATH = str(pathlib.Path(__file__).resolve().parent.parent.parent / "upstream" / "Detect-It-Easy" / "db")
 
@@ -34,21 +34,21 @@ def seven_zip_header() -> bytes:
 
 class TestAbiVersion(unittest.TestCase):
     def test_version_is_v1(self):
-        self.assertEqual(diec.abi_version(), 0x00010000)
+        self.assertEqual(die.abi_version(), 0x00010000)
 
     def test_compatible_with_v1_0(self):
-        self.assertTrue(diec.abi_compatible(0x00010000))
+        self.assertTrue(die.abi_compatible(0x00010000))
 
     def test_not_compatible_with_v2(self):
-        self.assertFalse(diec.abi_compatible(0x00020000))
+        self.assertFalse(die.abi_compatible(0x00020000))
 
 
 class TestStatusName(unittest.TestCase):
     def test_ok_name(self):
-        self.assertEqual(diec.status_name(0), "OK")
+        self.assertEqual(die.status_name(0), "OK")
 
     def test_unknown_name(self):
-        self.assertEqual(diec.status_name(99), "UNKNOWN")
+        self.assertEqual(die.status_name(99), "UNKNOWN")
 
 
 class TestScanBytes(unittest.TestCase):
@@ -56,7 +56,7 @@ class TestScanBytes(unittest.TestCase):
     def setUpClass(cls):
         if not pathlib.Path(DB_PATH).is_dir():
             raise unittest.SkipTest(f"database not found: {DB_PATH}")
-        cls.db = diec.Database.from_path(DB_PATH)
+        cls.db = die.Database.from_path(DB_PATH)
 
     @classmethod
     def tearDownClass(cls):
@@ -64,7 +64,7 @@ class TestScanBytes(unittest.TestCase):
             cls.db.close()
 
     def test_scan_7zip(self):
-        result = diec.scan_bytes(self.db, seven_zip_header())
+        result = die.scan_bytes(self.db, seven_zip_header())
         try:
             self.assertIn("7-Zip", result.json)
             self.assertGreater(result.detection_count, 0)
@@ -72,21 +72,21 @@ class TestScanBytes(unittest.TestCase):
             result.close()
 
     def test_scan_with_flags(self):
-        result = diec.scan_bytes(self.db, seven_zip_header(), diec.FLAG_VERBOSE)
+        result = die.scan_bytes(self.db, seven_zip_header(), die.FLAG_VERBOSE)
         try:
             self.assertGreaterEqual(result.detection_count, 0)
         finally:
             result.close()
 
     def test_context_manager(self):
-        with diec.scan_bytes(self.db, seven_zip_header()) as result:
+        with die.scan_bytes(self.db, seven_zip_header()) as result:
             self.assertIn("7-Zip", result.json)
 
 
 class TestErrorHandling(unittest.TestCase):
     def test_nonexistent_path_raises(self):
-        with self.assertRaises(diec.DiecError):
-            diec.Database.from_path("/nonexistent/path/that/does/not/exist")
+        with self.assertRaises(die.DieError):
+            die.Database.from_path("/nonexistent/path/that/does/not/exist")
 
 
 class TestReusableScanner(unittest.TestCase):
@@ -101,7 +101,7 @@ class TestReusableScanner(unittest.TestCase):
     def setUpClass(cls):
         if not pathlib.Path(DB_PATH).is_dir():
             raise unittest.SkipTest(f"database not found: {DB_PATH}")
-        cls.db = diec.Database.from_path(DB_PATH)
+        cls.db = die.Database.from_path(DB_PATH)
 
     @classmethod
     def tearDownClass(cls):

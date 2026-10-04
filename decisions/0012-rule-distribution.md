@@ -46,14 +46,14 @@ with optional override via `--extradb`/`--customdb`.**
    commit).
 2. The CLI searches for the database in this order:
    a. `--database` flag (explicit path)
-   b. `DIEC_DB_PATH` environment variable
+   b. `DIE_DB_PATH` environment variable
    c. `db/` directory adjacent to the executable
-   d. System-wide install path (e.g., `/usr/share/diec/db`)
+   d. System-wide install path (e.g., `/usr/share/die/db`)
    e. Fallback: bundled `db/` in the release archive
 3. Users can update rules by:
    - Downloading a newer release (recommended)
    - Using `--customdb` to point at a self-managed database
-   - Setting `DIEC_DB_PATH` to override the default
+   - Setting `DIE_DB_PATH` to override the default
 
 ### Alternatives Considered
 

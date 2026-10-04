@@ -24,7 +24,7 @@ Last updated: 2026-07-31
 
 本文是 Phase 0 评审稿。符号名、状态码和 options layout 在进入 `Accepted` 前仍可
 调整；它们不是当前仓库已经发布的 ABI。正式实现不得直接复制 spike 的
-`diec_spike_*` 名称或占位 JSON。
+`die_spike_*` 名称或占位 JSON。
 
 ## 目标
 
@@ -52,7 +52,7 @@ Last updated: 2026-07-31
 计划发布：
 
 ```text
-include/diec.h
+include/die.h
 lib/libdiec.a            Unix-like
 lib/diec.lib             Windows MSVC
 lib/diec_static_crt.lib  可选 Windows static-CRT variant
@@ -60,7 +60,7 @@ share/diec/...           固定规则与来源 manifest
 ```
 
 公共符号以 `diec_` 开头。除版本协商外，首个 major 的功能符号使用
-`diec_v1_` 前缀，使未来不兼容 major 可以与 v1 同时链接。
+`die_v1_` 前缀，使未来不兼容 major 可以与 v1 同时链接。
 
 静态库文件名不编码 Rust crate 结构。内部 workspace 中 FFI crate 的名称和拆分
 不属于 ABI。
@@ -77,22 +77,22 @@ share/diec/...           固定规则与来源 manifest
 建议编码：
 
 ```c
-#define DIEC_ABI_VERSION_ENCODE(major, minor) \
+#define DIE_ABI_VERSION_ENCODE(major, minor) \
     ((((uint32_t)(major)) << 16) | ((uint32_t)(minor)))
-#define DIEC_ABI_V1_0 DIEC_ABI_VERSION_ENCODE(1, 0)
+#define DIE_ABI_V1_0 DIE_ABI_VERSION_ENCODE(1, 0)
 ```
 
 只保留少量无 major 前缀的协商符号：
 
 ```c
-uint32_t diec_abi_version(void);
-uint32_t diec_abi_is_compatible(uint32_t requested);
+uint32_t die_abi_version(void);
+uint32_t die_abi_is_compatible(uint32_t requested);
 ```
 
 状态码解释属于对应 major：
 
 ```c
-uint32_t diec_v1_status_name(uint32_t status,
+uint32_t die_v1_status_name(uint32_t status,
                              const uint8_t **out_data,
                              uint64_t *out_length);
 ```
@@ -112,14 +112,14 @@ uint32_t diec_v1_status_name(uint32_t status,
 只使用 `<stdint.h>` 中固定宽度整数、C pointer 和 opaque forward declaration：
 
 ```c
-typedef uint32_t diec_status_t;
+typedef uint32_t die_status_t;
 
-typedef struct diec_v1_database_builder diec_v1_database_builder;
-typedef struct diec_v1_database diec_v1_database;
-typedef struct diec_v1_scanner diec_v1_scanner;
-typedef struct diec_v1_cancel diec_v1_cancel;
-typedef struct diec_v1_result diec_v1_result;
-typedef struct diec_v1_error diec_v1_error;
+typedef struct die_v1_database_builder die_v1_database_builder;
+typedef struct die_v1_database die_v1_database;
+typedef struct die_v1_scanner die_v1_scanner;
+typedef struct die_v1_cancel die_v1_cancel;
+typedef struct die_v1_result die_v1_result;
+typedef struct die_v1_error die_v1_error;
 ```
 
 不在 ABI 中使用 C `enum`、bitfield、`long`、`wchar_t`、`size_t`、`bool` 或
@@ -132,7 +132,7 @@ compiler-specific packed layout。布尔值使用 `uint32_t` 的 0/1，长度使
 cffi 创建并避免每次 scan 的 setter 调用：
 
 ```c
-typedef struct diec_v1_scan_options {
+typedef struct die_v1_scan_options {
     uint32_t struct_size;
     uint32_t flags;
     uint64_t max_input_bytes;
@@ -146,7 +146,7 @@ typedef struct diec_v1_scan_options {
     uint64_t script_stack_bytes;
     uint64_t script_fuel_quanta;
     uint64_t script_deadline_ms;
-} diec_v1_scan_options;
+} die_v1_scan_options;
 ```
 
 拟定 layout：
@@ -173,8 +173,8 @@ typedef struct diec_v1_scan_options {
 初始化：
 
 ```c
-diec_status_t diec_v1_scan_options_init(
-    diec_v1_scan_options *options,
+die_status_t die_v1_scan_options_init(
+    die_v1_scan_options *options,
     uint32_t options_size);
 ```
 
@@ -210,29 +210,29 @@ flag 数值在 `api.md` 完成后冻结，至少区分：
 
 | Value | Name | 含义 |
 | ---: | --- | --- |
-| 0 | `DIEC_STATUS_OK` | 成功 |
-| 1 | `DIEC_STATUS_INVALID_ARGUMENT` | pointer、长度、flag 或状态非法 |
-| 2 | `DIEC_STATUS_ABI_MISMATCH` | 调用方请求不兼容 ABI |
-| 3 | `DIEC_STATUS_INVALID_UTF8` | 要求 UTF-8 的输入非法 |
-| 4 | `DIEC_STATUS_IO` | 文件/目录读取失败 |
-| 5 | `DIEC_STATUS_DATABASE` | 规则数据库加载或校验失败 |
-| 6 | `DIEC_STATUS_UNSUPPORTED` | 明确不支持的格式/语法/功能 |
-| 7 | `DIEC_STATUS_LIMIT_EXCEEDED` | byte/entry/depth/memory 预算 |
-| 8 | `DIEC_STATUS_CANCELLED` | cancel token 被请求 |
-| 9 | `DIEC_STATUS_TIMEOUT` | deadline 到期 |
-| 10 | `DIEC_STATUS_SCRIPT` | 规则 parse/runtime 错误 |
-| 11 | `DIEC_STATUS_WRONG_THREAD` | thread-affine handle 在错误线程使用 |
-| 12 | `DIEC_STATUS_BUSY` | scanner 重入或并发调用 |
-| 13 | `DIEC_STATUS_PANIC` | unwind panic 被边界捕获 |
-| 14 | `DIEC_STATUS_INTERNAL` | 不满足内部不变量 |
-| 15 | `DIEC_STATUS_ALLOCATION_FAILED` | 可恢复的 `try_reserve` 等失败 |
+| 0 | `DIE_STATUS_OK` | 成功 |
+| 1 | `DIE_STATUS_INVALID_ARGUMENT` | pointer、长度、flag 或状态非法 |
+| 2 | `DIE_STATUS_ABI_MISMATCH` | 调用方请求不兼容 ABI |
+| 3 | `DIE_STATUS_INVALID_UTF8` | 要求 UTF-8 的输入非法 |
+| 4 | `DIE_STATUS_IO` | 文件/目录读取失败 |
+| 5 | `DIE_STATUS_DATABASE` | 规则数据库加载或校验失败 |
+| 6 | `DIE_STATUS_UNSUPPORTED` | 明确不支持的格式/语法/功能 |
+| 7 | `DIE_STATUS_LIMIT_EXCEEDED` | byte/entry/depth/memory 预算 |
+| 8 | `DIE_STATUS_CANCELLED` | cancel token 被请求 |
+| 9 | `DIE_STATUS_TIMEOUT` | deadline 到期 |
+| 10 | `DIE_STATUS_SCRIPT` | 规则 parse/runtime 错误 |
+| 11 | `DIE_STATUS_WRONG_THREAD` | thread-affine handle 在错误线程使用 |
+| 12 | `DIE_STATUS_BUSY` | scanner 重入或并发调用 |
+| 13 | `DIE_STATUS_PANIC` | unwind panic 被边界捕获 |
+| 14 | `DIE_STATUS_INTERNAL` | 不满足内部不变量 |
+| 15 | `DIE_STATUS_ALLOCATION_FAILED` | 可恢复的 `try_reserve` 等失败 |
 
 状态码只表达稳定类别；不得把 OS error、规则路径或详细诊断编码进整数。
 `ALLOCATION_FAILED` 不承诺捕获全局 allocator OOM abort。
 
 ## Error handle
 
-每个 fallible API 的最后一个参数统一为可选 `diec_v1_error **out_error`：
+每个 fallible API 的最后一个参数统一为可选 `die_v1_error **out_error`：
 
 - 调用前 library 将非 null `*out_error` 清为 null；
 - 成功时不产生 error；
@@ -243,15 +243,15 @@ flag 数值在 `api.md` 完成后冻结，至少区分：
 访问器：
 
 ```c
-diec_status_t diec_v1_error_status(const diec_v1_error *error,
+die_status_t die_v1_error_status(const die_v1_error *error,
                                    uint32_t *out_status);
-diec_status_t diec_v1_error_message(const diec_v1_error *error,
+die_status_t die_v1_error_message(const die_v1_error *error,
                                     const uint8_t **out_data,
                                     uint64_t *out_length);
-diec_status_t diec_v1_error_details_json(const diec_v1_error *error,
+die_status_t die_v1_error_details_json(const die_v1_error *error,
                                          const uint8_t **out_data,
                                          uint64_t *out_length);
-diec_status_t diec_v1_error_free(diec_v1_error **in_out_error);
+die_status_t die_v1_error_free(die_v1_error **in_out_error);
 ```
 
 message/details 是 UTF-8、非 NUL 结尾、借用到 error free。details schema 单独
@@ -267,33 +267,33 @@ message/details 是 UTF-8、非 NUL 结尾、借用到 error free。details sche
 拟定 builder API：
 
 ```c
-diec_status_t diec_v1_database_builder_new(
-    diec_v1_database_builder **out_builder,
-    diec_v1_error **out_error);
+die_status_t die_v1_database_builder_new(
+    die_v1_database_builder **out_builder,
+    die_v1_error **out_error);
 
-diec_status_t diec_v1_database_builder_add_path_utf8(
-    diec_v1_database_builder *builder,
+die_status_t die_v1_database_builder_add_path_utf8(
+    die_v1_database_builder *builder,
     uint32_t database_kind,
     const uint8_t *path,
     uint64_t path_length,
     uint32_t source_flags,
-    diec_v1_error **out_error);
+    die_v1_error **out_error);
 
-diec_status_t diec_v1_database_builder_build(
-    const diec_v1_database_builder *builder,
-    diec_v1_database **out_database,
-    diec_v1_error **out_error);
+die_status_t die_v1_database_builder_build(
+    const die_v1_database_builder *builder,
+    die_v1_database **out_database,
+    die_v1_error **out_error);
 
-diec_status_t diec_v1_database_builder_free(
-    diec_v1_database_builder **in_out_builder);
+die_status_t die_v1_database_builder_free(
+    die_v1_database_builder **in_out_builder);
 
-diec_status_t diec_v1_database_metadata_json(
-    const diec_v1_database *database,
+die_status_t die_v1_database_metadata_json(
+    const die_v1_database *database,
     const uint8_t **out_data,
     uint64_t *out_length);
 
-diec_status_t diec_v1_database_free(
-    diec_v1_database **in_out_database);
+die_status_t die_v1_database_free(
+    die_v1_database **in_out_database);
 ```
 
 `database_kind` 明确区分 main、extra、custom；不会复制上游“main 返回值影响调用方、
@@ -323,31 +323,31 @@ builder 在 `add_path_utf8` 返回前复制并验证 path，不保留调用方 b
 ### Reusable scanner
 
 ```c
-diec_status_t diec_v1_scanner_new(
-    const diec_v1_database *database,
-    diec_v1_scanner **out_scanner,
-    diec_v1_error **out_error);
+die_status_t die_v1_scanner_new(
+    const die_v1_database *database,
+    die_v1_scanner **out_scanner,
+    die_v1_error **out_error);
 
-diec_status_t diec_v1_scanner_scan_bytes(
-    diec_v1_scanner *scanner,
+die_status_t die_v1_scanner_scan_bytes(
+    die_v1_scanner *scanner,
     const uint8_t *data,
     uint64_t length,
-    const diec_v1_scan_options *options,
-    const diec_v1_cancel *cancel,
-    diec_v1_result **out_result,
-    diec_v1_error **out_error);
+    const die_v1_scan_options *options,
+    const die_v1_cancel *cancel,
+    die_v1_result **out_result,
+    die_v1_error **out_error);
 
-diec_status_t diec_v1_scanner_scan_path_utf8(
-    diec_v1_scanner *scanner,
+die_status_t die_v1_scanner_scan_path_utf8(
+    die_v1_scanner *scanner,
     const uint8_t *path,
     uint64_t path_length,
-    const diec_v1_scan_options *options,
-    const diec_v1_cancel *cancel,
-    diec_v1_result **out_result,
-    diec_v1_error **out_error);
+    const die_v1_scan_options *options,
+    const die_v1_cancel *cancel,
+    die_v1_result **out_result,
+    die_v1_error **out_error);
 
-diec_status_t diec_v1_scanner_free(
-    diec_v1_scanner **in_out_scanner);
+die_status_t die_v1_scanner_free(
+    die_v1_scanner **in_out_scanner);
 ```
 
 scanner 复用 rule runtime、host binding 和 per-worker cache，适合 C 或显式固定
@@ -356,23 +356,23 @@ worker 的绑定。
 ### Thread-neutral one-shot
 
 ```c
-diec_status_t diec_v1_scan_bytes(
-    const diec_v1_database *database,
+die_status_t die_v1_scan_bytes(
+    const die_v1_database *database,
     const uint8_t *data,
     uint64_t length,
-    const diec_v1_scan_options *options,
-    const diec_v1_cancel *cancel,
-    diec_v1_result **out_result,
-    diec_v1_error **out_error);
+    const die_v1_scan_options *options,
+    const die_v1_cancel *cancel,
+    die_v1_result **out_result,
+    die_v1_error **out_error);
 
-diec_status_t diec_v1_scan_path_utf8(
-    const diec_v1_database *database,
+die_status_t die_v1_scan_path_utf8(
+    const die_v1_database *database,
     const uint8_t *path,
     uint64_t path_length,
-    const diec_v1_scan_options *options,
-    const diec_v1_cancel *cancel,
-    diec_v1_result **out_result,
-    diec_v1_error **out_error);
+    const die_v1_scan_options *options,
+    const die_v1_cancel *cancel,
+    die_v1_result **out_result,
+    die_v1_error **out_error);
 ```
 
 one-shot 在调用线程创建并销毁内部 scanner，避免 runtime thread-affinity 泄漏给
@@ -390,12 +390,12 @@ scan 是同步调用。输入 bytes 只借用到函数返回；实现不得在�
 ## Cancellation
 
 ```c
-diec_status_t diec_v1_cancel_new(
-    diec_v1_cancel **out_cancel,
-    diec_v1_error **out_error);
-diec_status_t diec_v1_cancel_request(diec_v1_cancel *cancel);
-diec_status_t diec_v1_cancel_reset(diec_v1_cancel *cancel);
-diec_status_t diec_v1_cancel_free(diec_v1_cancel **in_out_cancel);
+die_status_t die_v1_cancel_new(
+    die_v1_cancel **out_cancel,
+    die_v1_error **out_error);
+die_status_t die_v1_cancel_request(die_v1_cancel *cancel);
+die_status_t die_v1_cancel_reset(die_v1_cancel *cancel);
+die_status_t die_v1_cancel_free(die_v1_cancel **in_out_cancel);
 ```
 
 cancel token 是唯一明确可由其他线程调用的 mutable handle，内部使用 atomic
@@ -411,13 +411,13 @@ scan 的 cancel 参数允许为 null，此时仍执行 options 中的 timeout �
 初始稳定结果面采用 immutable result + canonical JSON：
 
 ```c
-diec_status_t diec_v1_result_json(
-    const diec_v1_result *result,
+die_status_t die_v1_result_json(
+    const die_v1_result *result,
     const uint8_t **out_data,
     uint64_t *out_length);
 
-diec_status_t diec_v1_result_free(
-    diec_v1_result **in_out_result);
+die_status_t die_v1_result_free(
+    die_v1_result **in_out_result);
 ```
 
 契约：
@@ -522,7 +522,7 @@ v1 不接受 caller allocator callback：
 - static library 可能与宿主使用不同 CRT；
 - opaque handle 已避免跨 allocator free。
 
-所有 Rust-owned allocation 通过对应 `diec_v1_*_free` 释放。借用 view 无释放函数。
+所有 Rust-owned allocation 通过对应 `die_v1_*_free` 释放。借用 view 无释放函数。
 输入驱动的大分配优先使用 checked arithmetic 与 `try_reserve`，可恢复失败映射为
 `ALLOCATION_FAILED`；仍不承诺捕获全局 OOM abort。
 
@@ -562,7 +562,7 @@ FFI crate 使用 `crate-type = ["staticlib"]`，核心 crate 不依赖 FFI crate
 
 ### C
 
-C 直接包含 `diec.h` 并链接 archive。发行包提供：
+C 直接包含 `die.h` 并链接 archive。发行包提供：
 
 - 最小 scan/free 示例；
 - C11 `-Wall -Wextra -Werror` / MSVC `/W4 /WX` smoke；

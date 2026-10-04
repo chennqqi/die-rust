@@ -6,19 +6,19 @@
 
 #![allow(unsafe_code)]
 
-use crate::handles::DiecError;
+use crate::handles::DieError;
 use crate::panic::catch_panics;
-use crate::status::DiecStatus;
+use crate::status::DieStatus;
 
 /// Helper: validate a non-null out pointer and clear it.
 ///
 /// Returns `Ok(reference)` if the pointer is valid, or `Err(InvalidArgument)`.
-pub fn validate_out_ptr<T>(ptr: *mut *mut T) -> Result<&'static mut *mut T, DiecStatus>
+pub fn validate_out_ptr<T>(ptr: *mut *mut T) -> Result<&'static mut *mut T, DieStatus>
 where
     T: 'static,
 {
     if ptr.is_null() {
-        return Err(DiecStatus::InvalidArgument);
+        return Err(DieStatus::InvalidArgument);
     }
     // SAFETY: the caller guarantees the pointer is valid for writes.
     // We use a static lifetime here because the actual lifetime is tied
@@ -29,9 +29,9 @@ where
 /// Helper: validate a borrowed pointer (const T).
 ///
 /// Returns `Ok(reference)` if the pointer is valid.
-pub fn validate_borrowed_ptr<'a, T>(ptr: *const T) -> Result<&'a T, DiecStatus> {
+pub fn validate_borrowed_ptr<'a, T>(ptr: *const T) -> Result<&'a T, DieStatus> {
     if ptr.is_null() {
-        return Err(DiecStatus::InvalidArgument);
+        return Err(DieStatus::InvalidArgument);
     }
     // SAFETY: the caller guarantees the pointer is valid for the duration
     // of the FFI call.
@@ -41,9 +41,9 @@ pub fn validate_borrowed_ptr<'a, T>(ptr: *const T) -> Result<&'a T, DiecStatus> 
 /// Helper: validate a mutable pointer (mut T).
 ///
 /// Returns `Ok(reference)` if the pointer is valid.
-pub fn validate_mut_ptr<'a, T>(ptr: *mut T) -> Result<&'a mut T, DiecStatus> {
+pub fn validate_mut_ptr<'a, T>(ptr: *mut T) -> Result<&'a mut T, DieStatus> {
     if ptr.is_null() {
-        return Err(DiecStatus::InvalidArgument);
+        return Err(DieStatus::InvalidArgument);
     }
     // SAFETY: the caller guarantees the pointer is valid for the duration
     // of the FFI call.
@@ -55,7 +55,7 @@ pub fn write_byte_view(
     data: &[u8],
     out_data: *mut *const u8,
     out_length: *mut u64,
-) -> Result<(), DiecStatus> {
+) -> Result<(), DieStatus> {
     let out_data = validate_mut_ptr(out_data)?;
     let out_length = validate_mut_ptr(out_length)?;
     *out_data = data.as_ptr();
@@ -64,12 +64,12 @@ pub fn write_byte_view(
 }
 
 /// Helper: convert a raw (ptr, len) to a borrowed byte slice.
-pub fn byte_slice_from_raw<'a>(ptr: *const u8, len: u64) -> Result<&'a [u8], DiecStatus> {
+pub fn byte_slice_from_raw<'a>(ptr: *const u8, len: u64) -> Result<&'a [u8], DieStatus> {
     if ptr.is_null() && len == 0 {
         return Ok(&[]);
     }
     if ptr.is_null() {
-        return Err(DiecStatus::InvalidArgument);
+        return Err(DieStatus::InvalidArgument);
     }
     // SAFETY: the caller guarantees the pointer is valid for `len` bytes
     // for the duration of the call.
@@ -77,17 +77,17 @@ pub fn byte_slice_from_raw<'a>(ptr: *const u8, len: u64) -> Result<&'a [u8], Die
 }
 
 /// Helper: convert a raw (ptr, len) to a borrowed str (UTF-8 validated).
-pub fn str_from_raw<'a>(ptr: *const u8, len: u64) -> Result<&'a str, DiecStatus> {
+pub fn str_from_raw<'a>(ptr: *const u8, len: u64) -> Result<&'a str, DieStatus> {
     let bytes = byte_slice_from_raw(ptr, len)?;
     // Reject NUL bytes in paths (per design doc).
     if bytes.contains(&0) {
-        return Err(DiecStatus::InvalidArgument);
+        return Err(DieStatus::InvalidArgument);
     }
-    std::str::from_utf8(bytes).map_err(|_| DiecStatus::InvalidUtf8)
+    std::str::from_utf8(bytes).map_err(|_| DieStatus::InvalidUtf8)
 }
 
 /// Helper: free a boxed handle via pointer-to-pointer, setting it to null.
-pub fn free_handle<T: 'static>(in_out: *mut *mut T) -> Result<(), DiecStatus> {
+pub fn free_handle<T: 'static>(in_out: *mut *mut T) -> Result<(), DieStatus> {
     let slot = validate_out_ptr(in_out)?;
     if (*slot).is_null() {
         // Double-free is a no-op (safe).
@@ -102,21 +102,21 @@ pub fn free_handle<T: 'static>(in_out: *mut *mut T) -> Result<(), DiecStatus> {
     Ok(())
 }
 
-/// Convert a DiecStatus to a u32 return value.
-pub fn status_to_u32(s: DiecStatus) -> u32 {
+/// Convert a DieStatus to a u32 return value.
+pub fn status_to_u32(s: DieStatus) -> u32 {
     s.into()
 }
 
 // Suppress unused warning.
 #[allow(dead_code)]
 fn _use_status_to_u32() -> u32 {
-    status_to_u32(DiecStatus::Ok)
+    status_to_u32(DieStatus::Ok)
 }
 
 /// Run an FFI function body with panic containment and error handle creation.
 pub fn ffi_wrap<T>(
-    out_error: *mut *mut DiecError,
-    body: impl FnOnce() -> Result<T, DiecStatus>,
+    out_error: *mut *mut DieError,
+    body: impl FnOnce() -> Result<T, DieStatus>,
 ) -> u32 {
     // Clear any existing error.
     if !out_error.is_null() {
@@ -131,14 +131,14 @@ pub fn ffi_wrap<T>(
     match result {
         Ok(_value) => {
             // Success - no error to set.
-            DiecStatus::Ok.into()
+            DieStatus::Ok.into()
         }
         Err(status) => {
             if !out_error.is_null() {
                 let message = status.name().to_string();
                 // SAFETY: caller guarantees out_error is valid if non-null.
                 unsafe {
-                    *out_error = Box::into_raw(Box::new(DiecError::new(status.into(), message)));
+                    *out_error = Box::into_raw(Box::new(DieError::new(status.into(), message)));
                 }
             }
             status.into()
@@ -147,9 +147,9 @@ pub fn ffi_wrap<T>(
 }
 
 /// Run an FFI function body that produces a value to write to an out parameter.
-pub fn ffi_wrap_out<T, F>(out_value: *mut *mut T, out_error: *mut *mut DiecError, body: F) -> u32
+pub fn ffi_wrap_out<T, F>(out_value: *mut *mut T, out_error: *mut *mut DieError, body: F) -> u32
 where
-    F: FnOnce() -> Result<Box<T>, DiecStatus>,
+    F: FnOnce() -> Result<Box<T>, DieStatus>,
 {
     // Clear out_error if non-null.
     if !out_error.is_null() {
@@ -176,11 +176,11 @@ where
                 unsafe {
                     *out_value = Box::into_raw(value);
                 }
-                DiecStatus::Ok.into()
+                DieStatus::Ok.into()
             } else {
                 // out_value was null but body succeeded; drop the value.
                 drop(value);
-                DiecStatus::InvalidArgument.into()
+                DieStatus::InvalidArgument.into()
             }
         }
         Err(status) => {
@@ -188,7 +188,7 @@ where
                 let message = status.name().to_string();
                 // SAFETY: caller guarantees out_error is valid if non-null.
                 unsafe {
-                    *out_error = Box::into_raw(Box::new(DiecError::new(status.into(), message)));
+                    *out_error = Box::into_raw(Box::new(DieError::new(status.into(), message)));
                 }
             }
             status.into()

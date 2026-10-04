@@ -27,21 +27,21 @@ class CStaticLinkSpikeTests(unittest.TestCase):
                 self.assertEqual(actual, expected)
 
     def test_header_constants_match_machine_baseline(self):
-        header = (SPIKE / "include" / "diec_spike.h").read_text(
+        header = (SPIKE / "include" / "die_spike.h").read_text(
             encoding="utf-8"
         )
         expected = {
-            "DIEC_SPIKE_ABI_VERSION": self.reference["abi"]["version"],
-            "DIEC_SPIKE_STATUS_OK": self.reference["abi"][
+            "DIE_SPIKE_ABI_VERSION": self.reference["abi"]["version"],
+            "DIE_SPIKE_STATUS_OK": self.reference["abi"][
                 "status_codes"
             ]["ok"],
-            "DIEC_SPIKE_STATUS_INVALID_ARGUMENT": self.reference[
+            "DIE_SPIKE_STATUS_INVALID_ARGUMENT": self.reference[
                 "abi"
             ]["status_codes"]["invalid_argument"],
-            "DIEC_SPIKE_STATUS_INPUT_TOO_LARGE": self.reference[
+            "DIE_SPIKE_STATUS_INPUT_TOO_LARGE": self.reference[
                 "abi"
             ]["status_codes"]["input_too_large"],
-            "DIEC_SPIKE_STATUS_PANIC": self.reference["abi"][
+            "DIE_SPIKE_STATUS_PANIC": self.reference["abi"][
                 "status_codes"
             ]["panic"],
         }
@@ -55,7 +55,7 @@ class CStaticLinkSpikeTests(unittest.TestCase):
                 self.assertEqual(int(match.group(1)), value)
 
         max_input = re.search(
-            r"#define DIEC_SPIKE_MAX_INPUT_BYTES UINT64_C\((\d+)\)",
+            r"#define DIE_SPIKE_MAX_INPUT_BYTES UINT64_C\((\d+)\)",
             header,
         )
         self.assertIsNotNone(max_input)
@@ -65,7 +65,7 @@ class CStaticLinkSpikeTests(unittest.TestCase):
         )
 
     def test_exports_exist_in_header_and_rust_source(self):
-        header = (SPIKE / "include" / "diec_spike.h").read_text(
+        header = (SPIKE / "include" / "die_spike.h").read_text(
             encoding="utf-8"
         )
         rust = (SPIKE / "src" / "lib.rs").read_text(encoding="utf-8")

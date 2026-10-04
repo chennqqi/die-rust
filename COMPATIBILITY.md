@@ -258,8 +258,8 @@ The `-r`/`--recursivescan` flag now matches upstream semantics:
   compatibility.
 - **`--resources`**: Scan only PE resources.
 - **`--overlays`**: Scan only PE overlay.
-- **FFI flags**: `DIEC_SCAN_FLAG_RECURSIVE` (0x80),
-  `DIEC_SCAN_FLAG_RESOURCES` (0x100), `DIEC_SCAN_FLAG_OVERLAYS` (0x200).
+- **FFI flags**: `DIE_SCAN_FLAG_RECURSIVE` (0x80),
+  `DIE_SCAN_FLAG_RESOURCES` (0x100), `DIE_SCAN_FLAG_OVERLAYS` (0x200).
 
 ### Archive Member Extraction (13.5, ADR 0029/0030)
 
@@ -277,7 +277,7 @@ scanning:
   - Compression ratio limit: 100:1
   - Member count: 20 (default), 100000 (aggressive)
 - **RAR library**: `rars` 0.6.0 (MIT/Apache-2.0, pure Rust)
-- **FFI flag**: `DIEC_SCAN_FLAG_ARCHIVES` (0x400)
+- **FFI flag**: `DIE_SCAN_FLAG_ARCHIVES` (0x400)
 
 ### Known Differences from Upstream
 

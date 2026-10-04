@@ -42,7 +42,7 @@ occurrence comes from the more specific format group (e.g., "MSDOS" before
 
 **Flag propagation**: The `no_dedup` flag is propagated through all 6 layers:
 `ScanFlags` (engine) → `dedup_detections` (scanner) → `--no-dedup` (CLI) →
-`DIEC_SCAN_FLAG_NO_DEDUP = 0x40` (FFI C ABI) → `ScanFlagsRequest.no_dedup`
+`DIE_SCAN_FLAG_NO_DEDUP = 0x40` (FFI C ABI) → `ScanFlagsRequest.no_dedup`
 (server) → `ScanFlagsDto.no_dedup` (GUI).
 
 ## Alternatives Considered
@@ -68,8 +68,8 @@ occurrence comes from the more specific format group (e.g., "MSDOS" before
 - Default `--alltypes` output has fewer entries than upstream (dedup removes
   cross-group duplicates). This is an intentional quality improvement.
 - `--no-dedup` preserves upstream behavior for differential testing.
-- The FFI `DIEC_SCAN_FLAG_NO_DEDUP = 0x40` uses bit 7 (bits 1-6 are already
-  allocated: 0x01-0x20). This does not change `DiecScanOptions` struct layout
+- The FFI `DIE_SCAN_FLAG_NO_DEDUP = 0x40` uses bit 7 (bits 1-6 are already
+  allocated: 0x01-0x20). This does not change `DieScanOptions` struct layout
   or `struct_size`, maintaining ABI backward compatibility.
 - The `ScanFlags` struct gains a new `no_dedup: bool` field. Since `ScanFlags`
   is a Rust struct (not a C ABI struct), this is a source-level change with
@@ -88,5 +88,5 @@ occurrence comes from the more specific format group (e.g., "MSDOS" before
   14 fields
 - `crates/diec-engine/src/host.rs` L22-39: `ScanFlags` struct (6 fields
   before change)
-- `include/diec.h` L51-58: `DIEC_SCAN_FLAG_*` macros, bits 0x01-0x20 used
+- `include/die.h` L51-58: `DIE_SCAN_FLAG_*` macros, bits 0x01-0x20 used
 - `crates/diec-ffi/src/scan.rs` L136-159: `options_to_flags` bit mapping

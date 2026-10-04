@@ -1,20 +1,20 @@
-"""Python bindings for diec-rust via ctypes.
+"""Python bindings for die-rust via ctypes.
 
-This module wraps the C ABI defined in include/diec.h using ctypes.
+This module wraps the C ABI defined in include/die.h using ctypes.
 It provides Database, Result, and one-shot scan functions with
 automatic resource cleanup via context managers and __del__.
 
 Usage::
 
-    from diec import Database, scan_bytes
+    from die import Database, scan_bytes
 
     with Database("../../upstream/Detect-It-Easy/db") as db:
         result = scan_bytes(db, SEVEN_ZIP_HEADER)
         print(result.json)
         print(f"detections: {result.detection_count}")
 
-The shared library (diec_ffi.dll / libdiec_ffi.so / libdiec_ffi.dylib)
-must be findable via ctypes. Set DIEC_LIB_PATH or place it on PATH.
+The shared library (die_ffi.dll / libdie_ffi.so / libdie_ffi.dylib)
+must be findable via ctypes. Set DIE_LIB_PATH or place it on PATH.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ ErrorP = ctypes.c_void_p
 
 
 class ScanOptions(Structure):
-    """C-compatible scan options struct matching diec_v1_scan_options."""
+    """C-compatible scan options struct matching die_v1_scan_options."""
     _fields_ = [
         ("struct_size", c_uint32),
         ("flags", c_uint32),
@@ -97,19 +97,19 @@ class ScanOptions(Structure):
     ]
 
 
-class DiecError(Exception):
-    """Error from the diec-rust C ABI."""
+class DieError(Exception):
+    """Error from the die-rust C ABI."""
 
     def __init__(self, status: int, message: str):
         self.status = status
         self.message = message
-        super().__init__(f"diec status {status} ({STATUS_NAMES.get(status, 'UNKNOWN')}): {message}")
+        super().__init__(f"die status {status} ({STATUS_NAMES.get(status, 'UNKNOWN')}): {message}")
 
 
 def _load_library() -> ctypes.CDLL:
-    """Load the diec_ffi shared library."""
+    """Load the die_ffi shared library."""
     # Check explicit path override.
-    lib_path = os.environ.get("DIEC_LIB_PATH")
+    lib_path = os.environ.get("DIE_LIB_PATH")
     if lib_path and os.path.isfile(lib_path):
         return ctypes.CDLL(lib_path)
 
@@ -118,18 +118,18 @@ def _load_library() -> ctypes.CDLL:
     candidates = []
     if sys.platform == "win32":
         candidates = [
-            here / ".." / ".." / "target" / "release" / "diec_ffi.dll",
-            here / ".." / ".." / "target" / "debug" / "diec_ffi.dll",
+            here / ".." / ".." / "target" / "release" / "die_ffi.dll",
+            here / ".." / ".." / "target" / "debug" / "die_ffi.dll",
         ]
     elif sys.platform == "darwin":
         candidates = [
-            here / ".." / ".." / "target" / "release" / "libdiec_ffi.dylib",
-            here / ".." / ".." / "target" / "debug" / "libdiec_ffi.dylib",
+            here / ".." / ".." / "target" / "release" / "libdie_ffi.dylib",
+            here / ".." / ".." / "target" / "debug" / "libdie_ffi.dylib",
         ]
     else:
         candidates = [
-            here / ".." / ".." / "target" / "release" / "libdiec_ffi.so",
-            here / ".." / ".." / "target" / "debug" / "libdiec_ffi.so",
+            here / ".." / ".." / "target" / "release" / "libdie_ffi.so",
+            here / ".." / ".." / "target" / "debug" / "libdie_ffi.so",
         ]
 
     for c in candidates:
@@ -139,11 +139,11 @@ def _load_library() -> ctypes.CDLL:
 
     # Try system library search.
     try:
-        return ctypes.CDLL("diec_ffi")
+        return ctypes.CDLL("die_ffi")
     except OSError:
         raise RuntimeError(
-            "Cannot find diec_ffi library. Set DIEC_LIB_PATH or build with "
-            "cargo build -p diec-ffi --release"
+            "Cannot find die_ffi library. Set DIE_LIB_PATH or build with "
+            "cargo build -p die-ffi --release"
         )
 
 
@@ -151,88 +151,88 @@ _lib = _load_library()
 
 # ---- Configure function signatures ----
 
-_lib.diec_abi_version.restype = c_uint32
-_lib.diec_abi_version.argtypes = []
+_lib.die_abi_version.restype = c_uint32
+_lib.die_abi_version.argtypes = []
 
-_lib.diec_abi_is_compatible.restype = c_uint32
-_lib.diec_abi_is_compatible.argtypes = [c_uint32]
+_lib.die_abi_is_compatible.restype = c_uint32
+_lib.die_abi_is_compatible.argtypes = [c_uint32]
 
-_lib.diec_v1_status_name.restype = c_uint32
-_lib.diec_v1_status_name.argtypes = [c_uint32, POINTER(POINTER(c_uint8)), POINTER(c_uint64)]
+_lib.die_v1_status_name.restype = c_uint32
+_lib.die_v1_status_name.argtypes = [c_uint32, POINTER(POINTER(c_uint8)), POINTER(c_uint64)]
 
-_lib.diec_v1_scan_options_init.restype = c_uint32
-_lib.diec_v1_scan_options_init.argtypes = [POINTER(ScanOptions), c_uint32]
+_lib.die_v1_scan_options_init.restype = c_uint32
+_lib.die_v1_scan_options_init.argtypes = [POINTER(ScanOptions), c_uint32]
 
-_lib.diec_v1_database_builder_new.restype = c_uint32
-_lib.diec_v1_database_builder_new.argtypes = [POINTER(DatabaseBuilderP), POINTER(ErrorP)]
+_lib.die_v1_database_builder_new.restype = c_uint32
+_lib.die_v1_database_builder_new.argtypes = [POINTER(DatabaseBuilderP), POINTER(ErrorP)]
 
-_lib.diec_v1_database_builder_add_path_utf8.restype = c_uint32
-_lib.diec_v1_database_builder_add_path_utf8.argtypes = [
+_lib.die_v1_database_builder_add_path_utf8.restype = c_uint32
+_lib.die_v1_database_builder_add_path_utf8.argtypes = [
     DatabaseBuilderP, c_uint32, POINTER(c_uint8), c_uint64, c_uint32, POINTER(ErrorP),
 ]
 
-_lib.diec_v1_database_builder_build.restype = c_uint32
-_lib.diec_v1_database_builder_build.argtypes = [
+_lib.die_v1_database_builder_build.restype = c_uint32
+_lib.die_v1_database_builder_build.argtypes = [
     DatabaseBuilderP, POINTER(DatabaseP), POINTER(ErrorP),
 ]
 
-_lib.diec_v1_database_builder_free.restype = c_uint32
-_lib.diec_v1_database_builder_free.argtypes = [POINTER(DatabaseBuilderP)]
+_lib.die_v1_database_builder_free.restype = c_uint32
+_lib.die_v1_database_builder_free.argtypes = [POINTER(DatabaseBuilderP)]
 
-_lib.diec_v1_database_free.restype = c_uint32
-_lib.diec_v1_database_free.argtypes = [POINTER(DatabaseP)]
+_lib.die_v1_database_free.restype = c_uint32
+_lib.die_v1_database_free.argtypes = [POINTER(DatabaseP)]
 
-_lib.diec_v1_scan_bytes.restype = c_uint32
-_lib.diec_v1_scan_bytes.argtypes = [
+_lib.die_v1_scan_bytes.restype = c_uint32
+_lib.die_v1_scan_bytes.argtypes = [
     DatabaseP, POINTER(c_uint8), c_uint64, POINTER(ScanOptions), CancelP,
     POINTER(ResultP), POINTER(ErrorP),
 ]
 
-_lib.diec_v1_scan_path_utf8.restype = c_uint32
-_lib.diec_v1_scan_path_utf8.argtypes = [
+_lib.die_v1_scan_path_utf8.restype = c_uint32
+_lib.die_v1_scan_path_utf8.argtypes = [
     DatabaseP, POINTER(c_uint8), c_uint64, POINTER(ScanOptions), CancelP,
     POINTER(ResultP), POINTER(ErrorP),
 ]
 
-_lib.diec_v1_result_json.restype = c_uint32
-_lib.diec_v1_result_json.argtypes = [ResultP, POINTER(POINTER(c_uint8)), POINTER(c_uint64)]
+_lib.die_v1_result_json.restype = c_uint32
+_lib.die_v1_result_json.argtypes = [ResultP, POINTER(POINTER(c_uint8)), POINTER(c_uint64)]
 
-_lib.diec_v1_result_path_utf8.restype = c_uint32
-_lib.diec_v1_result_path_utf8.argtypes = [ResultP, POINTER(POINTER(c_uint8)), POINTER(c_uint64)]
+_lib.die_v1_result_path_utf8.restype = c_uint32
+_lib.die_v1_result_path_utf8.argtypes = [ResultP, POINTER(POINTER(c_uint8)), POINTER(c_uint64)]
 
-_lib.diec_v1_result_detection_count.restype = c_uint32
-_lib.diec_v1_result_detection_count.argtypes = [ResultP, POINTER(c_uint64)]
+_lib.die_v1_result_detection_count.restype = c_uint32
+_lib.die_v1_result_detection_count.argtypes = [ResultP, POINTER(c_uint64)]
 
-_lib.diec_v1_result_free.restype = c_uint32
-_lib.diec_v1_result_free.argtypes = [POINTER(ResultP)]
+_lib.die_v1_result_free.restype = c_uint32
+_lib.die_v1_result_free.argtypes = [POINTER(ResultP)]
 
 # Reusable scanner functions.
-_lib.diec_v1_scanner_new.restype = c_uint32
-_lib.diec_v1_scanner_new.argtypes = [DatabaseP, POINTER(ScannerP), POINTER(ErrorP)]
+_lib.die_v1_scanner_new.restype = c_uint32
+_lib.die_v1_scanner_new.argtypes = [DatabaseP, POINTER(ScannerP), POINTER(ErrorP)]
 
-_lib.diec_v1_scanner_scan_bytes.restype = c_uint32
-_lib.diec_v1_scanner_scan_bytes.argtypes = [
+_lib.die_v1_scanner_scan_bytes.restype = c_uint32
+_lib.die_v1_scanner_scan_bytes.argtypes = [
     ScannerP, POINTER(c_uint8), c_uint64, POINTER(ScanOptions), CancelP,
     POINTER(ResultP), POINTER(ErrorP),
 ]
 
-_lib.diec_v1_scanner_scan_path_utf8.restype = c_uint32
-_lib.diec_v1_scanner_scan_path_utf8.argtypes = [
+_lib.die_v1_scanner_scan_path_utf8.restype = c_uint32
+_lib.die_v1_scanner_scan_path_utf8.argtypes = [
     ScannerP, POINTER(c_uint8), c_uint64, POINTER(ScanOptions), CancelP,
     POINTER(ResultP), POINTER(ErrorP),
 ]
 
-_lib.diec_v1_scanner_free.restype = c_uint32
-_lib.diec_v1_scanner_free.argtypes = [POINTER(ScannerP)]
+_lib.die_v1_scanner_free.restype = c_uint32
+_lib.die_v1_scanner_free.argtypes = [POINTER(ScannerP)]
 
-_lib.diec_v1_error_status.restype = c_uint32
-_lib.diec_v1_error_status.argtypes = [ErrorP, POINTER(c_uint32)]
+_lib.die_v1_error_status.restype = c_uint32
+_lib.die_v1_error_status.argtypes = [ErrorP, POINTER(c_uint32)]
 
-_lib.diec_v1_error_message.restype = c_uint32
-_lib.diec_v1_error_message.argtypes = [ErrorP, POINTER(POINTER(c_uint8)), POINTER(c_uint64)]
+_lib.die_v1_error_message.restype = c_uint32
+_lib.die_v1_error_message.argtypes = [ErrorP, POINTER(POINTER(c_uint8)), POINTER(c_uint64)]
 
-_lib.diec_v1_error_free.restype = c_uint32
-_lib.diec_v1_error_free.argtypes = [POINTER(ErrorP)]
+_lib.die_v1_error_free.restype = c_uint32
+_lib.die_v1_error_free.argtypes = [POINTER(ErrorP)]
 
 
 def _consume_error(err: ErrorP) -> None:
@@ -240,15 +240,15 @@ def _consume_error(err: ErrorP) -> None:
     if not err:
         return
     status = c_uint32(0)
-    _lib.diec_v1_error_status(err, byref(status))
+    _lib.die_v1_error_status(err, byref(status))
     msg_ptr = POINTER(c_uint8)()
     msg_len = c_uint64(0)
-    _lib.diec_v1_error_message(err, byref(msg_ptr), byref(msg_len))
+    _lib.die_v1_error_message(err, byref(msg_ptr), byref(msg_len))
     message = ""
     if msg_ptr and msg_len.value > 0:
         message = ctypes.string_at(msg_ptr, msg_len.value).decode("utf-8", errors="replace")
-    _lib.diec_v1_error_free(byref(err))
-    raise DiecError(status.value, message)
+    _lib.die_v1_error_free(byref(err))
+    raise DieError(status.value, message)
 
 
 def _byte_view_to_str(ptr, length: int) -> str:
@@ -276,7 +276,7 @@ class Database:
     def close(self) -> None:
         """Release the database handle."""
         if self._handle:
-            _lib.diec_v1_database_free(byref(self._handle))
+            _lib.die_v1_database_free(byref(self._handle))
             self._handle = None
 
     @classmethod
@@ -284,27 +284,27 @@ class Database:
         """Build a database from a directory path."""
         builder = DatabaseBuilderP()
         err = ErrorP()
-        status = _lib.diec_v1_database_builder_new(byref(builder), byref(err))
+        status = _lib.die_v1_database_builder_new(byref(builder), byref(err))
         if status != STATUS_OK:
             _consume_error(err)
-            raise DiecError(status, "builder_new failed")
+            raise DieError(status, "builder_new failed")
 
         path_bytes = path.encode("utf-8")
         buf = (c_uint8 * len(path_bytes))(*path_bytes)
-        status = _lib.diec_v1_database_builder_add_path_utf8(
+        status = _lib.die_v1_database_builder_add_path_utf8(
             builder, DATABASE_KIND_MAIN, buf, len(path_bytes), 0, byref(err)
         )
         if status != STATUS_OK:
-            _lib.diec_v1_database_builder_free(byref(builder))
+            _lib.die_v1_database_builder_free(byref(builder))
             _consume_error(err)
-            raise DiecError(status, "add_path failed")
+            raise DieError(status, "add_path failed")
 
         db = DatabaseP()
-        status = _lib.diec_v1_database_builder_build(builder, byref(db), byref(err))
-        _lib.diec_v1_database_builder_free(byref(builder))
+        status = _lib.die_v1_database_builder_build(builder, byref(db), byref(err))
+        _lib.die_v1_database_builder_free(byref(builder))
         if status != STATUS_OK:
             _consume_error(err)
-            raise DiecError(status, "build failed")
+            raise DieError(status, "build failed")
 
         return cls(db.value)
 
@@ -352,7 +352,7 @@ class Scanner:
     def close(self) -> None:
         """Release the scanner handle."""
         if self._handle:
-            _lib.diec_v1_scanner_free(byref(self._handle))
+            _lib.die_v1_scanner_free(byref(self._handle))
             self._handle = None
 
     @classmethod
@@ -360,10 +360,10 @@ class Scanner:
         """Create a reusable scanner from a database."""
         scanner = ScannerP()
         err = ErrorP()
-        status = _lib.diec_v1_scanner_new(db.handle, byref(scanner), byref(err))
+        status = _lib.die_v1_scanner_new(db.handle, byref(scanner), byref(err))
         if status != STATUS_OK:
             _consume_error(err)
-            raise DiecError(status, "scanner_new failed")
+            raise DieError(status, "scanner_new failed")
         return cls(scanner.value)
 
     def scan_bytes(self, data: bytes, flags: int = 0) -> Result:
@@ -373,12 +373,12 @@ class Scanner:
         buf = (c_uint8 * len(data))(*data) if data else None
         result = ResultP()
         err = ErrorP()
-        status = _lib.diec_v1_scanner_scan_bytes(
+        status = _lib.die_v1_scanner_scan_bytes(
             self._handle, buf, len(data), opts_ptr, None, byref(result), byref(err)
         )
         if status != STATUS_OK:
             _consume_error(err)
-            raise DiecError(status, "scanner_scan_bytes failed")
+            raise DieError(status, "scanner_scan_bytes failed")
         return Result(result.value)
 
     def scan_path(self, path: str, flags: int = 0) -> Result:
@@ -389,12 +389,12 @@ class Scanner:
         buf = (c_uint8 * len(path_bytes))(*path_bytes)
         result = ResultP()
         err = ErrorP()
-        status = _lib.diec_v1_scanner_scan_path_utf8(
+        status = _lib.die_v1_scanner_scan_path_utf8(
             self._handle, buf, len(path_bytes), opts_ptr, None, byref(result), byref(err)
         )
         if status != STATUS_OK:
             _consume_error(err)
-            raise DiecError(status, "scanner_scan_path failed")
+            raise DieError(status, "scanner_scan_path failed")
         return Result(result.value)
 
 
@@ -416,7 +416,7 @@ class Result:
     def close(self) -> None:
         """Release the result handle."""
         if self._handle:
-            _lib.diec_v1_result_free(byref(self._handle))
+            _lib.die_v1_result_free(byref(self._handle))
             self._handle = None
 
     @property
@@ -424,7 +424,7 @@ class Result:
         """Canonical JSON representation."""
         ptr = POINTER(c_uint8)()
         length = c_uint64(0)
-        _lib.diec_v1_result_json(self._handle, byref(ptr), byref(length))
+        _lib.die_v1_result_json(self._handle, byref(ptr), byref(length))
         return _byte_view_to_str(ptr, length.value)
 
     @property
@@ -432,14 +432,14 @@ class Result:
         """Scanned file path."""
         ptr = POINTER(c_uint8)()
         length = c_uint64(0)
-        _lib.diec_v1_result_path_utf8(self._handle, byref(ptr), byref(length))
+        _lib.die_v1_result_path_utf8(self._handle, byref(ptr), byref(length))
         return _byte_view_to_str(ptr, length.value)
 
     @property
     def detection_count(self) -> int:
         """Number of detections."""
         count = c_uint64(0)
-        _lib.diec_v1_result_detection_count(self._handle, byref(count))
+        _lib.die_v1_result_detection_count(self._handle, byref(count))
         return count.value
 
 
@@ -448,7 +448,7 @@ def _make_options(flags: int) -> Optional[ScanOptions]:
     if flags == 0:
         return None
     opts = ScanOptions()
-    _lib.diec_v1_scan_options_init(byref(opts), ctypes.sizeof(ScanOptions))
+    _lib.die_v1_scan_options_init(byref(opts), ctypes.sizeof(ScanOptions))
     opts.flags = flags
     return opts
 
@@ -460,12 +460,12 @@ def scan_bytes(db: Database, data: bytes, flags: int = 0) -> Result:
     buf = (c_uint8 * len(data))(*data) if data else None
     result = ResultP()
     err = ErrorP()
-    status = _lib.diec_v1_scan_bytes(
+    status = _lib.die_v1_scan_bytes(
         db.handle, buf, len(data), opts_ptr, None, byref(result), byref(err)
     )
     if status != STATUS_OK:
         _consume_error(err)
-        raise DiecError(status, "scan_bytes failed")
+        raise DieError(status, "scan_bytes failed")
     return Result(result.value)
 
 
@@ -477,28 +477,28 @@ def scan_path(db: Database, path: str, flags: int = 0) -> Result:
     buf = (c_uint8 * len(path_bytes))(*path_bytes)
     result = ResultP()
     err = ErrorP()
-    status = _lib.diec_v1_scan_path_utf8(
+    status = _lib.die_v1_scan_path_utf8(
         db.handle, buf, len(path_bytes), opts_ptr, None, byref(result), byref(err)
     )
     if status != STATUS_OK:
         _consume_error(err)
-        raise DiecError(status, "scan_path failed")
+        raise DieError(status, "scan_path failed")
     return Result(result.value)
 
 
 def abi_version() -> int:
     """Get the library ABI version."""
-    return _lib.diec_abi_version()
+    return _lib.die_abi_version()
 
 
 def abi_compatible(requested: int) -> bool:
     """Check ABI compatibility."""
-    return _lib.diec_abi_is_compatible(requested) != 0
+    return _lib.die_abi_is_compatible(requested) != 0
 
 
 def status_name(status: int) -> str:
     """Get the name string for a status code."""
     ptr = POINTER(c_uint8)()
     length = c_uint64(0)
-    _lib.diec_v1_status_name(status, byref(ptr), byref(length))
+    _lib.die_v1_status_name(status, byref(ptr), byref(length))
     return _byte_view_to_str(ptr, length.value)

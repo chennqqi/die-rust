@@ -100,16 +100,16 @@ class RquickjsStaticLinkSpikeTests(unittest.TestCase):
 
     def test_header_constants_and_exports_match_rust(self):
         header = (
-            SPIKE / "include" / "diec_rquickjs_spike.h"
+            SPIKE / "include" / "die_rquickjs_spike.h"
         ).read_text(encoding="utf-8")
         rust = (SPIKE / "src" / "lib.rs").read_text(
             encoding="utf-8"
         )
         statuses = {
-            "DIEC_RQUICKJS_SPIKE_STATUS_OK": 0,
-            "DIEC_RQUICKJS_SPIKE_STATUS_INVALID_ARGUMENT": 1,
-            "DIEC_RQUICKJS_SPIKE_STATUS_RUNTIME_ERROR": 2,
-            "DIEC_RQUICKJS_SPIKE_STATUS_PANIC": 3,
+            "DIE_RQUICKJS_SPIKE_STATUS_OK": 0,
+            "DIE_RQUICKJS_SPIKE_STATUS_INVALID_ARGUMENT": 1,
+            "DIE_RQUICKJS_SPIKE_STATUS_RUNTIME_ERROR": 2,
+            "DIE_RQUICKJS_SPIKE_STATUS_PANIC": 3,
         }
         for name, expected in statuses.items():
             match = re.search(
@@ -120,8 +120,8 @@ class RquickjsStaticLinkSpikeTests(unittest.TestCase):
             self.assertEqual(int(match.group(1)), expected)
 
         for symbol in (
-            "diec_rquickjs_spike_eval",
-            "diec_rquickjs_spike_force_panic",
+            "die_rquickjs_spike_eval",
+            "die_rquickjs_spike_force_panic",
         ):
             self.assertIn(symbol, header)
             self.assertIn(f"fn {symbol}", rust)

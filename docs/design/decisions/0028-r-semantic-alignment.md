@@ -85,8 +85,8 @@ Align `-r`/`--recursivescan` with upstream semantics:
   `overlays`). Since `ScanFlags` is a Rust struct (not C ABI), this is a
   source-level change. All callers use `#[derive(Default)]` which initializes
   to `false`.
-- The FFI `DiecScanOptions` struct may need new bit flags for
-  `DIEC_SCAN_FLAG_RECURSIVE` and `DIEC_SCAN_FLAG_RECURSIVE_DIR`. These use
+- The FFI `DieScanOptions` struct may need new bit flags for
+  `DIE_SCAN_FLAG_RECURSIVE` and `DIE_SCAN_FLAG_RECURSIVE_DIR`. These use
   available bits (0x80 and beyond), maintaining ABI backward compatibility.
 - Differential testing of `-r` on the 8 nested corpus samples will now match
   upstream output.
