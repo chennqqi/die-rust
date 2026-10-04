@@ -80,7 +80,7 @@ impl<'a> X86<'a> {
             let index = index_field as i32 + if dec.rex_x { 8 } else { 0 };
             let base = (sib & 7) as i32 + if dec.rex_b { 8 } else { 0 };
 
-            if !(index_field == 4 && !dec.rex_x) {
+            if index_field != 4 || dec.rex_x {
                 // index == RSP without REX.X means "no index".
                 rm.index_reg = index;
                 rm.scale = scale;

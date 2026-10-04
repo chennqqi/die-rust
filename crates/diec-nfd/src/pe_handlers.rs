@@ -2912,7 +2912,7 @@ pub fn installers(
     // ---- Windows Installer (MSI overlay / embedded CFBF) ----
     if overlay.contains_key(&n::RECORD_NAME_MICROSOFTCOMPOUND) && pe.overlay_offset >= 0 {
         let (v, inf, ok) = windows_installer_vi(d, pe.overlay_offset as usize, pe.overlay_size);
-        if ok && !v.is_empty() || ok && !inf.is_empty() {
+        if ok && (!v.is_empty() || !inf.is_empty()) {
             emit(
                 misc,
                 ftpe,

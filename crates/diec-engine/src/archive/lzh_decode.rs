@@ -791,9 +791,12 @@ impl<'a> State<'a> {
                             return 100;
                         }
                         let lt_max = self.lt.max_bits;
-                        if !(br.cache_avail >= lt_max
-                            || self.br_fillup_bre(&mut br)
-                            || br.cache_avail >= lt_max)
+                        // Re-check cache_avail after fillup: fillup mutates br.
+                        let avail = br.cache_avail >= lt_max || {
+                            self.br_fillup_bre(&mut br);
+                            br.cache_avail >= lt_max
+                        };
+                        if !avail
                         {
                             if !last {
                                 next_data!(ST_GET_LITERAL);
@@ -826,9 +829,11 @@ impl<'a> State<'a> {
                 }
                 ST_GET_POS_1 => {
                     let pt_max = self.pt.max_bits;
-                    if !(br.cache_avail >= pt_max
-                        || self.br_fillup_bre(&mut br)
-                        || br.cache_avail >= pt_max)
+                    let avail = br.cache_avail >= pt_max || {
+                        self.br_fillup_bre(&mut br);
+                        br.cache_avail >= pt_max
+                    };
+                    if !avail
                     {
                         if !last {
                             self.copy_len = copy_len;
@@ -853,9 +858,11 @@ impl<'a> State<'a> {
                         if !Self::bit_count_valid(p) {
                             failed!();
                         }
-                        if !(br.cache_avail >= p
-                            || self.br_fillup_bre(&mut br)
-                            || br.cache_avail >= p)
+                        let avail = br.cache_avail >= p || {
+                            self.br_fillup_bre(&mut br);
+                            br.cache_avail >= p
+                        };
+                        if !avail
                         {
                             if last {
                                 failed!();

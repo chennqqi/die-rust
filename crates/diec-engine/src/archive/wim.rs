@@ -1106,7 +1106,7 @@ fn collect(d: &[u8]) -> Option<Collected> {
             return None;
         }
         let digest_matches = s.hash.len() == HASH_SIZE && sha1(&blob) == s.hash;
-        if !digest_matches && !(legacy && is_empty_hash(&s.hash)) {
+        if !(digest_matches || legacy && is_empty_hash(&s.hash)) {
             return None;
         }
         let (records, (hr, ir)) = parse_metadata(&blob, &h, &by_hash, &by_id)?;
