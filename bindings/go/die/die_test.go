@@ -90,8 +90,8 @@ func TestScanPath(t *testing.T) {
 	defer result.Close()
 
 	json := result.JSON()
-	if !strings.Contains(json, "Zip") {
-		t.Errorf("JSON does not contain Zip: %s", json)
+	if !strings.Contains(json, `"file_type":"ZIP"`) {
+		t.Errorf("JSON does not contain file_type ZIP: %s", json)
 	}
 }
 
@@ -171,7 +171,7 @@ func TestReusableScannerScanPath(t *testing.T) {
 	defer result.Close()
 
 	json := result.JSON()
-	if !strings.Contains(json, "Zip") {
-		t.Errorf("reusable scanner ScanPath JSON does not contain Zip: %s", json)
+	if !strings.Contains(json, `"file_type":"ZIP"`) {
+		t.Errorf("reusable scanner ScanPath JSON does not contain file_type ZIP: %s", json)
 	}
 }
