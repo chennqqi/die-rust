@@ -1496,3 +1496,9 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   - 根因 A：MSRV 1.88 clippy `nonminimal_bool` ×8（pe_handlers/lzh_decode/wim/x86 decode），1.97 不报。已修并本地 1.88 验证。
   - 根因 B：windows-2022 默认 `core.autocrlf=true` 把 `corpus/extract/*` 文本快照转成 CRLF，secondary_archives 15 个 extract-parity 测试字节比对失败。本地 autocrlf clone 复现；`.gitattributes` 标 `corpus/** -text` 修复并验证全绿。
   - 残余疑点：`default (windows-2022)` 的 `cargo test` 报 exit 127（非 101），疑与 die-gui test exe 相关，待新 CI run 确认。
+
+- 2026-10-04: 用户指示"配置 LF，禁止 CRLF"。
+  - `.gitattributes`: `* text=auto eol=lf`（自有文件强制 LF）+ `corpus/** -text` + `upstream/** -text`（字节冻结）。
+  - `upstream/Detect-It-Easy/.gitattributes` 的 `* text=auto` 改为 `* -text`（深层 attrs 覆盖根规则，不改则 .sg 会被归一 LF、破坏 manifest sha256）。
+  - `git add --renormalize`：31 个自有 CRLF 文件归一 LF（workflows/3 个 .rs/docs/JSON），upstream 全部撤回。
+  - autocrlf clone 验证：自有文件 LF、corpus LF、upstream .sg 保持 CRLF、manifest 4698/4698 MATCH、全套件 0 失败。
