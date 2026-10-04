@@ -796,8 +796,7 @@ impl<'a> State<'a> {
                             self.br_fillup_bre(&mut br);
                             br.cache_avail >= lt_max
                         };
-                        if !avail
-                        {
+                        if !avail {
                             if !last {
                                 next_data!(ST_GET_LITERAL);
                             }
@@ -833,8 +832,7 @@ impl<'a> State<'a> {
                         self.br_fillup_bre(&mut br);
                         br.cache_avail >= pt_max
                     };
-                    if !avail
-                    {
+                    if !avail {
                         if !last {
                             self.copy_len = copy_len;
                             next_data!(ST_GET_POS_1);
@@ -862,8 +860,7 @@ impl<'a> State<'a> {
                             self.br_fillup_bre(&mut br);
                             br.cache_avail >= p
                         };
-                        if !avail
-                        {
+                        if !avail {
                             if last {
                                 failed!();
                             }
