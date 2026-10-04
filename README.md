@@ -17,6 +17,16 @@ Aim for compatibility with upstream DIE — same detection capabilities,
 same rule semantics, same output formats — with Rust's memory safety and
 multi-language bindings.
 
+## Project Principles
+
+- **AI-developed, AI-tested**: this project is built and tested by AI.
+  No manual testing is promised; bug reports are welcome.
+- **Best-effort compatibility**: 1:1 behavioral parity with upstream DIE
+  is not guaranteed, but compatibility is a primary goal.
+- **Selective PRs**: pull requests are not guaranteed to be accepted; by
+  default only changes that align the project with upstream features
+  are merged.
+
 ## Key Points
 
 - **DIE compatibility**: loads upstream rules verbatim via the rquickjs

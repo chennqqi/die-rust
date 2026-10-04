@@ -1534,3 +1534,4 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   规模修正（diec 出现 1005 处而非 ~170）、lockfile 时序、updater
   兼容断点显式声明、验证清单补 xtask/metadata diff/反向检查。
 - 2026-10-04: 按 rename-die-rust.md v3 实施 diec-rust → die-rust 三步改名（crate/ABI+绑定/项目身份），保留 diec CLI 名与 .diec.json 读兼容
+- 2026-10-04: README 双语新增'项目原则'声明（AI开发测试/尽力兼容/选择性PR）
