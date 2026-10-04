@@ -194,11 +194,18 @@ mod tests {
     use super::*;
 
     fn temp_file(data: &[u8]) -> String {
+        // Atomic sequence alongside the timestamp: Windows SystemTime only has
+        // ~15.6ms granularity, so parallel tests can draw identical nanos and
+        // collide on the same path (another test's cleanup then deletes the
+        // file mid-test).
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let p = std::env::temp_dir().join(format!("die_ann_{}_{}", std::process::id(), nanos));
+        let p =
+            std::env::temp_dir().join(format!("die_ann_{}_{}_{}", std::process::id(), nanos, seq));
         std::fs::write(&p, data).unwrap();
         // Clean up a stale sidecar from a previous run.
         let _ = std::fs::remove_file(sidecar_path(p.to_str().unwrap()));
