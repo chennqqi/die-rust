@@ -22,3 +22,12 @@ ADR 0042 剩余 Conditional 项 = Phase 48（Tauri 自动更新）+ Phase 49
 
 - `updater_flow.rs` 5/5；前端 tsc/build 通过；i18n 24×279 键全过
 - 文档：ADR 0019 修订节、ADR 0042 状态表、ROADMAP、COMPATIBILITY
+
+## XEmulator 性质确认（Blocked 项后续）
+
+克隆 horsicq/XEmulator HEAD（b42b5f2，2026-09-25）：为 Qt/C++
+库（xemuemulator 外观 + arch/os/format 三层），无 .pro 可执行目标；
+上游 `xstaticunpacker.pri` 以 INCLUDEPATH+SOURCES 方式源码内嵌，
+仅取 x86 核心（xemux86/memmgr/registers ≈6.9 kLOC）。XStaticUnpacker
+pin 日期 2026-09-22 与其同期 → 判定为 DIE 组件库，按用户规则立项
+Phase 50。上游调用点已自带步数/陷阱边界，安全设计镜像即可。

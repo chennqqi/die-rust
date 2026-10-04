@@ -38,17 +38,31 @@ explicit unblocking condition.
 | 1 | Archive safety bounds (ADR 0030) | 128 MiB member / 512 MiB total / 100:1 ratio / 20-or-100000 members / depth 32, fail-closed | No size/ratio limits; member-count and loop caps only | **Permanent** (safety hardening) | Only via a new ADR introducing an explicit opt-out flag; safe defaults must remain |
 | 2 | XStyles theme ecosystem | CSS-variable themes: light/dark/system + 6 XStyles-derived palettes + custom overrides | Qt QSS style sheets (XStyles pin `948dd85`) | **Permanent** platform difference; Tauri-native theme set delivered → Phase 49 ✅ | Delivered 2026-10-12: representative palettes only, not QSS-selector equivalence |
 | 3 | i18n coverage (ADR 0038) | 5 validated locales × 269 keys (en, zh-CN, ru, de, fr) | 22 Qt `.ts` catalogs + 24 XTranslation `.po` terminology dictionaries | **Scheduled** → Phase 45 (terminology-anchored drafts + validation tooling) | — |
-| 4 | InstallSimple static unpacker | Not implemented | `xinstallsimple.cpp` wholly inside `#ifdef USE_XEMULATOR`; XEmulator absent from pin | **Blocked** | Pin horsicq/XEmulator at a fixed SHA as an external oracle source + reproducible build + security review of the sandboxed-execution semantics |
+| 4 | InstallSimple static unpacker | Not implemented | `xinstallsimple.cpp` wholly inside `#ifdef USE_XEMULATOR`; XEmulator is a horsicq source library (not an app) referenced as sibling checkout, absent from pin | **Scheduled** → Phase 50 | Pin XEmulator at a fixed SHA as tools-only oracle + bounded-emulator safety review |
 | 5 | Tauri auto-update (ADR 0019) | Implemented (`tauri-plugin-updater` + dev-signed test fixtures) | Upstream XUpdate/XOnlineTools unchecked-out Qt components; not on the diec console path | Code delivered → Phase 48 ✅; production key/endpoint/CI signing remains a **Conditional** deployment decision | Dev fixture keys in `corpus/updater` must never sign releases |
 | 6 | RNC old-variant / encrypted-stream corpora | Generators emit oracle-accepted old-variant and locked streams (Phase 47) | Same code path; upstream also lacks bundled samples | **DONE** → Phase 47 | — |
 | 7 | Windows shell context menu | `add_context_menu`/`remove_context_menu`/`get_context_menu_status`, Windows registry only | `XOptions::registerContext` is `#ifdef Q_OS_WIN` — Windows-only upstream | **Parity** (was misclassified as a gap). No action. | If Linux/macOS shell integration is ever requested it is a new product feature, not a parity item |
 | 8 | NFD/SpecAbstract remaining scope (ADR 0035) | All `getInfo` drivers and nearly all `handle_*` chains ported (Phases 21–23). Residual: `handle_PolyMorph` (nfd_pe.cpp:8283 call site) and ZIP-family member handlers `handle_Metainfos`/`handle_Microsoftoffice`/`handle_OpenOffice`/`handle_JAR`/`handle_IPA` (`promote.rs` "Phase 23.C pending"). `handle_AnslymPacker` is commented-out dead code upstream — parity, not a gap | Full SpecAbstract (pinned `5188e04`, checked out) | **Scheduled** → Phase 46 | — |
-| 9 | XStaticUnpacker packers (ADR 0036) | All non-emulator modules ported with oracle-verified parity: UPX (Phase 20), MEW/Petite/yoda/ASPack/NsPack (Phases 26–27), AutoIt/EnigmaVB/BoxedApp (Phase 28) | 10 modules; XEmulator needed only by xinstallsimple and the emulator fallback branches of xaspack/xpetite | **Complete** except: InstallSimple + ASPack/Petite emulator branches → **Blocked** (same XEmulator condition as item 4) | — |
+| 9 | XStaticUnpacker packers (ADR 0036) | All non-emulator modules ported with oracle-verified parity: UPX (Phase 20), MEW/Petite/yoda/ASPack/NsPack (Phases 26–27), AutoIt/EnigmaVB/BoxedApp (Phase 28) | 10 modules; XEmulator needed only by xinstallsimple and the emulator fallback branches of xaspack/xpetite | **Complete** except: InstallSimple + ASPack/Petite emulator branches → **Scheduled** with item 4 → Phase 50 | — |
 | 10 | InfoDB storage format (ADR 0037) | Sidecar JSON `<file>.diec.json` (Phase 19) | SQLite InfoDB | **Permanent** product difference (functionally delivered; no SQLite dependency) | — |
 | 11 | TLSH (ADR 0039) | SSDeep implemented clean-room (Phase 38, ppdeep oracle); TLSH not implemented | Pin baseline has neither (XHashWidget `291e3ef6` lacks both) | **Conditional** | A maintained pure-Rust TLSH implementation or an in-tree port with an independent oracle |
 | 12 | Vendored rule DB vs upstream submodule drift | Vendored `db/`/`db_extra/` snapshot; 10 rules still call upstream-removed `PE.isNET` (alias added to keep them working) | Upstream `db` submodule at a newer pin | **Conditional** maintenance task | Re-sync vendored DB to the pinned submodule SHA, then remove the `PE.isNET` compat alias |
 
-### Scheduled phases (Phase 45–47)
+### Scheduled phases (Phase 45–47, Phase 50)
+
+- **Phase 50**: XEmulator x86-core subset port + InstallSimple +
+  ASPack 2.11/Petite emulator branches (items 4, 9) — scheduled
+  2026-10-12 after confirming XEmulator is a source library in the
+  horsicq component family, not a standalone app. Sub-steps:
+  (a) pin horsicq/XEmulator at a SHA contemporary with the
+  XStaticUnpacker pin and build a tools-only Qt oracle driving the
+  three call sites; (b) port the ~6.9 kLOC x86 core (`xemux86` +
+  memory manager + registers) as a bounded emulator — mapped-memory
+  only, upstream step caps (`pnStepsRemaining`,
+  `IS_CANCEL_CHECK_STEPS`, `STEP_HALT` traps) mirrored, fail-closed
+  on unmapped access/invalid opcodes — plus `xinstallsimple.cpp`,
+  the two ASPack 2.11 layout rows and the xpetite emulator
+  branches; (c) oracle differential + regression tests + docs.
 
 - **Phase 45**: i18n terminology-anchored bulk drafts + validation
   tooling (item 3).
@@ -93,7 +107,14 @@ to `tools/` oracle harnesses — never a Rust crate dependency.
   without a trigger or phase number is no longer an acceptable status.
 - Items 1, 2, 7, 10 are closed decisions — listed so they are not
   re-litigated.
-- Item 4 stays blocked: no half-port of `xinstallsimple.cpp` without
-  the emulator source, and no fabricated oracle output.
+- Item 4 was reclassified Blocked → Scheduled (Phase 50, 2026-10-12)
+  after verifying XEmulator is a horsicq library component — the same
+  category as the other pinned `dep/` sources — not a standalone app:
+  the needed subset is the x86 core only (~6.9 kLOC: `xemux86`,
+  `xemumemorymanager`, `xemuregisters`), the OS/syscall layers are
+  unused by XStaticUnpacker, and upstream call sites already bound
+  execution (`pnStepsRemaining`, `IS_CANCEL_CHECK_STEPS`,
+  `STEP_HALT` trap addresses). Still no half-port and no fabricated
+  oracle output.
 - Item 12 is a small housekeeping task folded into the next
   rules-touching phase rather than its own phase.

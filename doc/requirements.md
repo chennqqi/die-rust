@@ -1440,3 +1440,11 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   `ViewSettings.custom_theme` 白名单变量覆盖持久化 + 两处设置
   UI 同步 + 语言下拉动态化补漏。
 - 文档：ADR 0019/0042、ROADMAP、COMPATIBILITY 同步。
+
+### 2026-10-12：XEmulator 性质确认 + Blocked 项重分类
+
+- 用户裁定：XEmulator 若为独立 EXE/APP 则暂停；若为 DIE 组件库则
+  立项。核实为后者（horsicq 库家族，xstaticunpacker.pri 以兄弟目录
+  源码编译方式引用，仅需 x86 核心 ≈6.9k 行）。
+- ADR 0042 #4/#9：Blocked → Scheduled → Phase 50
+  （oracle pin + 有界模拟器移植 + 三个调用点）。

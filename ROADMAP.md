@@ -2231,10 +2231,10 @@ name/size/packed/dir/mtime + 提取字节 parity；上游提取失败的
 ### 不立项项（分类见 ADR 0042；触发后重议）
 
 - **InstallSimple 静态解包**：上游 `xinstallsimple.cpp` 整体在
-  `USE_XEMULATOR` 内，XEmulator 既不是 submodule 也未检入
-  pin 树——无源码可移植、无 oracle 可验证。**Blocked**（ADR 0042
-  #4）：解除条件为独立 pin horsicq/XEmulator 源 + 可复现 oracle
-  构建 + 沙盒执行安全评审。
+  `USE_XEMULATOR` 内，XEmulator 不在 pin 基线但已证实为
+  horsicq 库组件（非独立 app）——**Blocked → Scheduled**
+  （ADR 0042 #4），Phase 50 立项：pin XEmulator 为 tools-only
+  oracle + 有界模拟器移植。
 - **tauri 自动更新**（ADR 0019）：代码侧已交付（Phase 48 ✅）；
   生产签名密钥/更新服务器/CI 签名管线仍属产品/分发决策，
   dev fixture 密钥不可用于发布。
@@ -2533,9 +2533,17 @@ Windows-only 实为 parity（上游 `registerContext` 同样
   必须新 ADR + 显式 opt-out，默认不变）；InfoDB 侧车 JSON
   存储格式（ADR 0037 Superseded，功能已交付无 SQLite）；
   XStyles 平台差异本身。
-- **Blocked**：InstallSimple + ASPack/Petite 模拟器分支
-  （XEmulator 不在 pin 基线；解除需独立 pin horsicq/XEmulator
-  源 + 可复现 oracle + 沙盒执行安全评审）。
+- **Phase 50：XEmulator x86 子集 + InstallSimple/ASPack 2.11/
+  Petite 模拟器分支**（2026-10-12 立项）：核实 XEmulator 为
+  horsicq 库组件（非独立 EXE，与 dep/ 家族同级，仅被
+  xstaticunpacker.pri 以兄弟目录引用）。范围：XStaticUnpacker
+  仅用 x86 核心 ≈6.9k 行（xemux86 4.7k + memmgr 1.4k +
+  registers，OS/syscall 层不用）。子步骤：(a) pin XEmulator
+  于 XStaticUnpacker pin 同期 SHA，tools-only Qt oracle；
+  (b) 有界模拟器移植（镜像上游 pnStepsRemaining/
+  IS_CANCEL_CHECK_STEPS/STEP_HALT bounds + 映射内存限定
+  fail-closed）+ xinstallsimple 857 行 + 2 行 aspack 2.11
+  布局 + xpetite 模拟器分支；(c) oracle 差分 + 回归测试。
 - **Parity**：右键菜单 Windows-only（上游同样仅 Windows）。
 - **维护任务**：vendored `db/`/`db_extra/` 与上游 submodule pin
   的漂移（vendored 中 10 条规则仍调已删的 `PE.isNET`，已加
