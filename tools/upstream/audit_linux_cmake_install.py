@@ -19,13 +19,13 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
-BASE_IMAGE = "diec-rust/upstream-oracle-cmake:74eaf505"
+BASE_IMAGE = "die-rust/upstream-oracle-cmake:74eaf505"
 BASE_IMAGE_ID = (
     "sha256:466102628c3a94b7ab1048f0c24261b"
     "1920e61a40029b128763cf79370255040"
 )
-FULL_IMAGE = "diec-rust/upstream-install-qt5:74eaf505"
-INSIDE_SCRIPT = "/opt/diec-install/audit_linux_cmake_install.py"
+FULL_IMAGE = "die-rust/upstream-install-qt5:74eaf505"
+INSIDE_SCRIPT = "/opt/die-install/audit_linux_cmake_install.py"
 DOCKERFILE = "tools/upstream/Dockerfile.upstream-install-qt5"
 SOURCE_ROOT = Path("/opt/die-source")
 BUILD_ROOT = Path("/opt/die-build")

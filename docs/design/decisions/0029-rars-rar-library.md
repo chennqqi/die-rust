@@ -25,7 +25,7 @@ UnRAR license requires:
 2. Source code may not be used to develop RAR-compatible archiver or recreate
    the proprietary RAR compression algorithm.
 
-diec-rust has explicitly decided NOT to copy, translate, or derive from
+die-rust has explicitly decided NOT to copy, translate, or derive from
 XArchive's RAR decoder (see `docs/research/rar-decoder-provenance.md`).
 
 **Pure Rust RAR library survey** (2026-08-15):
@@ -38,7 +38,7 @@ XArchive's RAR decoder (see `docs/research/rar-decoder-provenance.md`).
 
 ## Decision
 
-Select `rars` (WTFPL) as the RAR extraction library for diec-rust.
+Select `rars` (WTFPL) as the RAR extraction library for die-rust.
 
 **Rationale**:
 
@@ -87,8 +87,8 @@ Select `rars` (WTFPL) as the RAR extraction library for diec-rust.
 
 ## Consequences
 
-- `rars` (WTFPL) is added as a dependency of the `diec-unpack` crate (or
-  `diec-formats` extension).
+- `rars` (WTFPL) is added as a dependency of the `die-unpack` crate (or
+  `die-formats` extension).
 - `NOTICES.md` must list `rars` with its WTFPL license and a reference to
   this ADR.
 - `AUDIT.md` must document WTFPL as a permissive (non-copyleft) license.

@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake:74eaf505
+ARG BASE_IMAGE=die-rust/upstream-oracle-cmake:74eaf505
 FROM ${BASE_IMAGE}
 
 COPY pe_rule_harness_main.cpp /tmp/pe_rule_harness_main.cpp
@@ -14,10 +14,10 @@ RUN set -eux; \
         -o /tmp/pe_rule_harness_main.cpp.o; \
     sed \
         -e 's#CMakeFiles/diec.dir/main_console.cpp.o#/tmp/pe_rule_harness_main.cpp.o#' \
-        -e 's# -o diec # -o diec-pe-rule-harness #' \
+        -e 's# -o diec # -o die-pe-rule-harness #' \
         "${object_dir}/link.txt" > /tmp/link-pe-rule-harness.sh; \
     sh /tmp/link-pe-rule-harness.sh; \
-    test -x /opt/die-build/src/console/diec-pe-rule-harness
+    test -x /opt/die-build/src/console/die-pe-rule-harness
 
 LABEL org.opencontainers.image.revision="74eaf505c250ab47e709024e9dc41657cd8f2254"
 LABEL org.opencontainers.image.source="https://github.com/horsicq/DIE-engine"

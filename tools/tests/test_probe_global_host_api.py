@@ -179,7 +179,7 @@ class GlobalHostApiProbeTests(unittest.TestCase):
             regular = observation["modes"]["empty_requested"]
             self.assertEqual(
                 regular["application_name"],
-                "diec-global-host-api-harness",
+                "die-global-host-api-harness",
             )
             self.assertFalse(regular["library"]["boolean"])
 
@@ -334,7 +334,7 @@ class GlobalHostApiProbeTests(unittest.TestCase):
         self.assertIn(
             (
                 "ARG BASE_IMAGE="
-                "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+                "die-rust/upstream-oracle-cmake-qt6:74eaf505"
             ),
             source,
         )

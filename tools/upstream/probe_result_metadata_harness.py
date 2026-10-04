@@ -14,10 +14,10 @@ from typing import Any
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 FORMATS_COMMIT = "1151e7254fdee3c0294ff7095edbdd7bfccf8201"
 XSCANENGINE_COMMIT = "dfe4a419e4f491bb23688ba03c5a5bf39e34da83"
-IMAGE = "diec-rust/result-metadata-harness-qt5:74eaf505"
-BINARY = "/opt/die-build/src/console/diec-result-metadata-harness"
+IMAGE = "die-rust/result-metadata-harness-qt5:74eaf505"
+BINARY = "/opt/die-build/src/console/die-result-metadata-harness"
 INPUT_SIZE = 0x80
-FILE_PATH = "/tmp/diec-result-metadata-input.exe"
+FILE_PATH = "/tmp/die-result-metadata-input.exe"
 DEVICE_NAME = "named-device.exe"
 
 

@@ -37,7 +37,7 @@ serde_json = "1"
 # Output:     target/debian/died_<version>_<arch>.deb
 [package.metadata.deb]
 name = "died"
-maintainer = "diec-rust maintainers"
+maintainer = "die-rust maintainers"
 section = "utils"
 priority = "optional"
 extended-description = """\

@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-result-flags-harness <fixture-root>\n"
+            "usage: die-result-flags-harness <fixture-root>\n"
         );
         return 2;
     }

@@ -7,7 +7,7 @@
   "normalization_schema": 1,
   "normalized_projection_sha256": "f95dcd8d21f4bb6c5102d45cb451c09352b01491e11f9b58b2786b482c9f5351",
   "normalizer": {
-    "name": "diec-semantic-normalizer",
+    "name": "die-semantic-normalizer",
     "version": 1
   },
   "policy_artifact": {

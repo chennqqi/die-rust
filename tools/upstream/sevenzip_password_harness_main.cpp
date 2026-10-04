@@ -41,7 +41,7 @@ int main(int argc, char *argv[])
     if (fileName.isEmpty()) {
         std::fprintf(
             stderr,
-            "usage: diec-sevenzip-password-harness "
+            "usage: die-sevenzip-password-harness "
             "[--password <value>] <file>\n"
         );
         return 2;

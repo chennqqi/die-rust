@@ -43,12 +43,12 @@ def build_report(
     underlying.ORACLES = (
         underlying.Oracle(
             "linux-qt5-cmake",
-            "diec-rust/upstream-oracle-cmake:74eaf505",
+            "die-rust/upstream-oracle-cmake:74eaf505",
             "/opt/die-build/src/console/diec",
         ),
         underlying.Oracle(
             "linux-qt6-cmake",
-            "diec-rust/upstream-oracle-cmake-qt6:74eaf505",
+            "die-rust/upstream-oracle-cmake-qt6:74eaf505",
             "/opt/die-build/src/console/diec",
         ),
     )

@@ -24,7 +24,7 @@ from typing import Any
 
 PLAN_SCHEMA_VERSIONS = {1, 2}
 REPORT_SCHEMA_VERSION = 2
-RUNNER = {"name": "diec-process-benchmark", "version": 2}
+RUNNER = {"name": "die-process-benchmark", "version": 2}
 WARM = "warm"
 FILE_CONTENT = "file-content-nonresident-metadata-warm"
 FILE_CONTENT_CONTROLLER_KIND = "linux-file-content-v1"

@@ -14,7 +14,7 @@ import zlib
 from collections.abc import Callable
 
 
-PAYLOAD = b"diec-rust deterministic corpus\n"
+PAYLOAD = b"die-rust deterministic corpus\n"
 
 
 def _stored_deflate(data: bytes) -> bytes:

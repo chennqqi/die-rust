@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-generic-archive-dispatch-harness <archive>\n"
+            "usage: die-generic-archive-dispatch-harness <archive>\n"
         );
         return 2;
     }

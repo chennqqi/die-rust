@@ -25,12 +25,12 @@ class ResultModelHarnessDockerfilesQt6Test(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 self.assertIn(
                     "ARG BASE_IMAGE="
-                    "diec-rust/upstream-oracle-cmake-qt6:74eaf505",
+                    "die-rust/upstream-oracle-cmake-qt6:74eaf505",
                     text,
                 )
                 self.assertIn(source, text)
                 self.assertIn(
-                    f"diec-result-{profile}-harness",
+                    f"die-result-{profile}-harness",
                     text,
                 )
                 self.assertNotIn("apt-get", text)

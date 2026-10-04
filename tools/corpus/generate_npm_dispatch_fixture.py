@@ -14,7 +14,7 @@ import sys
 
 
 GENERATOR = "tools/corpus/generate_npm_dispatch_fixture.py"
-VALID_PACKAGE_JSON = b'{"name":"diec-fixture","version":"1.2.3"}\n'
+VALID_PACKAGE_JSON = b'{"name":"die-fixture","version":"1.2.3"}\n'
 INVALID_PACKAGE_JSON = b'{"name":'
 JAVASCRIPT = b"module.exports = 1;\n"
 TYPESCRIPT = b"export const value: number = 1;\n"
@@ -54,8 +54,8 @@ def tar_entry(name: str, data: bytes) -> bytes:
     header[156:157] = b"0"
     header[257:263] = b"ustar\0"
     header[263:265] = b"00"
-    header[265:297] = b"diec-rust".ljust(32, b"\0")
-    header[297:329] = b"diec-rust".ljust(32, b"\0")
+    header[265:297] = b"die-rust".ljust(32, b"\0")
+    header[297:329] = b"die-rust".ljust(32, b"\0")
     header[148:156] = f"{sum(header):06o}\0 ".encode("ascii")
     return bytes(header) + data + bytes((-len(data)) % 512)
 

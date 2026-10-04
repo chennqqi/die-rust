@@ -1,6 +1,6 @@
 {
   "timestamp": "2026-08-01T08:12:04.325845+00:00",
-  "db_path": "I:\\github.com\\chennqqi\\diec-rust\\upstream\\Detect-It-Easy\\db",
+  "db_path": "I:\\github.com\\chennqqi\\die-rust\\upstream\\Detect-It-Easy\\db",
   "db_exists": true,
   "rule_database": {
     "total_sg": 2037,

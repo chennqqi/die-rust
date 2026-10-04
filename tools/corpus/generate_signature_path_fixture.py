@@ -17,7 +17,7 @@ DIRECTORIES = (
     "extra/Binary",
     "input",
 )
-INPUT = b"diec-rust signature path filter input\n"
+INPUT = b"die-rust signature path filter input\n"
 
 
 def result_rule(name: str) -> bytes:

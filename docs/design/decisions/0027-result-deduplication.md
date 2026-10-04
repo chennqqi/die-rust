@@ -78,15 +78,15 @@ occurrence comes from the more specific format group (e.g., "MSDOS" before
 
 ## Evidence
 
-- `crates/diec-engine/src/scanner.rs` L385-516: `scan_bytes` free function,
+- `crates/die-engine/src/scanner.rs` L385-516: `scan_bytes` free function,
   no dedup before returning `ScanResult`
-- `crates/diec-engine/src/scanner.rs` L603-747: `Scanner::scan_bytes`,
+- `crates/die-engine/src/scanner.rs` L603-747: `Scanner::scan_bytes`,
   same pattern
-- `crates/diec-engine/src/scanner.rs` L224-246: `all_rule_types()` returns
+- `crates/die-engine/src/scanner.rs` L224-246: `all_rule_types()` returns
   18 file types for `--alltypes` mode
-- `crates/diec-engine/src/scanner.rs` L248-284: `ScanDetection` struct with
+- `crates/die-engine/src/scanner.rs` L248-284: `ScanDetection` struct with
   14 fields
-- `crates/diec-engine/src/host.rs` L22-39: `ScanFlags` struct (6 fields
+- `crates/die-engine/src/host.rs` L22-39: `ScanFlags` struct (6 fields
   before change)
 - `include/die.h` L51-58: `DIE_SCAN_FLAG_*` macros, bits 0x01-0x20 used
-- `crates/diec-ffi/src/scan.rs` L136-159: `options_to_flags` bit mapping
+- `crates/die-ffi/src/scan.rs` L136-159: `options_to_flags` bit mapping

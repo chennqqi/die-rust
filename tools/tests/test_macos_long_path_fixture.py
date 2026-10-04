@@ -159,7 +159,7 @@ def synthetic_report(local_path: str) -> dict:
 
 class MacosLongPathFixtureTest(unittest.TestCase):
     def test_exact_full_path_and_component_boundaries(self) -> None:
-        base = PurePosixPath("/private/tmp/diec-macos-long-path")
+        base = PurePosixPath("/private/tmp/die-macos-long-path")
         discovery_roots = set()
         for target in (1023, 1024, 1025, 8191, 8192, 8193):
             relative = GENERATOR.build_full_relative_path(
@@ -186,7 +186,7 @@ class MacosLongPathFixtureTest(unittest.TestCase):
                 / "long-path-fixture-candidate.json"
             )
             report = synthetic_report(
-                "/private/tmp/diec-macos-long-path"
+                "/private/tmp/die-macos-long-path"
             )
             path.write_text(
                 json.dumps(report, sort_keys=True), encoding="utf-8"
@@ -214,7 +214,7 @@ class MacosLongPathFixtureTest(unittest.TestCase):
                 / "long-path-fixture-candidate.json"
             )
             report = synthetic_report(
-                "/private/tmp/diec-macos-long-path"
+                "/private/tmp/die-macos-long-path"
             )
             path.write_text(
                 json.dumps(report, sort_keys=True), encoding="utf-8"

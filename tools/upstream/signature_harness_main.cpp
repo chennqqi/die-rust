@@ -695,7 +695,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-signature-harness <vectors.json>\n"
+            "usage: die-signature-harness <vectors.json>\n"
         );
         return 2;
     }

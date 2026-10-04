@@ -19,7 +19,7 @@ cargo install cargo-wix
 # Install WiX Toolset v3.14+ from https://wixtoolset.org/
 
 # Build the MSI
-cargo wix --package diec-server
+cargo wix --package die-server
 # Output: target/wix/died-<version>-x86_64-install.msi
 ```
 
@@ -50,7 +50,7 @@ died uninstall
 cargo install cargo-deb
 
 # Build the DEB
-cargo deb --package diec-server
+cargo deb --package die-server
 # Output: target/debian/died_<version>_<arch>.deb
 
 # Install
@@ -63,10 +63,10 @@ sudo dpkg -i target/debian/died_*.deb
 
 ```bash
 # Build the binary
-cargo build --release --package diec-server
+cargo build --release --package die-server
 
 # Build the RPM (requires rpmbuild)
-rpmbuild -ba crates/diec-server/packaging/died.spec
+rpmbuild -ba crates/die-server/packaging/died.spec
 # Output: ~/rpmbuild/RPMS/<arch>/died-<version>-<release>.<arch>.rpm
 
 # Install

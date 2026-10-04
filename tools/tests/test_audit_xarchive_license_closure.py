@@ -67,7 +67,7 @@ class AuditXArchiveLicenseClosureUnitTests(unittest.TestCase):
                     link_directory
                     / "CMakeFiles/diec.dir/__/__/XArchive/"
                     "xarchive.cpp.o.d",
-                    "diec-direct",
+                    "die-direct",
                 )
             ],
         )

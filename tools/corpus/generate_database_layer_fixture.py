@@ -10,7 +10,7 @@ import pathlib
 import sys
 
 
-INPUT = b"diec-rust deterministic database layer corpus\n"
+INPUT = b"die-rust deterministic database layer corpus\n"
 LAYERS = ("main", "extra", "custom")
 RULES = (
     ("layer-low.1.sg", "Low"),

@@ -22,8 +22,8 @@ DOCKERFILES = {
 class EngineContractHarnessDockerfileTests(unittest.TestCase):
     def test_builds_from_pinned_cmake_oracle_without_network(self):
         expected_bases = {
-            "qt5": "diec-rust/upstream-oracle-cmake:74eaf505",
-            "qt6": "diec-rust/upstream-oracle-cmake-qt6:74eaf505",
+            "qt5": "die-rust/upstream-oracle-cmake:74eaf505",
+            "qt6": "die-rust/upstream-oracle-cmake-qt6:74eaf505",
         }
         for profile, dockerfile in DOCKERFILES.items():
             with self.subTest(profile=profile):
@@ -33,7 +33,7 @@ class EngineContractHarnessDockerfileTests(unittest.TestCase):
                     text,
                 )
                 self.assertIn("engine_contract_harness_main.cpp", text)
-                self.assertIn("diec-engine-contract-harness", text)
+                self.assertIn("die-engine-contract-harness", text)
                 self.assertNotIn("apt-get", text)
                 self.assertNotIn("git clone", text)
 

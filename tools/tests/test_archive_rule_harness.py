@@ -106,7 +106,7 @@ class ArchiveRuleHarnessTests(unittest.TestCase):
             / "Dockerfile.archive-rule-harness-qt5"
         ).read_text(encoding="utf-8")
         self.assertIn(
-            "diec-rust/upstream-oracle-cmake:74eaf505",
+            "die-rust/upstream-oracle-cmake:74eaf505",
             dockerfile,
         )
         self.assertNotIn("apt-get", dockerfile)

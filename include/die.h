@@ -2,7 +2,7 @@
 #define DIE_H
 
 /*
- * die.h - Public C ABI for diec-rust.
+ * die.h - Public C ABI for die-rust.
  *
  * This header defines the stable C ABI for the Detect-It-Easy-compatible
  * file identification engine. It uses opaque handles, explicit ownership

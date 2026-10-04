@@ -23,13 +23,13 @@ from typing import Any
 SCHEMA_VERSION = 1
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 BUILD_TOOLS_COMMIT = "5dd5bcc8abf3b178d9ed47100f6f37ebecceb23e"
-BASE_IMAGE = "diec-rust/upstream-install-qt5:74eaf505"
+BASE_IMAGE = "die-rust/upstream-install-qt5:74eaf505"
 BASE_IMAGE_ID = (
     "sha256:6f7a378ea1c5a07745d45083c0e59643"
     "0fefc6526273528366a7dc7e11230368"
 )
-RELEASE_IMAGE = "diec-rust/upstream-release-trees-qt5:74eaf505"
-INSIDE_SCRIPT = "/opt/diec-release/audit_linux_release_trees.py"
+RELEASE_IMAGE = "die-rust/upstream-release-trees-qt5:74eaf505"
+INSIDE_SCRIPT = "/opt/die-release/audit_linux_release_trees.py"
 DOCKERFILE = "tools/upstream/Dockerfile.upstream-release-trees-qt5"
 SOURCE_ROOT = Path("/opt/die-source")
 BUILD_ROOT = Path("/opt/die-build")

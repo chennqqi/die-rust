@@ -14,7 +14,7 @@ from typing import Any
 
 GENERATOR = "tools/upstream/probe_qt6_engine_contract.py"
 UNDERLYING_PROBE = "tools/upstream/probe_engine_contract.py"
-IMAGE = "diec-rust/engine-contract-harness-qt6:74eaf505"
+IMAGE = "die-rust/engine-contract-harness-qt6:74eaf505"
 DOCKERFILE = "tools/upstream/Dockerfile.engine-contract-harness-qt6"
 
 

@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake-qt6:74eaf505
+ARG BASE_IMAGE=die-rust/upstream-oracle-cmake-qt6:74eaf505
 FROM ${BASE_IMAGE}
 
 COPY archive_harness_main.cpp /tmp/archive_harness_main.cpp
@@ -14,11 +14,11 @@ RUN set -eux; \
         -o /tmp/archive_harness_main.cpp.o; \
     sed \
         -e 's#CMakeFiles/diec.dir/main_console.cpp.o#/tmp/archive_harness_main.cpp.o#' \
-        -e 's# -o diec # -o diec-archive-harness #' \
+        -e 's# -o diec # -o die-archive-harness #' \
         "${object_dir}/link.txt" > /tmp/link-archive-harness.sh; \
     sh /tmp/link-archive-harness.sh; \
-    test -x /opt/die-build/src/console/diec-archive-harness; \
-    /opt/die-build/src/console/diec-archive-harness \
+    test -x /opt/die-build/src/console/die-archive-harness; \
+    /opt/die-build/src/console/die-archive-harness \
         /opt/die-source/README.md >/tmp/archive-harness-smoke.json
 
 LABEL org.opencontainers.image.revision="74eaf505c250ab47e709024e9dc41657cd8f2254"

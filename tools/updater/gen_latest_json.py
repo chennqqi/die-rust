@@ -16,7 +16,7 @@ Usage:
 
 Example:
 
-  gen_latest_json.py artifacts v0.9.1 chennqqi/diec-rust latest.json
+  gen_latest_json.py artifacts v0.9.1 chennqqi/die-rust latest.json
 """
 
 import base64
@@ -94,7 +94,7 @@ def main() -> int:
 
     manifest = {
         "version": f"v{version}",
-        "notes": f"diec-rust {version}",
+        "notes": f"die-rust {version}",
         "pub_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "platforms": platforms,
     }

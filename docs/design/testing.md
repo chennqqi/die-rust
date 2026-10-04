@@ -598,12 +598,12 @@ wall-clock fixture 的 VM 计时从首次 interrupt callback 开始，native 计
 
 | Target | 覆盖层 | 不变量 |
 |--------|--------|--------|
-| `fuzz_byte_source` | diec-core | 无 panic、无越界 |
-| `fuzz_byte_view_subview` | diec-core | 无 panic、无越界 |
-| `fuzz_format_probe` | diec-formats | 无 panic、无 None strength、无 Io error |
-| `fuzz_scan_engine` | diec-engine | 无 panic、无 hang、detection 字段非空 |
-| `fuzz_output_render` | diec-output | 无 panic、JSON 可解析、所有渲染器不崩溃 |
-| `fuzz_scan_ffi` | diec-ffi | 无跨边界 panic、状态码合法、double-free 安全 |
+| `fuzz_byte_source` | die-core | 无 panic、无越界 |
+| `fuzz_byte_view_subview` | die-core | 无 panic、无越界 |
+| `fuzz_format_probe` | die-formats | 无 panic、无 None strength、无 Io error |
+| `fuzz_scan_engine` | die-engine | 无 panic、无 hang、detection 字段非空 |
+| `fuzz_output_render` | die-output | 无 panic、JSON 可解析、所有渲染器不崩溃 |
+| `fuzz_scan_ffi` | die-ffi | 无跨边界 panic、状态码合法、double-free 安全 |
 
 每个 target 设置输入大小、总 allocation、depth、instruction 和 wall timeout。
 fuzz invariant：

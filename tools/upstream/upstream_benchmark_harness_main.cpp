@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
     ) {
         std::fprintf(
             stderr,
-            "usage: diec-upstream-benchmark-harness "
+            "usage: die-upstream-benchmark-harness "
             "--noop | --database-only | --archive <file>\n"
         );
         return 2;

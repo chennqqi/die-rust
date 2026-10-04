@@ -15,7 +15,7 @@ import tomllib
 from typing import Any
 
 
-IMAGE = "diec-rust/upstream-oracle-cmake:74eaf505"
+IMAGE = "die-rust/upstream-oracle-cmake:74eaf505"
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 DIRECT_OBJECT = "CMakeFiles/diec.dir/__/__/XCapstone/xcapstone.cpp.o"
 ARCHIVE_TOKEN = "../XCapstone_86/libcapstone_x86.a"
@@ -256,7 +256,7 @@ def build_inside_report(
     compile_units = [
         {
             "source": "xcapstone.cpp",
-            "linkage": "diec-direct",
+            "linkage": "die-direct",
             "dependency_file": direct_dependency.relative_to(
                 build_root
             ).as_posix(),

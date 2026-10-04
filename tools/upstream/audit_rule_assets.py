@@ -14,7 +14,7 @@ import tomllib
 from typing import Any
 
 
-IMAGE = "diec-rust/upstream-oracle-cmake:74eaf505"
+IMAGE = "die-rust/upstream-oracle-cmake:74eaf505"
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 DETECT_COMMIT = "c2c17dfa5ea4e078ba31eab55d87430c96622fb6"
 XYARA_COMMIT = "34a733e9c733669ad8dcaf4588d51197a08545e3"

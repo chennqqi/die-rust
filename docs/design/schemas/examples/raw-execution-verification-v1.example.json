@@ -29,7 +29,7 @@
   "verification_schema": 1,
   "verified_total_bytes": 36,
   "verifier": {
-    "name": "diec-raw-execution-verifier",
+    "name": "die-raw-execution-verifier",
     "version": 1
   }
 }

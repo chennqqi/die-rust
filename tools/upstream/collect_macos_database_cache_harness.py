@@ -187,7 +187,7 @@ def normalize_observation(
     linux_probe: Any,
 ) -> dict[str, Any]:
     result = json.loads(json.dumps(value))
-    database = "/tmp/diec-database-cache-harness/database"
+    database = "/tmp/die-database-cache-harness/database"
     rule = database + "/Binary/fixture.1.sg"
     if result.get("database_path") != database:
         raise HarnessError("fixed harness database path changed")
@@ -336,7 +336,7 @@ def collect(
         raise HarnessError("harness working directory must be empty")
     home_dir = working_dir / "home"
     home_dir.mkdir()
-    fixed_work = Path("/tmp/diec-database-cache-harness")
+    fixed_work = Path("/tmp/die-database-cache-harness")
     if fixed_work.exists():
         raise HarnessError(
             "fixed harness /tmp work root already exists"

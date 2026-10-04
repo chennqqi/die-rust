@@ -4,7 +4,7 @@ Status: Accepted
 Last updated: 2026-07-31
 ## Context
 
-diec-rust 需要同时承载不可信二进制解析、上游规则 runtime、嵌套扫描、CLI 和稳定
+die-rust 需要同时承载不可信二进制解析、上游规则 runtime、嵌套扫描、CLI 和稳定
 C ABI。上游实现的模块关系、Qt/C++ 依赖和全局状态不适合直接翻译；同时，规则需要
 查询格式事实，容易形成 `rules <-> formats` 循环。嵌套对象若直接递归调用扫描入口，
 也难以统一限制深度、累计解压、取消和确定性顺序。
@@ -13,8 +13,8 @@ C ABI。上游实现的模块关系、Qt/C++ 依赖和全局状态不适合直�
 
 ## Decision
 
-Proposed：采用 `diec-core`、`diec-formats`、`diec-rules`、`diec-engine`、
-`diec-output`、`diec-cli` 和 `diec-ffi` 的向内依赖 workspace。
+Proposed：采用 `die-core`、`die-formats`、`die-rules`、`die-engine`、
+`die-output`、`die-cli` 和 `die-ffi` 的向内依赖 workspace。
 
 - core 提供 checked input、基础模型、预算、取消和结果 arena。
 - formats 与 rules 仅依赖 core，彼此不依赖。
@@ -85,7 +85,7 @@ static link、许可证和部署更复杂。
 代价：
 
 - 需要设计 ports 和 adapter，早期代码量高于单 crate。
-- `diec-core` 的准入需要持续评审，防止成为公共杂物箱。
+- `die-core` 的准入需要持续评审，防止成为公共杂物箱。
 - rule host adapter 可能产生一定转换成本，需要 benchmark 后优化。
 - workspace 的版本、feature 和依赖策略需要 CI 工具维护。
 - 在 `api.md` 冻结结果模型前，core 与 output 的边界仍可能调整。

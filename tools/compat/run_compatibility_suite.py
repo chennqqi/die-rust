@@ -18,7 +18,7 @@ import audit_semantic_case as case_auditor
 PLAN_SCHEMA_VERSION = 1
 REPORT_SCHEMA_VERSION = 1
 RUNNER = {
-    "name": "diec-compatibility-suite-runner",
+    "name": "die-compatibility-suite-runner",
     "version": 1,
 }
 MAX_CASES = 10_000

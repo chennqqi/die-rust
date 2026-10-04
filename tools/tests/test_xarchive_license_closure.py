@@ -61,7 +61,7 @@ class XArchiveLicenseClosureTests(unittest.TestCase):
         self.assertEqual(
             counts,
             {
-                "diec-direct": 84,
+                "die-direct": 84,
                 "../XArchive/3rdparty/bzip2/libbzip2.a": 8,
                 "../XArchive/3rdparty/lzma/liblzma.a": 2,
                 "../XArchive/3rdparty/ppmd/libppmd.a": 4,

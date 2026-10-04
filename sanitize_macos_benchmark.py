@@ -14,7 +14,7 @@ SANITIZED_DIR = WORK_DIR / "evidence-sanitized" / "macos-benchmark"
 
 # Path replacements (longest first to avoid partial matches)
 REPLACEMENTS = [
-    ("/Users/chenq/dev/tmp/diec-macos-work/", "<macos-work>/"),
+    ("/Users/chenq/dev/tmp/die-macos-work/", "<macos-work>/"),
 ]
 
 

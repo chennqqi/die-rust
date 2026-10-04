@@ -17,12 +17,12 @@ compression ratio limit** (see `docs/research/nested-scan-behavior.md`
 - Upstream allocates the full declared uncompressed size as a buffer before
   decompression, with no cap on individual member size.
 
-diec-rust's core principle (AGENTS.md § Architecture & Security): "All binary
+die-rust's core principle (AGENTS.md § Architecture & Security): "All binary
 input is untrusted. Offsets, lengths, integer arithmetic, and allocations must
 be bounded; malformed input must not cause panics, out-of-bounds, infinite
 loops, or unbounded allocations."
 
-The existing `diec-core/src/limits.rs` already defines a framework:
+The existing `die-core/src/limits.rs` already defines a framework:
 - `max_archive_entries: u64` (default 4096)
 - `max_total_decompressed_bytes: u64` (default 512 MiB)
 - `max_depth: u32` (default 32)
@@ -95,7 +95,7 @@ higher thresholds.
   edge-case archives (very large members, very high compression ratios).
   This is documented as a known difference in `COMPATIBILITY.md`.
 - The `max_total_decompressed_bytes` and `max_single_allocation_bytes` fields
-  in `diec-core/src/limits.rs` are now actively enforced in the extraction
+  in `die-core/src/limits.rs` are now actively enforced in the extraction
   path.
 - The compression ratio limit (100:1) is a new safety check not present in
   the existing `limits.rs` framework. It should be added as a new field
@@ -113,7 +113,7 @@ higher thresholds.
   extraction flow, no total/single size/ratio limits
 - `docs/research/nested-scan-behavior.md` L121: "分配发生在成员类型过滤之前，
   且按 archive 声明的解压后大小创建 buffer" (allocation by declared size)
-- `crates/diec-core/src/limits.rs` L29-30, L76-77, L86-89: existing limit
+- `crates/die-core/src/limits.rs` L29-30, L76-77, L86-89: existing limit
   framework (`max_archive_entries`, `max_total_decompressed_bytes`,
   `max_depth`, `max_single_allocation_bytes`)
 - `AGENTS.md` § Architecture & Security: "All binary input is untrusted...

@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-npm-dispatch-harness <input.tgz>\n"
+            "usage: die-npm-dispatch-harness <input.tgz>\n"
         );
         return 2;
     }

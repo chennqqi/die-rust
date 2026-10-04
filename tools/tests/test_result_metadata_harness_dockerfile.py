@@ -15,11 +15,11 @@ class ResultMetadataHarnessDockerfileTests(unittest.TestCase):
     def test_builds_from_pinned_cmake_oracle_without_network(self):
         text = DOCKERFILE.read_text(encoding="utf-8")
         self.assertIn(
-            "ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake:74eaf505",
+            "ARG BASE_IMAGE=die-rust/upstream-oracle-cmake:74eaf505",
             text,
         )
         self.assertIn("result_metadata_harness_main.cpp", text)
-        self.assertIn("diec-result-metadata-harness", text)
+        self.assertIn("die-result-metadata-harness", text)
         self.assertNotIn("apt-get", text)
         self.assertNotIn("git clone", text)
 

@@ -61,12 +61,12 @@ class Observation:
 ORACLES = (
     Oracle(
         "qmake",
-        "diec-rust/upstream-oracle:74eaf505-repro",
+        "die-rust/upstream-oracle:74eaf505-repro",
         "/opt/die-source/build/release/diec",
     ),
     Oracle(
         "cmake",
-        "diec-rust/upstream-oracle-cmake:74eaf505",
+        "die-rust/upstream-oracle-cmake:74eaf505",
         "/opt/die-build/src/console/diec",
     ),
 )

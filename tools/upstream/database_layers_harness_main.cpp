@@ -123,7 +123,7 @@ QJsonObject observeScan(
     options.bUseCustomDatabase = useCustom;
     options.bIsSort = sortResults;
 
-    QByteArray input("diec-rust deterministic database layer corpus\n");
+    QByteArray input("die-rust deterministic database layer corpus\n");
     XBinary::PDSTRUCT state = XBinary::createPdStruct();
     const XScanEngine::SCAN_RESULT scanResult = engine->scanMemory(
         input.data(),
@@ -175,7 +175,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-database-layers-harness <fixture-root>\n"
+            "usage: die-database-layers-harness <fixture-root>\n"
         );
         return 2;
     }

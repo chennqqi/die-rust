@@ -14,34 +14,34 @@ Last updated: 2026-08-05
 - 上游 GUI 源码分析：[`docs/research/upstream-gui-analysis.md`](../research/upstream-gui-analysis.md)
 - 框架选型 ADR：[`docs/design/decisions/0018-tauri-gui-framework.md`](decisions/0018-tauri-gui-framework.md)
 - 现有架构：[`docs/design/architecture.md`](architecture.md)
-- 现有引擎 API：`diec-engine::{Scanner, scan_bytes, scan_once, ScanResult, ScanFlags, Database}`
+- 现有引擎 API：`die-engine::{Scanner, scan_bytes, scan_once, ScanResult, ScanFlags, Database}`
 
 ## 架构
 
 ### crate 定位
 
-`die-gui` 是 Tauri 应用 crate，属于适配层，依赖 `diec-engine`/`diec-output`/
-`diec-core`，核心层不反向依赖。与 `diec-cli`/`diec-ffi`/`diec-server` 平级。
+`die-gui` 是 Tauri 应用 crate，属于适配层，依赖 `die-engine`/`die-output`/
+`die-core`，核心层不反向依赖。与 `die-cli`/`die-ffi`/`die-server` 平级。
 
 ### workspace 集成
 
 ```toml
 # Cargo.toml (workspace)
 members = [
-    "crates/diec-core",
-    "crates/diec-formats",
-    "crates/diec-rules",
-    "crates/diec-engine",
-    "crates/diec-output",
-    "crates/diec-cli",
-    "crates/diec-ffi",
-    "crates/diec-server",
+    "crates/die-core",
+    "crates/die-formats",
+    "crates/die-rules",
+    "crates/die-engine",
+    "crates/die-output",
+    "crates/die-cli",
+    "crates/die-ffi",
+    "crates/die-server",
     "crates/die-gui",       # ← 新增
     "xtask",
 ]
 ```
 
-`die-gui` 不加入 `diec-ffi`/`diec-server` 的依赖图，`xtask check-deps`
+`die-gui` 不加入 `die-ffi`/`die-server` 的依赖图，`xtask check-deps`
 需更新依赖 DAG 规则以允许 `die-gui` 依赖 `tauri`。
 
 ### IPC 架构
@@ -50,7 +50,7 @@ members = [
 流式推送进度：
 
 ```
-Frontend (React)  ←→  Tauri IPC  ←→  Rust Commands  ←→  diec-engine
+Frontend (React)  ←→  Tauri IPC  ←→  Rust Commands  ←→  die-engine
      ↑                                                      ↓
      └──────── Channel<ScanProgress> ─────────────────  ScanResult
 ```
@@ -104,7 +104,7 @@ pub struct GuiError {
 
 /// Scan flags mirroring upstream `XScanEngine::SF_*` and `comboBoxFlags`.
 ///
-/// Field mapping to `diec-engine::ScanFlags`:
+/// Field mapping to `die-engine::ScanFlags`:
 /// - `deep`/`heuristic`/`verbose`/`aggressive`/`all_types`/`hide_unknown`
 ///   map directly to `ScanFlags` fields.
 /// - `recursive`/`overlay`/`resources`/`archives`/`first_wrapper_only`
@@ -353,12 +353,12 @@ async fn demangle(symbol: String, compiler: String) -> Result<String, GuiError>;
 | 在线工具 | VirusTotal 等 API | ADR 0023（待定） |
 | 熵视图 | 熵计算 | 复用 CLI `--entropy` |
 | 哈希视图 | MD5/SHA1/SHA256 | Rust `sha2`/`md-5` |
-| 内存映射视图 | PE/ELF section map | 复用 `diec-formats` |
-| 区段视图 | PE/ELF regions | 复用 `diec-formats` |
-| 符号表视图 | PE/ELF symbols | 复用 `diec-formats` |
-| 归档视图 | archive 内容 | 复用 `diec-formats` |
+| 内存映射视图 | PE/ELF section map | 复用 `die-formats` |
+| 区段视图 | PE/ELF regions | 复用 `die-formats` |
+| 符号表视图 | PE/ELF symbols | 复用 `die-formats` |
+| 归档视图 | archive 内容 | 复用 `die-formats` |
 | 数据转换器 | hex/dec/ascii/base64 | 前端实现 |
-| 提取器 | overlay/archive 提取 | 复用 `diec-engine` |
+| 提取器 | overlay/archive 提取 | 复用 `die-engine` |
 
 ## 测试策略
 
@@ -372,7 +372,7 @@ AGENTS.md 要求"每项能力包含单元/集成测试，并按风险补充差�
 - IPC 命令单元测试：mock `AppState`（in-memory `Database`），验证
   `scan_file`/`scan_bytes`/`stop_scan` 返回值和 `GuiError` 错误码
 - DTO 转换测试：`ScanResult` → `ScanResultDto` 字段映射完整性
-- `ScanFlagsDto` → `diec-engine::ScanFlags` 映射测试（含
+- `ScanFlagsDto` → `die-engine::ScanFlags` 映射测试（含
   `first_wrapper_only` 等扩展字段的传递路径）
 - 设置序列化/反序列化往返测试（`settings.json` 读写）
 - `GuiError` 序列化测试（`code`/`message` 字段完整性）

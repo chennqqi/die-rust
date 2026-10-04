@@ -18,13 +18,13 @@ recursion. Specifically:
 - Directory enumeration is unconditional (depth-first) and does not depend on
   `-r`.
 
-diec-rust's current `-r`/`--recursive` does **directory-level recursion**
+die-rust's current `-r`/`--recursive` does **directory-level recursion**
 (`expand_target` in `main.rs` L53-65), which is semantically different from
 upstream. This means:
 
-1. diec-rust cannot produce nested resource/overlay detections (e.g., PE → PDF
+1. die-rust cannot produce nested resource/overlay detections (e.g., PE → PDF
    Resource, PE → PDF Overlay) that upstream produces with `-r`.
-2. diec-rust's `-r` on a directory silently does something upstream does not
+2. die-rust's `-r` on a directory silently does something upstream does not
    gate on `-r` at all.
 
 This is a **breaking change**: existing users who run `diec -r directory` must
@@ -61,7 +61,7 @@ Align `-r`/`--recursivescan` with upstream semantics:
 ## Alternatives Considered
 
 1. **Keep `-r` as directory recursion, add `--nested` for intra-file
-   recursion**: Rejected. This would leave diec-rust's `-r` semantically
+   recursion**: Rejected. This would leave die-rust's `-r` semantically
    incompatible with upstream, defeating the goal of 100% CLI alignment.
    Differential testing of `-r` behavior would always show mismatches.
 
@@ -101,13 +101,13 @@ Align `-r`/`--recursivescan` with upstream semantics:
   unreachable
 - `docs/research/nested-scan-behavior.md` L183-212: 8 nested corpus samples
   × 4 modes with fixed stdout SHA-256
-- `crates/diec-cli/src/main.rs` L33, L142-144, L53-65: current `-r` does
+- `crates/die-cli/src/main.rs` L33, L142-144, L53-65: current `-r` does
   directory recursion only
-- `crates/diec-engine/src/host.rs` L22-45: `ScanFlags` has no
+- `crates/die-engine/src/host.rs` L22-45: `ScanFlags` has no
   resource/overlay/recursive fields
-- `crates/diec-engine/src/host.rs` L415-417: `is_recursive()` hardcoded to
+- `crates/die-engine/src/host.rs` L415-417: `is_recursive()` hardcoded to
   `false`
-- `crates/diec-core/src/request.rs` L64-71: `NestingOptions` defined but
+- `crates/die-core/src/request.rs` L64-71: `NestingOptions` defined but
   unused by engine
-- `crates/diec-engine/src/scanner.rs` L279-313: `ScanDetection` has
+- `crates/die-engine/src/scanner.rs` L279-313: `ScanDetection` has
   `parent_id`/`file_part`/`offset`/`size` fields, always `None`

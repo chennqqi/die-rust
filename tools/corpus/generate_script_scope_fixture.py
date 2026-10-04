@@ -15,7 +15,7 @@ DIRECTORIES = ("main", "main/Binary", "extra", "custom", "input")
 FILES = (
     (
         "input/probe.bin",
-        b"diec-rust script scope probe\n",
+        b"die-rust script scope probe\n",
         "benign scan input",
     ),
     (

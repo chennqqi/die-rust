@@ -163,7 +163,7 @@ if (
     throw "Cannot locate original target, LFLAGS, or console source."
 }
 $OriginalTarget = $TargetMatch.Groups[1].Value.Trim()
-$HarnessTarget = "diec-debug-dispatch-harness.exe"
+$HarnessTarget = "die-debug-dispatch-harness.exe"
 $HarnessObjectName = "release\debug_dispatch_harness_main.obj"
 $AccessAlias = (
     "/alternatename:" +

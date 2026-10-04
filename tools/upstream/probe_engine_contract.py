@@ -15,8 +15,8 @@ from probe_rule_orchestration import load_and_verify_fixture
 
 
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
-IMAGE = "diec-rust/engine-contract-harness-qt5:74eaf505"
-BINARY = "/opt/die-build/src/console/diec-engine-contract-harness"
+IMAGE = "die-rust/engine-contract-harness-qt5:74eaf505"
+BINARY = "/opt/die-build/src/console/die-engine-contract-harness"
 HARNESS_SOURCE = "tools/upstream/engine_contract_harness_main.cpp"
 HARNESS_DOCKERFILE = (
     "tools/upstream/Dockerfile.engine-contract-harness-qt5"

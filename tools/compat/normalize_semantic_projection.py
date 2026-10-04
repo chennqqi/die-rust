@@ -16,7 +16,7 @@ from typing import Any, Callable
 INPUT_SCHEMA_VERSION = 1
 POLICY_SCHEMA_VERSION = 1
 OUTPUT_SCHEMA_VERSION = 1
-NORMALIZER_NAME = "diec-semantic-normalizer"
+NORMALIZER_NAME = "die-semantic-normalizer"
 NORMALIZER_VERSION = 1
 
 HEX_40 = re.compile(r"^[0-9a-f]{40}$")

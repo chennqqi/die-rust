@@ -696,7 +696,7 @@ class SemanticComparisonTests(unittest.TestCase):
         self.assertEqual(
             report["properties"]["run_identity"]["$ref"],
             (
-                "https://diec-rust.invalid/schemas/"
+                "https://die-rust.invalid/schemas/"
                 "semantic-projection-v1.schema.json#/$defs/runIdentity"
             ),
         )

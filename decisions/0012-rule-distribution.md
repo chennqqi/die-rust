@@ -8,9 +8,9 @@ Accepted
 
 ## Context
 
-diec-rust requires the upstream Detect-It-Easy rule database to perform
+die-rust requires the upstream Detect-It-Easy rule database to perform
 detection. The database is 2.7 MB containing 2037 `.sg` rule files,
-licensed under MIT (same as diec-rust).
+licensed under MIT (same as die-rust).
 
 Two distribution options were considered:
 

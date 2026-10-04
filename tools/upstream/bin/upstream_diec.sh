@@ -11,8 +11,8 @@
 # back to Binary there. Set UPSTREAM_ORACLE_QT=qt5 for the archive-less
 # variant or qt6 for the V4 build.
 QT_VARIANT="${UPSTREAM_ORACLE_QT:-qt5-arc}"
-IMAGE="diec-rust/upstream-oracle-${QT_VARIANT}:23fec32"
-CONTAINER="diec-oracle-${QT_VARIANT}-23fec32"
+IMAGE="die-rust/upstream-oracle-${QT_VARIANT}:23fec32"
+CONTAINER="die-oracle-${QT_VARIANT}-23fec32"
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 DIE_DB="${REPO_ROOT}/upstream/Detect-It-Easy"
 

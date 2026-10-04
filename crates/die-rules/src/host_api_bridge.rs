@@ -6809,7 +6809,7 @@ impl HostApiBridge {
                     // file starts within the parent. For standalone files, 0.
                     Binary.getStartOffset = function() {
                         // Check if this is an embedded resource by looking for
-                        // a parent file context. In diec-rust, files are standalone.
+                        // a parent file context. In die-rust, files are standalone.
                         if (Binary.getSize() > 0) return 0;
                         return 0;
                     };
@@ -8034,7 +8034,7 @@ mod tests {
     mod msdos_oracle_tests {
         //! MSDOS host API differential tests (Phase 42).
         //!
-        //! Compares the diec-rust JS bridge results for every `MSDOS.*` host
+        //! Compares the die-rust JS bridge results for every `MSDOS.*` host
         //! API method against the pinned upstream DIE-engine output captured
         //! by `tools/msdos-oracle` (corpus/p42-msdos-oracle.json). The
         //! vendored upstream `db/MSDOS/_init` is evaluated first so that

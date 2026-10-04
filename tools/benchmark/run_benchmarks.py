@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run diec-rust benchmarks and collect results.
+"""Run die-rust benchmarks and collect results.
 
 This script runs the criterion benchmarks in release mode and collects
 the timing results into a JSON file for documentation.
@@ -91,9 +91,9 @@ def main() -> int:
         "benchmarks": {},
     }
 
-    # 1. diec-engine scan benchmarks
-    print("=== Running diec-engine scan benchmarks ===")
-    cmd = ["cargo", "bench", "-p", "diec-engine", "--bench", "scan", "--"]
+    # 1. die-engine scan benchmarks
+    print("=== Running die-engine scan benchmarks ===")
+    cmd = ["cargo", "bench", "-p", "die-engine", "--bench", "scan", "--"]
     if args.quick:
         cmd += ["--quick", "--warm-up-time", "1", "--measurement-time", "2"]
     else:
@@ -107,9 +107,9 @@ def main() -> int:
         print(f"  FAILED (exit {code})")
         all_results["benchmarks"]["diec_engine_scan"] = {"error": output[-500:]}
 
-    # 2. diec-formats probe benchmarks
-    print("=== Running diec-formats probe benchmarks ===")
-    cmd = ["cargo", "bench", "-p", "diec-formats", "--bench", "probe", "--"]
+    # 2. die-formats probe benchmarks
+    print("=== Running die-formats probe benchmarks ===")
+    cmd = ["cargo", "bench", "-p", "die-formats", "--bench", "probe", "--"]
     if args.quick:
         cmd += ["--quick", "--warm-up-time", "1", "--measurement-time", "2"]
     else:
@@ -129,7 +129,7 @@ def main() -> int:
     for i in range(5):
         start = time.perf_counter()
         code, _ = run_cmd(
-            ["cargo", "run", "--release", "-p", "diec-cli", "--", "--showdatabase"],
+            ["cargo", "run", "--release", "-p", "die-cli", "--", "--showdatabase"],
             timeout=30,
         )
         elapsed = time.perf_counter() - start

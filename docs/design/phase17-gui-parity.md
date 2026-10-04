@@ -32,7 +32,7 @@ Last updated: 2026-10-02
 - 上游基线：`DIE-engine@23fec32`（`upstream/components.lock.toml`）
 - XDemangle 固定 commit：`161659880361e23cc4e983776becc323ff68da26`（20 模式）
 - 已有 RAR 决策：[`decisions/0029-rars-rar-library.md`](decisions/0029-rars-rar-library.md)
-- 引擎已有归档提取：`crates/diec-engine/src/archive_unpack.rs`（ZIP/7Z/RAR）
+- 引擎已有归档提取：`crates/die-engine/src/archive_unpack.rs`（ZIP/7Z/RAR）
 
 ## 任务批次
 
@@ -78,19 +78,19 @@ Last updated: 2026-10-02
 
 ### 17.B 归档列表扩展（P1，V4-11）
 
-**现状**：`list_archive` 手写 ZIP/TAR/GZ；而 `diec-engine` 已有
-`extract_zip`/`extract_7z`/`extract_rar` 与 `diec-formats` 的
+**现状**：`list_archive` 手写 ZIP/TAR/GZ；而 `die-engine` 已有
+`extract_zip`/`extract_7z`/`extract_rar` 与 `die-formats` 的
 ZipProbe/RarProbe/SevenZProbe/CabProbe/Iso9660Probe —— **差距主要
 是接线而非缺实现**。
 
 **实现**：
 
-1. `diec-engine` 新增 `list_archive_members(data) -> Vec<ArchiveMemberInfo>`
+1. `die-engine` 新增 `list_archive_members(data) -> Vec<ArchiveMemberInfo>`
    （name/uncompressed_size/compressed_size/is_dir/mtime），
    ZIP 走目录直读（已有 `zip_member_names`/`decompress` 语义），
    7Z/RAR 复用现有解码头只取元数据不取数据。
 2. `die-gui` `list_archive` 改为调用引擎接口，探测顺序统一走
-   `diec-formats` probe table（不再手写 magic）。
+   `die-formats` probe table（不再手写 magic）。
 3. CAB/ISO9660 列表：probe 已有；解码头评估 `cab`（纯 Rust）与
    自实现 ISO9660 目录遍历（量小），本期可选做，未做则
    COMPATIBILITY 标注。
@@ -130,7 +130,7 @@ ZipProbe/RarProbe/SevenZProbe/CabProbe/Iso9660Probe —— **差距主要
    前缀字符串）、type_ids（descriptor_idx→string）、proto_ids、
    field_ids、method_ids（class/proto/name 三元组解码）、
    class_def_item、map_list。leb128 解码注意边界（不可信输入）。
-   `diec-formats/src/dex_class_pyc.rs` 已有 DEX 探测逻辑可参照，
+   `die-formats/src/dex_class_pyc.rs` 已有 DEX 探测逻辑可参照，
    但不直接复用（该模块面向 detection 非展示）。
 2. `MiscViewPanel.tsx` DEX 分支增加子标签：Strings/Types/Protos/
    Fields/Methods/Classes/Map。

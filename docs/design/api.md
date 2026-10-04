@@ -57,7 +57,7 @@ Last updated: 2026-07-31
 
 ## 4. 顶层 Rust API 草案
 
-公共入口由 `diec-engine` 暴露，示意签名如下：
+公共入口由 `die-engine` 暴露，示意签名如下：
 
 ```rust
 pub struct DatabaseBuilder { /* private */ }
@@ -603,7 +603,7 @@ usage
 
 ## 14. Batch 与目录枚举
 
-单文件 scanner 不枚举目录。`diec-cli` 使用独立 `TargetExpander`：
+单文件 scanner 不枚举目录。`die-cli` 使用独立 `TargetExpander`：
 
 ```rust
 pub struct BatchRequest {

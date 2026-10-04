@@ -42,7 +42,7 @@ git remote set-url --push upstream-detect-it-easy DISABLED
 74eaf505c250ab47e709024e9dc41657cd8f2254
 ```
 
-subtree 内容仅作为上游参考与变更跟踪来源，不直接成为 diec-rust 的编译输入。
+subtree 内容仅作为上游参考与变更跟踪来源，不直接成为 die-rust 的编译输入。
 
 当前导入提交记录（2026-10-01 同步）：
 

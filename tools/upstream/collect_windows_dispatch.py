@@ -34,21 +34,21 @@ EXPECTED_DIE_SCRIPT_OBJECT_SHA256 = (
 )
 PROFILES = {
     "bw": {
-        "binary": "diec-bw-dispatch-harness.exe",
+        "binary": "die-bw-dispatch-harness.exe",
         "source": "bw_dispatch_harness_main.cpp",
         "reference": "bw-dispatch-engine-qt5.json",
         "fixture": None,
         "case_count": 2,
     },
     "npm": {
-        "binary": "diec-npm-dispatch-harness.exe",
+        "binary": "die-npm-dispatch-harness.exe",
         "source": "npm_dispatch_harness_main.cpp",
         "reference": "npm-dispatch-engine-qt5.json",
         "fixture": "npm",
         "case_count": 4,
     },
     "generic_archive": {
-        "binary": "diec-generic-archive-dispatch-harness.exe",
+        "binary": "die-generic-archive-dispatch-harness.exe",
         "source": "generic_archive_dispatch_harness_main.cpp",
         "reference": "generic-archive-dispatch-engine-qt5.json",
         "fixture": "generic",

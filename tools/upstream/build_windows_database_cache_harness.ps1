@@ -171,7 +171,7 @@ if (-not $SourceMatch.Success) {
     throw "Cannot locate main_console.cpp in the Release Makefile."
 }
 
-$HarnessTarget = "diec-database-cache-harness.exe"
+$HarnessTarget = "die-database-cache-harness.exe"
 $PatchedMakefile = $OriginalMakefile.Replace(
     "release\main_console.obj",
     "release\database_cache_harness_windows_adapter.obj"

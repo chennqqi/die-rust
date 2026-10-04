@@ -169,7 +169,7 @@ class CollectWindowsDatabaseCacheHarnessTests(unittest.TestCase):
             "I:/tmp",
             "I:\\\\tmp",
             "worker",
-            "diec-windows-script-source",
+            "die-windows-script-source",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)

@@ -14,7 +14,7 @@ import tempfile
 from typing import Any
 
 
-IMAGE = "diec-rust/upstream-oracle-cmake:74eaf505"
+IMAGE = "die-rust/upstream-oracle-cmake:74eaf505"
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 XARCHIVE_COMMIT = "0fcd4e8d3e9933baac3b12246d82ac026557ffd0"
 BROTLI_COMMIT = "028fb5a23661f123017c060daa546b55cf4bde29"

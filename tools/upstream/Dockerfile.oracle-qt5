@@ -48,8 +48,8 @@ RUN mkdir -p /opt/die-evidence \
         "DEFINES+=QT_NO_DEBUG_OUTPUT" \
     && make --jobs="$(nproc)" sub-build_libs-make_first \
     && make --jobs="$(nproc)" sub-console_source-make_first \
-    && grep '^LIBS ' console_source/Makefile > /opt/die-evidence/diec-libs.txt \
-    && grep '^LFLAGS ' console_source/Makefile > /opt/die-evidence/diec-lflags.txt
+    && grep '^LIBS ' console_source/Makefile > /opt/die-evidence/die-libs.txt \
+    && grep '^LFLAGS ' console_source/Makefile > /opt/die-evidence/die-lflags.txt
 
 RUN file build/release/diec > /opt/die-evidence/file.txt \
     && sha256sum build/release/diec > /opt/die-evidence/sha256.txt \

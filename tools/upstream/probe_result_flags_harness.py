@@ -15,8 +15,8 @@ UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 FORMATS_COMMIT = "1151e7254fdee3c0294ff7095edbdd7bfccf8201"
 XSCANENGINE_COMMIT = "dfe4a419e4f491bb23688ba03c5a5bf39e34da83"
 DIE_SCRIPT_COMMIT = "5d82316c110abf0eb863b50bc679d330e05067b6"
-IMAGE = "diec-rust/result-flags-harness-qt5:74eaf505"
-BINARY = "/opt/die-build/src/console/diec-result-flags-harness"
+IMAGE = "die-rust/result-flags-harness-qt5:74eaf505"
+BINARY = "/opt/die-build/src/console/die-result-flags-harness"
 INPUT_SHA256 = (
     "28aa71cff9d35029534ce01a6c64d944e910f9b0232b9519679c79abf2288b87"
 )

@@ -1,6 +1,6 @@
 [Unit]
 Description=diec scan daemon (died)
-Documentation=https://github.com/chennqqi/diec-rust
+Documentation=https://github.com/chennqqi/die-rust
 After=network.target
 
 [Service]

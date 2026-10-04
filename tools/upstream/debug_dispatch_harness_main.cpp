@@ -163,7 +163,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-debug-dispatch-harness <fixture-root>\n"
+            "usage: die-debug-dispatch-harness <fixture-root>\n"
         );
         return 2;
     }

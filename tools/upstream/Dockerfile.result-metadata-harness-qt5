@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake:74eaf505
+ARG BASE_IMAGE=die-rust/upstream-oracle-cmake:74eaf505
 FROM ${BASE_IMAGE}
 
 COPY result_metadata_harness_main.cpp /tmp/result_metadata_harness_main.cpp
@@ -14,10 +14,10 @@ RUN set -eux; \
         -o /tmp/result_metadata_harness_main.cpp.o; \
     sed \
         -e 's#CMakeFiles/diec.dir/main_console.cpp.o#/tmp/result_metadata_harness_main.cpp.o#' \
-        -e 's# -o diec # -o diec-result-metadata-harness #' \
+        -e 's# -o diec # -o die-result-metadata-harness #' \
         "${object_dir}/link.txt" > /tmp/link-result-metadata-harness.sh; \
     sh /tmp/link-result-metadata-harness.sh; \
-    test -x /opt/die-build/src/console/diec-result-metadata-harness
+    test -x /opt/die-build/src/console/die-result-metadata-harness
 
 LABEL org.opencontainers.image.revision="74eaf505c250ab47e709024e9dc41657cd8f2254"
 LABEL org.opencontainers.image.source="https://github.com/horsicq/DIE-engine"

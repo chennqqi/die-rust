@@ -8345,7 +8345,7 @@ fn run_fixture(rule_root: &Path) -> Result<bool, String> {
     .err();
     let stack_limit_recovery = eval_string(&stack_context, b"String(6 * 7)");
 
-    const PANIC_SENTINEL: &str = "diec-rquickjs-native-panic-sentinel";
+    const PANIC_SENTINEL: &str = "die-rquickjs-native-panic-sentinel";
     let panic_runtime = new_runtime()?;
     let panic_context = new_context(&panic_runtime)?;
     panic_context.with(|ctx| {
@@ -8564,53 +8564,53 @@ fn run_fixture(rule_root: &Path) -> Result<bool, String> {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: diec-rquickjs-rule-runtime-spike \
+        "usage: die-rquickjs-rule-runtime-spike \
          <eval-isolated|eval-isolated-compat|eval-shared> <rule-root>...\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike \
          eval-isolated-compat-tracked-heap <rule-root>...\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike \
          measure-rule-corpus-isolated-heap <rule-root>...\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike \
          verify-scope-lifecycles-tracked-heap \
          <main-rule-root> <extra-rule-root> <include-graph-sizing-json>\n       \
-         diec-rquickjs-rule-runtime-spike fixture <main-rule-root>\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike fixture <main-rule-root>\n       \
+         die-rquickjs-rule-runtime-spike \
          <eval-binary-lifecycle|eval-binary-lifecycle-raw|eval-binary-lifecycle-lexical> \
          <main-rule-root> <binary-order-json>\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike \
          <eval-scope-fixture|eval-scope-fixture-lexical> \
          <fixture-root> <fixture-manifest-json> <qt5-baseline-json>\n       \
-         diec-rquickjs-rule-runtime-spike detect-nintendo \
+         die-rquickjs-rule-runtime-spike detect-nintendo \
          <main-rule-root> <corpus-dir> <baseline-json>\n       \
-         diec-rquickjs-rule-runtime-spike detect-nintendo-lifecycle \
+         die-rquickjs-rule-runtime-spike detect-nintendo-lifecycle \
          <main-rule-root> <corpus-dir> <baseline-json> <binary-order-json>\n       \
-         diec-rquickjs-rule-runtime-spike trace-binary-detects \
+         die-rquickjs-rule-runtime-spike trace-binary-detects \
          <main-rule-root> <input-file> <binary-order-json>\n       \
-         diec-rquickjs-rule-runtime-spike verify-binary-corpus \
+         die-rquickjs-rule-runtime-spike verify-binary-corpus \
          <main-rule-root> <corpus-dir> <corpus-manifest-json> \
          <baseline-json> <binary-order-json>\n       \
-         diec-rquickjs-rule-runtime-spike verify-binary-corpus-tracked-heap \
+         die-rquickjs-rule-runtime-spike verify-binary-corpus-tracked-heap \
          <main-rule-root> <corpus-dir> <corpus-manifest-json> \
          <baseline-json> <binary-order-json>\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike \
          <verify-pe-rule|verify-pe-rule-tracked-heap> \
          <main-rule-root> <pe-fixture-json> <qt5-baseline-json>\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike \
          <verify-elf-rule|verify-elf-rule-tracked-heap> \
          <main-rule-root> <elf-fixture-json> <qt5-baseline-json>\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike \
          <verify-macho-rule|verify-macho-rule-tracked-heap> \
          <main-rule-root> <macho-fixture-json> <qt5-baseline-json>\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike \
          <verify-dex-rule|verify-dex-rule-tracked-heap> \
          <main-rule-root> <dex-fixture-json> <qt5-baseline-json>\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike \
          <verify-apk-rule|verify-apk-rule-tracked-heap> \
          <main-rule-root> <apk-fixture-json> <qt5-baseline-json>\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike \
          <verify-archive-rule|verify-archive-rule-tracked-heap> \
          <main-rule-root> <archive-fixture-json> <qt5-baseline-json>\n       \
-         diec-rquickjs-rule-runtime-spike \
+         die-rquickjs-rule-runtime-spike \
          <verify-pdf-rule|verify-pdf-rule-tracked-heap> \
          <main-rule-root> <pdf-fixture-json> <qt5-baseline-json>"
     );
@@ -8775,7 +8775,7 @@ mod tests {
             .expect("system clock should follow Unix epoch")
             .as_nanos();
         std::env::temp_dir().join(format!(
-            "diec-rquickjs-spike-{}-{nonce}",
+            "die-rquickjs-spike-{}-{nonce}",
             std::process::id()
         ))
     }

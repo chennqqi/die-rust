@@ -135,11 +135,11 @@ class ArchiveFormatHarnessProbeTests(unittest.TestCase):
                     "8a0b27396de1baf2ee634daf"
                 ),
                 "name": (
-                    "diec-rust/upstream-sevenzip-password-harness:"
+                    "die-rust/upstream-sevenzip-password-harness:"
                     "74eaf505"
                 ),
                 "repo_digests": [
-                    "diec-rust/upstream-sevenzip-password-harness@sha256:"
+                    "die-rust/upstream-sevenzip-password-harness@sha256:"
                     "adf8e09f3ed7c15a54f3486c482599e1bcb12230"
                     "8a0b27396de1baf2ee634daf"
                 ],
@@ -152,7 +152,7 @@ class ArchiveFormatHarnessProbeTests(unittest.TestCase):
                 "direct_password_harness": {
                     "path": (
                         "/opt/die-build/src/console/"
-                        "diec-sevenzip-password-harness"
+                        "die-sevenzip-password-harness"
                     ),
                     "sha256": (
                         "af3566c9c3a554f0769a3c582ebc2eb116e74560"
@@ -163,7 +163,7 @@ class ArchiveFormatHarnessProbeTests(unittest.TestCase):
                 "harness": {
                     "path": (
                         "/opt/die-build/src/console/"
-                        "diec-archive-harness"
+                        "die-archive-harness"
                     ),
                     "sha256": (
                         "b7ea9b151b58b630c017e9989333fa035b7d86ffa"

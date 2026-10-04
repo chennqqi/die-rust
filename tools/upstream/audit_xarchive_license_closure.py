@@ -14,7 +14,7 @@ import tomllib
 from typing import Any
 
 
-IMAGE = "diec-rust/upstream-oracle-cmake:74eaf505"
+IMAGE = "die-rust/upstream-oracle-cmake:74eaf505"
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 DIRECT_OBJECT_PREFIX = "CMakeFiles/diec.dir/__/__/XArchive/"
 EXPECTED_ARCHIVES = {
@@ -96,7 +96,7 @@ def direct_compile_units(
         relative_source = token[len(DIRECT_OBJECT_PREFIX) : -2]
         source = component_root / relative_source
         dependency_file = link_directory / f"{token}.d"
-        units.append((source, dependency_file, "diec-direct"))
+        units.append((source, dependency_file, "die-direct"))
     return units
 
 

@@ -17,29 +17,29 @@ UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 PROFILES = {
     "metadata": {
         "probe": "tools/upstream/probe_result_metadata_harness.py",
-        "image": "diec-rust/result-metadata-harness-qt6:74eaf505",
+        "image": "die-rust/result-metadata-harness-qt6:74eaf505",
         "qt5_report": (
             "docs/research/data/result-metadata-engine-qt5.json"
         ),
     },
     "lists": {
         "probe": "tools/upstream/probe_result_lists_harness.py",
-        "image": "diec-rust/result-lists-harness-qt6:74eaf505",
+        "image": "die-rust/result-lists-harness-qt6:74eaf505",
         "qt5_report": "docs/research/data/result-lists-engine-qt5.json",
     },
     "ids": {
         "probe": "tools/upstream/probe_result_ids_harness.py",
-        "image": "diec-rust/result-ids-harness-qt6:74eaf505",
+        "image": "die-rust/result-ids-harness-qt6:74eaf505",
         "qt5_report": "docs/research/data/result-ids-engine-qt5.json",
     },
     "flags": {
         "probe": "tools/upstream/probe_result_flags_harness.py",
-        "image": "diec-rust/result-flags-harness-qt6:74eaf505",
+        "image": "die-rust/result-flags-harness-qt6:74eaf505",
         "qt5_report": "docs/research/data/result-flags-engine-qt5.json",
     },
     "enums": {
         "probe": "tools/upstream/probe_result_enums_harness.py",
-        "image": "diec-rust/result-enums-harness-qt6:74eaf505",
+        "image": "die-rust/result-enums-harness-qt6:74eaf505",
         "qt5_report": "docs/research/data/result-enums-engine-qt5.json",
     },
 }

@@ -100,10 +100,10 @@ class ProbeRar5StoreHarnessTests(unittest.TestCase):
                     "e885a894695abfa959bab5dc"
                 ),
                 "name": (
-                    "diec-rust/upstream-archive-harness:74eaf505"
+                    "die-rust/upstream-archive-harness:74eaf505"
                 ),
                 "repo_digests": [
-                    "diec-rust/upstream-archive-harness@sha256:"
+                    "die-rust/upstream-archive-harness@sha256:"
                     "771b9094a2ad6ab4f6250dd89307ab727c07a1aa"
                     "e885a894695abfa959bab5dc"
                 ],
@@ -118,7 +118,7 @@ class ProbeRar5StoreHarnessTests(unittest.TestCase):
                 "harness": {
                     "path": (
                         "/opt/die-build/src/console/"
-                        "diec-archive-harness"
+                        "die-archive-harness"
                     ),
                     "sha256": (
                         "b7ea9b151b58b630c017e9989333fa035b7d86ffa"

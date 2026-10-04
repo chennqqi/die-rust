@@ -36,27 +36,27 @@ $Profiles = @(
     [ordered]@{
         name = "metadata"
         source = "result_metadata_harness_main.cpp"
-        target = "diec-result-metadata-harness.exe"
+        target = "die-result-metadata-harness.exe"
     },
     [ordered]@{
         name = "lists"
         source = "result_lists_harness_main.cpp"
-        target = "diec-result-lists-harness.exe"
+        target = "die-result-lists-harness.exe"
     },
     [ordered]@{
         name = "flags"
         source = "result_flags_harness_main.cpp"
-        target = "diec-result-flags-harness.exe"
+        target = "die-result-flags-harness.exe"
     },
     [ordered]@{
         name = "ids"
         source = "result_ids_harness_main.cpp"
-        target = "diec-result-ids-harness.exe"
+        target = "die-result-ids-harness.exe"
     },
     [ordered]@{
         name = "enums"
         source = "result_enums_harness_main.cpp"
-        target = "diec-result-enums-harness.exe"
+        target = "die-result-enums-harness.exe"
     }
 )
 

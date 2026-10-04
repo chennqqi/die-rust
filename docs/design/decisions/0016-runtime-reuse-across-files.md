@@ -5,7 +5,7 @@ Last updated: 2026-08-04
 
 ## Context
 
-当前 `scan_bytes`（`crates/diec-engine/src/scanner.rs:293-405`）对每个文件
+当前 `scan_bytes`（`crates/die-engine/src/scanner.rs:293-405`）对每个文件
 的每个 file_type group 执行完整的 runtime 生命周期：
 
 1. `RquickjsRuntime::new()` — 创建 QuickJS runtime + context，设置
@@ -149,10 +149,10 @@ QuickJS 支持字节码缓存，可将规则源码预编译为字节码避免重
 
 ### 已实现（2026-08-04）
 
-- **`RquickjsRuntime::reinit()`**（`crates/diec-rules/src/backend_rquickjs.rs`）：
+- **`RquickjsRuntime::reinit()`**（`crates/die-rules/src/backend_rquickjs.rs`）：
   清除上一文件的结果 + 重新执行 type_init 脚本更新 host 别名
   （`var File = PE; var X = PE;`）。
-- **`Scanner` 结构**（`crates/diec-engine/src/scanner.rs`）：
+- **`Scanner` 结构**（`crates/die-engine/src/scanner.rs`）：
   - `Scanner::new(Arc<Database>)` — 持有 database，runtime 懒加载
   - `Scanner::scan_bytes()` — 复用 per-file_type runtime，register_host_api
     覆盖旧 host + reinit 更新别名 + evaluate_rule_source
@@ -170,13 +170,13 @@ QuickJS 支持字节码缓存，可将规则源码预编译为字节码避免重
 
 ## Evidence
 
-- `crates/diec-engine/src/scanner.rs:293-405` — 当前 scan_bytes 实现
-- `crates/diec-rules/src/backend_rquickjs.rs:89-124` — RquickjsRuntime::new
-- `crates/diec-rules/src/backend_rquickjs.rs:446-482` — load_database
-- `crates/diec-rules/src/backend_rquickjs.rs:484-504` — init
-- `crates/diec-rules/src/backend_rquickjs.rs:569-639` — evaluate_rule_source
+- `crates/die-engine/src/scanner.rs:293-405` — 当前 scan_bytes 实现
+- `crates/die-rules/src/backend_rquickjs.rs:89-124` — RquickjsRuntime::new
+- `crates/die-rules/src/backend_rquickjs.rs:446-482` — load_database
+- `crates/die-rules/src/backend_rquickjs.rs:484-504` — init
+- `crates/die-rules/src/backend_rquickjs.rs:569-639` — evaluate_rule_source
   IIFE 隔离
-- `crates/diec-rules/src/backend_rquickjs.rs:550-554` — shutdown
+- `crates/die-rules/src/backend_rquickjs.rs:550-554` — shutdown
 - ADR 0006 — rquickjs runtime 资源与恢复约束
 - 待补充：`docs/research/runtime-reuse-state-audit.md`
 - 待补充：`scan_corpus_reuse` benchmark 结果

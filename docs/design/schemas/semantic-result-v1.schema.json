@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://diec-rust.invalid/schemas/semantic-result-v1.schema.json",
+  "$id": "https://die-rust.invalid/schemas/semantic-result-v1.schema.json",
   "title": "DIEC legacy CLI compatibility semantic result v1",
   "type": "object",
   "additionalProperties": false,
@@ -180,7 +180,7 @@
       ],
       "properties": {
         "output": {
-          "$ref": "https://diec-rust.invalid/schemas/semantic-projection-contract-v1.schema.json#/$defs/output"
+          "$ref": "https://die-rust.invalid/schemas/semantic-projection-contract-v1.schema.json#/$defs/output"
         },
         "termination": {
           "$ref": "#/$defs/termination"

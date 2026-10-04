@@ -1,5 +1,5 @@
 /*
- * smoke.c - C smoke test for diec-rust C ABI.
+ * smoke.c - C smoke test for die-rust C ABI.
  *
  * This program builds the database, scans a 7-Zip header, and verifies
  * the result JSON contains "7-Zip". It demonstrates the complete

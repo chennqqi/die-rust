@@ -1,6 +1,6 @@
 # Supply Chain Audit
 
-This document records the supply chain security audit for diec-rust.
+This document records the supply chain security audit for die-rust.
 
 Last updated: 2026-08-15
 

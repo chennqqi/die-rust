@@ -121,7 +121,7 @@ class XCapstoneLicenseClosureTests(unittest.TestCase):
         self.assertEqual(
             linkage_counts,
             {
-                "diec-direct": 1,
+                "die-direct": 1,
                 MODULE.ARCHIVE_TOKEN: 10,
             },
         )

@@ -20,8 +20,8 @@ FIXTURE_GENERATOR = (
 SOURCE_GENERATOR = "tools/corpus/generate_archive_format_fixture.py"
 HARNESS_SOURCE = "tools/upstream/archive_harness_main.cpp"
 HARNESS_DOCKERFILE = "tools/upstream/Dockerfile.archive-harness-qt5"
-IMAGE = "diec-rust/upstream-archive-harness:74eaf505"
-HARNESS_BINARY = "/opt/die-build/src/console/diec-archive-harness"
+IMAGE = "die-rust/upstream-archive-harness:74eaf505"
+HARNESS_BINARY = "/opt/die-build/src/console/die-archive-harness"
 RELEASE_BINARY = "/opt/die-build/src/console/diec"
 DATABASE_ARGS = (
     "--database",

@@ -36,12 +36,12 @@ HARNESS_DOCKERFILE = (
     "Dockerfile.generic-archive-dispatch-harness-qt5"
 )
 HARNESS_IMAGE = (
-    "diec-rust/generic-archive-dispatch-harness-qt5:74eaf505"
+    "die-rust/generic-archive-dispatch-harness-qt5:74eaf505"
 )
-QMAKE_IMAGE = "diec-rust/upstream-oracle:74eaf505-repro"
+QMAKE_IMAGE = "die-rust/upstream-oracle:74eaf505-repro"
 HARNESS_BINARY = (
     "/opt/die-build/src/console/"
-    "diec-generic-archive-dispatch-harness"
+    "die-generic-archive-dispatch-harness"
 )
 CMAKE_RELEASE_BINARY = "/opt/die-build/src/console/diec"
 QMAKE_RELEASE_BINARY = "/opt/die-source/build/release/diec"

@@ -22,8 +22,8 @@ XSCANENGINE_COMMIT = "dfe4a419e4f491bb23688ba03c5a5bf39e34da83"
 QT5_REPORT_SHA256 = (
     "ab24ede4c85ab856e77639ad27f31ee47154c0d3e1885d88f9e0f6f8f4bfede8"
 )
-IMAGE = "diec-rust/bw-dispatch-harness-qt6:74eaf505"
-BINARY = "/opt/die-build/src/console/diec-bw-dispatch-harness"
+IMAGE = "die-rust/bw-dispatch-harness-qt6:74eaf505"
+BINARY = "/opt/die-build/src/console/die-bw-dispatch-harness"
 DOCKERFILE = (
     ROOT
     / "tools"

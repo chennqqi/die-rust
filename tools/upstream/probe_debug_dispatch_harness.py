@@ -34,8 +34,8 @@ DEBUG_RULE_SHA256 = (
     "381b6259b239f2633b92fbd84fd0d99b972751e20cab12b6e09139a260f1f47d"
 )
 DEBUG_RULE_NAME = "debug_data_debugData.1.sg"
-IMAGE = "diec-rust/debug-dispatch-harness-qt5:74eaf505"
-BINARY = "/opt/die-build/src/console/diec-debug-dispatch-harness"
+IMAGE = "die-rust/debug-dispatch-harness-qt5:74eaf505"
+BINARY = "/opt/die-build/src/console/die-debug-dispatch-harness"
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HARNESS_SOURCE = (
     ROOT / "tools" / "upstream" / "debug_dispatch_harness_main.cpp"

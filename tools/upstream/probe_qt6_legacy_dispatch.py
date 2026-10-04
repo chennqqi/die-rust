@@ -22,7 +22,7 @@ FORMATS_COMMIT = "1151e7254fdee3c0294ff7095edbdd7bfccf8201"
 QT5_REPORT_SHA256 = (
     "9dd1d4de3535fc035d4624205a24405d05d1b9a9589ca89b4a1e0a4cfdace5fc"
 )
-QT6_IMAGE = "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+QT6_IMAGE = "die-rust/upstream-oracle-cmake-qt6:74eaf505"
 QT6_BINARY = "/opt/die-build/src/console/diec"
 REPETITIONS = 2
 SOURCE_PATHS = (

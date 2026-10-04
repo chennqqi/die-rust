@@ -71,7 +71,7 @@ class DatabaseLayersHarnessTests(unittest.TestCase):
         )
         self.assertEqual(
             report["binary"],
-            "/opt/die-build/src/console/diec-database-layers-harness",
+            "/opt/die-build/src/console/die-database-layers-harness",
         )
         self.assertEqual(report["repetitions"], 2)
         self.assertTrue(report["passed"])
@@ -247,14 +247,14 @@ class DatabaseLayersHarnessTests(unittest.TestCase):
 
         dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
         self.assertIn(
-            "diec-rust/upstream-oracle-cmake:74eaf505",
+            "die-rust/upstream-oracle-cmake:74eaf505",
             dockerfile,
         )
         self.assertIn(
             "74eaf505c250ab47e709024e9dc41657cd8f2254",
             dockerfile,
         )
-        self.assertIn("diec-database-layers-harness", dockerfile)
+        self.assertIn("die-database-layers-harness", dockerfile)
 
     def test_document_and_index_link_machine_evidence(self):
         document = DOCUMENT_PATH.read_text(encoding="utf-8")

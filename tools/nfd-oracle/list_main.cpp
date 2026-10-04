@@ -1,6 +1,6 @@
 // list-oracle — console harness that runs the pinned upstream XArchive
 // classes on an archive input and reports the member record list, for
-// differential comparison against diec-engine::archive::list_secondary.
+// differential comparison against die-engine::archive::list_secondary.
 //
 // Usage: list-oracle <input> [outdir]
 //   Prints one JSON object per format class that claims the file:

@@ -30,13 +30,13 @@ class ArchitectureDesignTest(unittest.TestCase):
 
     def test_workspace_layers_are_defined(self) -> None:
         for crate in (
-            "diec-core",
-            "diec-formats",
-            "diec-rules",
-            "diec-engine",
-            "diec-output",
-            "diec-cli",
-            "diec-ffi",
+            "die-core",
+            "die-formats",
+            "die-rules",
+            "die-engine",
+            "die-output",
+            "die-cli",
+            "die-ffi",
             "xtask",
         ):
             self.assertIn(f"`{crate}`", self.architecture)
@@ -46,19 +46,19 @@ class ArchitectureDesignTest(unittest.TestCase):
 
     def test_dependency_direction_and_forbidden_edges_are_explicit(self) -> None:
         required_edges = (
-            "`diec-formats` | library | 格式探测与安全解析，返回格式事实 | `diec-core`",
-            "`diec-rules` | library | 规则数据库、语法诊断、runtime/host ports 和 backend 隔离 | `diec-core`",
-            "`diec-engine` | library | 扫描编排、候选选择、嵌套队列、结果聚合 | `diec-core`, `diec-formats`, `diec-rules`",
-            "`diec-output` | library | canonical JSON 和人类可读渲染 | `diec-core`",
+            "`die-formats` | library | 格式探测与安全解析，返回格式事实 | `die-core`",
+            "`die-rules` | library | 规则数据库、语法诊断、runtime/host ports 和 backend 隔离 | `die-core`",
+            "`die-engine` | library | 扫描编排、候选选择、嵌套队列、结果聚合 | `die-core`, `die-formats`, `die-rules`",
+            "`die-output` | library | canonical JSON 和人类可读渲染 | `die-core`",
         )
         for edge in required_edges:
             self.assertIn(edge, self.architecture)
 
         for forbidden in (
-            "`diec-core -> diec-formats|diec-rules|diec-engine|diec-output|diec-cli|diec-ffi`",
-            "`diec-rules -> diec-formats|diec-engine|diec-output|diec-cli|diec-ffi`",
-            "`diec-engine -> diec-cli|diec-ffi|diec-output`",
-            "`diec-output -> diec-engine|diec-formats|diec-rules|diec-cli|diec-ffi`",
+            "`die-core -> die-formats|die-rules|die-engine|die-output|die-cli|die-ffi`",
+            "`die-rules -> die-formats|die-engine|die-output|die-cli|die-ffi`",
+            "`die-engine -> die-cli|die-ffi|die-output`",
+            "`die-output -> die-engine|die-formats|die-rules|die-cli|die-ffi`",
         ):
             self.assertIn(forbidden, self.architecture)
 
@@ -76,7 +76,7 @@ class ArchitectureDesignTest(unittest.TestCase):
 
     def test_runtime_is_a_port_not_a_selected_backend(self) -> None:
         self.assertIn("`RuleRuntime` 与 `HostApi` ports", self.architecture)
-        self.assertIn("由 `diec-engine` 的 adapter 实现", self.architecture)
+        self.assertIn("由 `die-engine` 的 adapter 实现", self.architecture)
         self.assertIn("本文不选择 runtime", self.architecture)
         self.assertNotRegex(
             self.architecture,

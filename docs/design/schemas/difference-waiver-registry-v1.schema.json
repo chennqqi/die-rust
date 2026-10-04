@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://diec-rust.invalid/schemas/difference-waiver-registry-v1.schema.json",
-  "title": "diec-rust evidence-bound difference waiver registry v1",
+  "$id": "https://die-rust.invalid/schemas/difference-waiver-registry-v1.schema.json",
+  "title": "die-rust evidence-bound difference waiver registry v1",
   "type": "object",
   "additionalProperties": false,
   "required": [

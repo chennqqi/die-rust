@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://diec-rust.invalid/schemas/semantic-normalization-output-v1.schema.json",
+  "$id": "https://die-rust.invalid/schemas/semantic-normalization-output-v1.schema.json",
   "title": "DIEC audited semantic normalization output v1",
   "type": "object",
   "additionalProperties": false,
@@ -28,7 +28,7 @@
       ],
       "properties": {
         "name": {
-          "const": "diec-semantic-normalizer"
+          "const": "die-semantic-normalizer"
         },
         "version": {
           "const": 1

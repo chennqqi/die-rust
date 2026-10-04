@@ -203,7 +203,7 @@ int main(int argc, char *argv[])
 {
     QCoreApplication application(argc, argv);
     if (argc != 2) {
-        std::fprintf(stderr, "usage: diec-apk-rule-harness <fixture.json>\n");
+        std::fprintf(stderr, "usage: die-apk-rule-harness <fixture.json>\n");
         return 2;
     }
 

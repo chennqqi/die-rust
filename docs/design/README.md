@@ -1,6 +1,6 @@
 # 设计文档
 
-本目录保存由调研证据支持的 diec-rust 设计。尚未完成上游调研的部分应明确标记为待定。
+本目录保存由调研证据支持的 die-rust 设计。尚未完成上游调研的部分应明确标记为待定。
 
 - [`schemas/`](schemas/)：raw execution/framing、legacy CLI semantic result、
   normalization、双侧 semantic comparison、差分输入、精确 waiver registry 和

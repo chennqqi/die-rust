@@ -276,7 +276,7 @@ pub fn extract_7z(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
     let max_members = max_members(flags);
 
     // Create a temporary directory for extraction.
-    let temp_dir = std::env::temp_dir().join(format!("diec_7z_{}", std::process::id()));
+    let temp_dir = std::env::temp_dir().join(format!("die_7z_{}", std::process::id()));
     if std::fs::create_dir_all(&temp_dir).is_err() {
         return vec![];
     }
@@ -1151,7 +1151,7 @@ fn extract_member_zip(data: &[u8], name: &str, limits: &ArchiveLimits) -> Vec<u8
 
 /// Extract one 7Z member bounded to `limits.single_member_bytes`.
 fn extract_member_7z(data: &[u8], name: &str, limits: &ArchiveLimits) -> Vec<u8> {
-    let temp_dir = std::env::temp_dir().join(format!("diec_7z_member_{}", std::process::id()));
+    let temp_dir = std::env::temp_dir().join(format!("die_7z_member_{}", std::process::id()));
     if std::fs::create_dir_all(&temp_dir).is_err() {
         return Vec::new();
     }

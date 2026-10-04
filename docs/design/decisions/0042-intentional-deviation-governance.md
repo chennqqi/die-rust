@@ -7,7 +7,7 @@
 
 After Phases 41–44 eliminated all remaining schedulable alignment
 gaps, the
-delta between diec-rust and the pinned upstream baseline consists
+delta between die-rust and the pinned upstream baseline consists
 entirely of intentional deviations, blocked items, and deferred items.
 Previously these were recorded across several ADRs (0019, 0030,
 0035–0039) plus scattered ROADMAP/COMPATIBILITY notes with inconsistent

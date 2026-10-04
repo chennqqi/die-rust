@@ -26,12 +26,12 @@ class BwDispatchHarnessDockerfileTests(unittest.TestCase):
                 text = dockerfile.read_text(encoding="utf-8")
                 suffix = "-qt6" if platform == "qt6" else ""
                 self.assertIn(
-                    "ARG BASE_IMAGE=diec-rust/"
+                    "ARG BASE_IMAGE=die-rust/"
                     f"upstream-oracle-cmake{suffix}:74eaf505",
                     text,
                 )
                 self.assertIn("bw_dispatch_harness_main.cpp", text)
-                self.assertIn("diec-bw-dispatch-harness", text)
+                self.assertIn("die-bw-dispatch-harness", text)
                 self.assertNotIn("apt-get", text)
                 self.assertNotIn("git clone", text)
 

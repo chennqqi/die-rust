@@ -42,19 +42,19 @@ $Profiles = @(
     [ordered]@{
         name = "bw"
         source = "bw_dispatch_harness_main.cpp"
-        target = "diec-bw-dispatch-harness.exe"
+        target = "die-bw-dispatch-harness.exe"
         adapt_database_paths = $false
     },
     [ordered]@{
         name = "npm"
         source = "npm_dispatch_harness_main.cpp"
-        target = "diec-npm-dispatch-harness.exe"
+        target = "die-npm-dispatch-harness.exe"
         adapt_database_paths = $true
     },
     [ordered]@{
         name = "generic_archive"
         source = "generic_archive_dispatch_harness_main.cpp"
-        target = "diec-generic-archive-dispatch-harness.exe"
+        target = "die-generic-archive-dispatch-harness.exe"
         adapt_database_paths = $true
     }
 )

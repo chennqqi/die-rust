@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://diec-rust.invalid/schemas/compatibility-suite-report-v1.schema.json",
+  "$id": "https://die-rust.invalid/schemas/compatibility-suite-report-v1.schema.json",
   "title": "DIEC typed legacy compatibility suite report v1",
   "type": "object",
   "additionalProperties": false,
@@ -32,7 +32,7 @@
       ],
       "properties": {
         "name": {
-          "const": "diec-compatibility-suite-runner"
+          "const": "die-compatibility-suite-runner"
         },
         "version": {
           "const": 1

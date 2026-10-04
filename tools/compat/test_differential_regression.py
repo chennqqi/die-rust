@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Differential regression test: compare current diec-rust output against baseline.
+"""Differential regression test: compare current die-rust output against baseline.
 
-This script runs diec-rust on the corpus and compares the output against
+This script runs die-rust on the corpus and compares the output against
 a previously collected baseline. Any difference in detections or
 diagnostics is reported as a regression.
 

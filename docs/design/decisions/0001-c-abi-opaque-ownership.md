@@ -4,7 +4,7 @@ Status: Accepted
 Last updated: 2026-07-31
 ## Context
 
-diec-rust 需要同时供 C、Go 和 Python 使用，并提供 Unix `.a` 与 Windows `.lib`。
+die-rust 需要同时供 C、Go 和 Python 使用，并提供 Unix `.a` 与 Windows `.lib`。
 内部结果包含 detection tree、错误、debug、handler 和嵌套 file-part，尚未冻结为
 公共 Rust model。Rust 与调用方可能使用不同 allocator/CRT；规则 runtime 还可能
 带有 thread affinity。

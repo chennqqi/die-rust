@@ -944,7 +944,7 @@ def _validate_path_boundary_report(report: dict[str, Any]) -> None:
         or report.get("upstream_commit") != UPSTREAM_COMMIT
         or report.get("platform") != "linux-x86_64-qt5-qt6"
         or report.get("qt6_image")
-        != "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+        != "die-rust/upstream-oracle-cmake-qt6:74eaf505"
         or report.get("qt6_binary") != "/opt/die-build/src/console/diec"
         or report.get("generator")
         != "tools/upstream/probe_qt6_path_boundaries.py"
@@ -1944,7 +1944,7 @@ def _validate_engine_contract_reports(
     oracle = qt6.get("oracle", {})
     if (
         oracle.get("image")
-        != "diec-rust/engine-contract-harness-qt6:74eaf505"
+        != "die-rust/engine-contract-harness-qt6:74eaf505"
         or oracle.get("image_id")
         != "sha256:ffd09170f4c37a49bffff6a3c3c59469c19caabf6aa9c78f0981e1bd95591a6b"
         or oracle.get("revision") != UPSTREAM_COMMIT
@@ -2285,7 +2285,7 @@ def _validate_signature_path_reports(
         or qt6.get("capability") != "CAP-RULE-007"
         or qt6.get("result") != "observed"
         or oracle.get("image")
-        != "diec-rust/signature-path-harness-qt6:74eaf505"
+        != "die-rust/signature-path-harness-qt6:74eaf505"
         or oracle.get("image_id")
         != "sha256:df9be77359a4b9eb877ddf03c247ab553385b35b103d617655f973e916a333fd"
         or oracle.get("revision") != UPSTREAM_COMMIT
@@ -2322,7 +2322,7 @@ def _validate_debug_dispatch_reports(
         or qt6.get("capability") != "CAP-NEST-007"
         or qt6.get("result") != "observed"
         or oracle.get("image")
-        != "diec-rust/debug-dispatch-harness-qt6:74eaf505"
+        != "die-rust/debug-dispatch-harness-qt6:74eaf505"
         or oracle.get("image_id")
         != "sha256:10a4ab04d46419ae7e3ea7285588d2c8cd9dc7fd75b82e00d6aa9e8f7156f3c3"
         or oracle.get("revision") != UPSTREAM_COMMIT
@@ -2375,7 +2375,7 @@ def _validate_resource_context_reports(
         or qt6.get("platform") != "linux-amd64-qt6"
         or qt6.get("result") != "observed"
         or oracle.get("image")
-        != "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+        != "die-rust/upstream-oracle-cmake-qt6:74eaf505"
         or oracle.get("image_id")
         != "sha256:e015495c313d0715f0b80f395da983a113a439f2a135eb637e9f0638c225200b"
         or oracle.get("image_revision") != UPSTREAM_COMMIT
@@ -2497,18 +2497,18 @@ def _validate_archive_option_report(report: dict[str, Any]) -> None:
     expected_oracles = {
         "qt5": {
             "harness": {
-                "image": "diec-rust/upstream-archive-harness:74eaf505",
+                "image": "die-rust/upstream-archive-harness:74eaf505",
                 "image_id": (
                     "sha256:771b9094a2ad6ab4f6250dd89307ab727c07a1aae885a894695abfa959bab5dc"
                 ),
                 "revision": UPSTREAM_COMMIT,
-                "binary": "/opt/die-build/src/console/diec-archive-harness",
+                "binary": "/opt/die-build/src/console/die-archive-harness",
                 "binary_sha256": (
                     "b7ea9b151b58b630c017e9989333fa035b7d86ffab366a5d3a1f74bab9f1e96e"
                 ),
             },
             "release": {
-                "image": "diec-rust/upstream-oracle-cmake:74eaf505",
+                "image": "die-rust/upstream-oracle-cmake:74eaf505",
                 "image_id": (
                     "sha256:466102628c3a94b7ab1048f0c24261b1920e61a40029b128763cf79370255040"
                 ),
@@ -2522,20 +2522,20 @@ def _validate_archive_option_report(report: dict[str, Any]) -> None:
         "qt6": {
             "harness": {
                 "image": (
-                    "diec-rust/upstream-archive-harness-qt6:74eaf505"
+                    "die-rust/upstream-archive-harness-qt6:74eaf505"
                 ),
                 "image_id": (
                     "sha256:2e46aa3e3d2fa731e92bd57c11f905bc3ff4a4064106d020314ad05a422c4488"
                 ),
                 "revision": UPSTREAM_COMMIT,
-                "binary": "/opt/die-build/src/console/diec-archive-harness",
+                "binary": "/opt/die-build/src/console/die-archive-harness",
                 "binary_sha256": (
                     "6fed831d6c11b67e0a9e0ea0aa57b2a9e380a5a6f53dd46f426122aec3839d76"
                 ),
             },
             "release": {
                 "image": (
-                    "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+                    "die-rust/upstream-oracle-cmake-qt6:74eaf505"
                 ),
                 "image_id": (
                     "sha256:e015495c313d0715f0b80f395da983a113a439f2a135eb637e9f0638c225200b"

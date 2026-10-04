@@ -29,7 +29,7 @@ from typing import Any
 import verify_raw_execution as raw_verifier
 
 
-COLLECTOR_NAME = "diec-rust-execution-collector"
+COLLECTOR_NAME = "die-rust-execution-collector"
 COLLECTOR_VERSION = 1
 HASH_CHUNK_BYTES = 1024 * 1024
 MAX_STDOUT_BYTES = 64 * 1024 * 1024

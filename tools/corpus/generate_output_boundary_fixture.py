@@ -10,7 +10,7 @@ import pathlib
 import sys
 
 
-INPUT = b"diec-rust output boundary fixture\n"
+INPUT = b"die-rust output boundary fixture\n"
 SPECIAL_NAME = (
     'Quote" Backslash\\ Slash/ Semi; Comma, Tab\t CR\r LF\n '
     "XML<>&' Snowman\u2603 CJK\u4e2d Emoji\U0001f600 "

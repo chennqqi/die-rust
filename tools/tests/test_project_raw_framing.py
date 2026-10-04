@@ -520,7 +520,7 @@ class RawFramingProjectionTests(unittest.TestCase):
         self.assertEqual(
             schema["properties"]["execution_verification"]["$ref"],
             (
-                "https://diec-rust.invalid/schemas/"
+                "https://die-rust.invalid/schemas/"
                 "raw-execution-verification-v1.schema.json"
             ),
         )

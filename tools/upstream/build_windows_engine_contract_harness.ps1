@@ -165,7 +165,7 @@ if (-not $SourceMatch.Success) {
     throw "Cannot locate main_console.cpp in the Release Makefile."
 }
 
-$HarnessTarget = "diec-engine-contract-harness.exe"
+$HarnessTarget = "die-engine-contract-harness.exe"
 $HarnessObjectName = "release\engine_contract_harness_main.obj"
 $PatchedMakefile = $OriginalMakefile.Replace(
     "release\main_console.obj",

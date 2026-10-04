@@ -69,7 +69,7 @@ class DatabaseCacheHarnessTests(unittest.TestCase):
         )
         self.assertEqual(
             report["binary"],
-            "/opt/die-build/src/console/diec-database-cache-harness",
+            "/opt/die-build/src/console/die-database-cache-harness",
         )
         self.assertEqual(report["repetitions"], 2)
         self.assertTrue(report["passed"])
@@ -129,7 +129,7 @@ class DatabaseCacheHarnessTests(unittest.TestCase):
         self.assertEqual(observation["effective_gid"], 65534)
         self.assertEqual(
             observation["database_path"],
-            "/tmp/diec-database-cache-harness/database",
+            "/tmp/die-database-cache-harness/database",
         )
         self.assertEqual(observation["fixed_mtime_seconds"], 1700000000)
         self.assertEqual(observation["fixed_mtime_nanoseconds"], 123000000)
@@ -336,7 +336,7 @@ class DatabaseCacheHarnessTests(unittest.TestCase):
             "geteuid",
             "getegid",
             "replaceRulePreservingStats",
-            "/tmp/diec-database-cache-harness",
+            "/tmp/die-database-cache-harness",
             "1700000000",
         ):
             with self.subTest(token=token):
@@ -344,14 +344,14 @@ class DatabaseCacheHarnessTests(unittest.TestCase):
 
         dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
         self.assertIn(
-            "diec-rust/upstream-oracle-cmake:74eaf505",
+            "die-rust/upstream-oracle-cmake:74eaf505",
             dockerfile,
         )
         self.assertIn(
             "74eaf505c250ab47e709024e9dc41657cd8f2254",
             dockerfile,
         )
-        self.assertIn("diec-database-cache-harness", dockerfile)
+        self.assertIn("die-database-cache-harness", dockerfile)
 
     def test_document_and_index_link_machine_evidence(self):
         document = DOCUMENT_PATH.read_text(encoding="utf-8")

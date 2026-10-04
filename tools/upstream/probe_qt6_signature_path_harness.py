@@ -14,7 +14,7 @@ from typing import Any
 
 GENERATOR = "tools/upstream/probe_qt6_signature_path_harness.py"
 UNDERLYING_PROBE = "tools/upstream/probe_signature_path_harness.py"
-IMAGE = "diec-rust/signature-path-harness-qt6:74eaf505"
+IMAGE = "die-rust/signature-path-harness-qt6:74eaf505"
 DOCKERFILE = "tools/upstream/Dockerfile.signature-path-harness-qt6"
 
 

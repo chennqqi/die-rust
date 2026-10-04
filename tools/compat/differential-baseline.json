@@ -1,8 +1,8 @@
 {
-  "tool": "diec-rust",
+  "tool": "die-rust",
   "version": "diec 0.1.4",
   "collected_at": "2026-08-03T05:02:46.326126+00:00",
-  "corpus_dir": "I:\\github.com\\chennqqi\\diec-rust\\corpus",
+  "corpus_dir": "I:\\github.com\\chennqqi\\die-rust\\corpus",
   "file_count": 28,
   "results": [
     {

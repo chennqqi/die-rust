@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <!--
   WiX installer configuration for died (die daemon).
-  Build with: cargo wix --package diec-server
+  Build with: cargo wix --package die-server
   Requires:   cargo install cargo-wix
               WiX Toolset v3.14+ (candle.exe + light.exe)
   Output:     target/wix/died-<version>-x86_64-install.msi
@@ -10,12 +10,12 @@
   <Product
     Id='*'
     Name='died (die daemon)'
-    Publisher='diec-rust'
+    Publisher='die-rust'
     Version='!(bind.FileVersion.died)'
     Language='1033'
     Codepage='1252'>
     <Package Id='*' Keywords='Installer' Description='died HTTP/JSON scan service'
-      Manufacturer='diec-rust' InstallerVersion='405' InstallPrivileges='elevated'
+      Manufacturer='die-rust' InstallerVersion='405' InstallPrivileges='elevated'
       InstallScope='perMachine' Compressed='yes' />
     <Media Id='1' Cabinet='died.cab' EmbedCab='yes' />
     <Directory Id='TARGETDIR' Name='SourceDir'>

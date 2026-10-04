@@ -1,5 +1,5 @@
 import json, sys, os
-os.chdir(os.path.expanduser('~/dev/tmp/diec-macos-work/evidence'))
+os.chdir(os.path.expanduser('~/dev/tmp/die-macos-work/evidence'))
 for fn in ['cli-matrix-candidate.json','cli-baseline-candidate.json','cli-database-candidate.json','cli-filesystem-candidate.json','cli-large-directory-candidate.json','cli-path-nested-candidate.json','cli-remaining-candidate.json','cli-toctou-candidate.json','long-path-fixture-candidate.json']:
     try:
         d = json.load(open(fn))

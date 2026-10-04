@@ -16,9 +16,9 @@ from typing import Any
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 DIE_SCRIPT_COMMIT = "5d82316c110abf0eb863b50bc679d330e05067b6"
 RULES_COMMIT = "c2c17dfa5ea4e078ba31eab55d87430c96622fb6"
-QT5_IMAGE = "diec-rust/upstream-global-host-api-harness:74eaf505"
-QT6_IMAGE = "diec-rust/upstream-global-host-api-harness-qt6:74eaf505"
-DEFAULT_BINARY = "/opt/die-build/src/console/diec-global-host-api-harness"
+QT5_IMAGE = "die-rust/upstream-global-host-api-harness:74eaf505"
+QT6_IMAGE = "die-rust/upstream-global-host-api-harness-qt6:74eaf505"
+DEFAULT_BINARY = "/opt/die-build/src/console/die-global-host-api-harness"
 QT5_GLOBALS = (
     "includeScript",
     "_log",
@@ -593,7 +593,7 @@ def validate_observation(
         raise ValueError("lite mode behavior changed")
     if (
         modes["empty_requested"]["application_name"]
-        != "diec-global-host-api-harness"
+        != "die-global-host-api-harness"
         or modes["empty_requested"]["library"].get("boolean") is not False
     ):
         raise ValueError("empty application-name fallback changed")

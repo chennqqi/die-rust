@@ -26,7 +26,7 @@ class GenericArchiveDispatchHarnessDockerfileTests(unittest.TestCase):
                 text = dockerfile.read_text(encoding="utf-8")
                 suffix = "-qt6" if qt == "qt6" else ""
                 self.assertIn(
-                    "ARG BASE_IMAGE=diec-rust/"
+                    "ARG BASE_IMAGE=die-rust/"
                     f"upstream-oracle-cmake{suffix}:74eaf505",
                     text,
                 )
@@ -35,7 +35,7 @@ class GenericArchiveDispatchHarnessDockerfileTests(unittest.TestCase):
                     text,
                 )
                 self.assertIn(
-                    "diec-generic-archive-dispatch-harness",
+                    "die-generic-archive-dispatch-harness",
                     text,
                 )
                 self.assertNotIn("apt-get", text)

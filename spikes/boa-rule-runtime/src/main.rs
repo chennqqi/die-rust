@@ -252,9 +252,9 @@ fn run_fixture(rule_root: &Path) -> Result<bool, String> {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: diec-boa-rule-runtime-spike \
+        "usage: die-boa-rule-runtime-spike \
          <parse-isolated|parse-shared> <rule-root>...\n       \
-         diec-boa-rule-runtime-spike fixture <main-rule-root>"
+         die-boa-rule-runtime-spike fixture <main-rule-root>"
     );
     ExitCode::from(2)
 }
@@ -301,7 +301,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock should follow Unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("diec-boa-spike-{}-{nonce}", std::process::id()))
+        std::env::temp_dir().join(format!("die-boa-spike-{}-{nonce}", std::process::id()))
     }
 
     #[test]

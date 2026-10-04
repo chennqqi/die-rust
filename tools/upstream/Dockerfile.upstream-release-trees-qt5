@@ -1,11 +1,11 @@
-ARG BASE_IMAGE=diec-rust/upstream-install-qt5:74eaf505@sha256:6f7a378ea1c5a07745d45083c0e596430fefc6526273528366a7dc7e11230368
+ARG BASE_IMAGE=die-rust/upstream-install-qt5:74eaf505@sha256:6f7a378ea1c5a07745d45083c0e596430fefc6526273528366a7dc7e11230368
 FROM ${BASE_IMAGE}
 
 COPY upstream/audit_linux_release_trees.py \
-    /opt/diec-release/audit_linux_release_trees.py
+    /opt/die-release/audit_linux_release_trees.py
 
 LABEL org.opencontainers.image.revision="74eaf505c250ab47e709024e9dc41657cd8f2254"
 LABEL org.opencontainers.image.source="https://github.com/horsicq/DIE-engine"
 LABEL org.opencontainers.image.description="Pinned Linux Qt5 release-tree replay audit environment"
 
-ENTRYPOINT ["/usr/bin/python3", "/opt/diec-release/audit_linux_release_trees.py", "--inside"]
+ENTRYPOINT ["/usr/bin/python3", "/opt/die-release/audit_linux_release_trees.py", "--inside"]

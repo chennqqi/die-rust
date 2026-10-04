@@ -35,7 +35,7 @@
 
 - `docs/design/phase7-gui.md` 目标写 "图形界面程序 `die-gui`"。
 - 后文 crate、架构、Workspace 集成均使用 `die-gui`。
-- **建议**：统一使用 `die-gui`，与项目 `diec-*` 前缀一致。
+- **建议**：统一使用 `die-gui`，与项目 `die-*` 前缀一致。
 
 ### 3. 前端入口文件命名不一致（中）
 
@@ -47,7 +47,7 @@
 
 - 上游 `comboBoxFlags` 包含 `Recursive/Overlay/Resource/Archive/Deep/Heuristic/Aggressive/Verbose/AllTypes/FirstWrapperOnly`。
 - `phase7-gui.md` 中的 `ScanFlagsDto` 缺少 `first_wrapper_only`。
-- **建议**：补齐该字段，并与现有 `diec-engine::ScanFlags` 保持同步。
+- **建议**：补齐该字段，并与现有 `die-engine::ScanFlags` 保持同步。
 
 ### 5. 上游 submodule 获取方式不可复现（中）
 
@@ -96,7 +96,7 @@
 | 1 | 阶段命名不一致 | 文件重命名 `phase7-gui.md` → `phase8-gui.md`，标题改为 Phase 8，更新 ROADMAP/AGENTS/README 引用 |
 | 2 | 程序命名不一致 | 统一使用 `die-gui`（目标章节 + CI/CD 发布物） |
 | 3 | 前端入口命名 | `main.ts` → `main.tsx`（ADR 0018 crate 结构） |
-| 4 | ScanFlagsDto 缺字段 | 补齐 `first_wrapper_only` + `hide_unknown`，添加与 `diec-engine::ScanFlags` 的映射说明 |
+| 4 | ScanFlagsDto 缺字段 | 补齐 `first_wrapper_only` + `hide_unknown`，添加与 `die-engine::ScanFlags` 的映射说明 |
 | 5 | submodule 获取不可复现 | 补充 `git clone` + `git checkout 5b48377` 可复现命令 |
 | 6 | GUI 测试策略缺失 | 补充 7A/7B/7C 分阶段测试策略（单元/前端组件/集成/差分/跨平台 CI/WebView 一致性） |
 | 7 | IPC 错误为 String | 定义 `GuiError { code, message }` 结构化 DTO，替换所有 `Result<..., String>` |

@@ -1,6 +1,6 @@
 // unpack-oracle — console harness that runs the pinned upstream
 // XStaticUnpacker classes on a packed input and writes the unpacked
-// output, for differential comparison against diec-engine::unpack.
+// output, for differential comparison against die-engine::unpack.
 //
 // Usage: unpack-oracle <input> <output-prefix>
 //   Prints one JSON object per unpacker that claims the file, and

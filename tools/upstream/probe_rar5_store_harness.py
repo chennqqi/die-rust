@@ -17,8 +17,8 @@ UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 FIXTURE_GENERATOR = "tools/corpus/generate_rar5_store_fixture.py"
 HARNESS_SOURCE = "tools/upstream/archive_harness_main.cpp"
 HARNESS_DOCKERFILE = "tools/upstream/Dockerfile.archive-harness-qt5"
-IMAGE = "diec-rust/upstream-archive-harness:74eaf505"
-HARNESS_BINARY = "/opt/die-build/src/console/diec-archive-harness"
+IMAGE = "die-rust/upstream-archive-harness:74eaf505"
+HARNESS_BINARY = "/opt/die-build/src/console/die-archive-harness"
 RELEASE_BINARY = "/opt/die-build/src/console/diec"
 DATABASE_ARGS = (
     "--database",

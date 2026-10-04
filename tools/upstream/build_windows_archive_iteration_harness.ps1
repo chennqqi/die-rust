@@ -144,7 +144,7 @@ if (-not $TargetMatch.Success -or -not $SourceMatch.Success) {
     throw "Cannot locate original target or console source."
 }
 $OriginalTarget = $TargetMatch.Groups[1].Value.Trim()
-$HarnessTarget = "diec-archive-iteration-harness.exe"
+$HarnessTarget = "die-archive-iteration-harness.exe"
 $HarnessObjectName = "release\archive_iteration_boundary_harness_main.obj"
 $PatchedMakefile = $OriginalMakefile.Replace(
     "release\main_console.obj",

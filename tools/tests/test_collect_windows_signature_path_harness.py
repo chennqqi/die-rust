@@ -215,7 +215,7 @@ class CollectWindowsSignaturePathHarnessTests(unittest.TestCase):
             "I:/tmp",
             "I:\\\\tmp",
             "worker",
-            "diec-windows-clean",
+            "die-windows-clean",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)

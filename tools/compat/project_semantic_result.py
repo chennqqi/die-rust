@@ -21,7 +21,7 @@ import verify_raw_execution as raw_verifier
 SEMANTIC_MODEL_SCHEMA_VERSION = 1
 SEMANTIC_PROJECTION_SCHEMA_VERSION = 1
 SEMANTIC_CONTRACT_SCHEMA_VERSION = 1
-PROJECTOR_NAME = "diec-semantic-result-projector"
+PROJECTOR_NAME = "die-semantic-result-projector"
 PROJECTOR_VERSION = 1
 
 OUTPUT_KINDS = (

@@ -1,4 +1,4 @@
-//! `xtask` is the diec-rust build/sync/oracle/corpus/release tooling binary.
+//! `xtask` is the die-rust build/sync/oracle/corpus/release tooling binary.
 //!
 //! It is not part of the runtime dependency graph and must not be depended on
 //! by any runtime crate. Subcommands:

@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "diec-rquickjs-static-link-spike"
+name = "die-rquickjs-static-link-spike"
 version = "0.0.0"
 dependencies = [
  "rquickjs",

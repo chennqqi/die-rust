@@ -185,7 +185,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-image-dispatch-harness <fixture-root>\n"
+            "usage: die-image-dispatch-harness <fixture-root>\n"
         );
         return 2;
     }

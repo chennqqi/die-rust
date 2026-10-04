@@ -126,7 +126,7 @@ class HostApiArityProbeTests(unittest.TestCase):
         self.assertIn(
             (
                 "ARG BASE_IMAGE="
-                "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+                "die-rust/upstream-oracle-cmake-qt6:74eaf505"
             ),
             source,
         )

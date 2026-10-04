@@ -17,7 +17,7 @@ GENERATOR = "tools/upstream/probe_qt6_resource_context_chain.py"
 UNDERLYING_PROBE = "tools/upstream/probe_resource_context_chain.py"
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 RULES_COMMIT = "c2c17dfa5ea4e078ba31eab55d87430c96622fb6"
-IMAGE = "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+IMAGE = "die-rust/upstream-oracle-cmake-qt6:74eaf505"
 BINARY = "/opt/die-build/src/console/diec"
 QT6_IMAGE_ID = (
     "sha256:e015495c313d0715f0b80f395da983a113a439f2a135eb637e9f0638c225200b"

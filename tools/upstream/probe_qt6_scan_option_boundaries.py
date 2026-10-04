@@ -13,7 +13,7 @@ from typing import Any
 
 QT6_WARNING = b"Unimplemented code.\n" * 4
 QT6_ORACLE_NAME = "linux-qt6-cmake"
-QT6_IMAGE = "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+QT6_IMAGE = "die-rust/upstream-oracle-cmake-qt6:74eaf505"
 QT6_BINARY = "/opt/die-build/src/console/diec"
 REPETITIONS = 2
 

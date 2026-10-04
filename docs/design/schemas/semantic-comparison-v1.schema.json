@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://diec-rust.invalid/schemas/semantic-comparison-v1.schema.json",
+  "$id": "https://die-rust.invalid/schemas/semantic-comparison-v1.schema.json",
   "title": "DIEC audited two-sided semantic comparison v1",
   "type": "object",
   "additionalProperties": false,
@@ -30,7 +30,7 @@
       ],
       "properties": {
         "name": {
-          "const": "diec-semantic-comparator"
+          "const": "die-semantic-comparator"
         },
         "version": {
           "const": 1
@@ -50,10 +50,10 @@
       "$ref": "#/$defs/requirement"
     },
     "run_identity": {
-      "$ref": "https://diec-rust.invalid/schemas/semantic-projection-v1.schema.json#/$defs/runIdentity"
+      "$ref": "https://die-rust.invalid/schemas/semantic-projection-v1.schema.json#/$defs/runIdentity"
     },
     "case_id": {
-      "$ref": "https://diec-rust.invalid/schemas/semantic-projection-v1.schema.json#/$defs/caseId"
+      "$ref": "https://die-rust.invalid/schemas/semantic-projection-v1.schema.json#/$defs/caseId"
     },
     "contracts": {
       "$ref": "#/$defs/contracts"
@@ -349,7 +349,7 @@
       ],
       "properties": {
         "producer": {
-          "$ref": "https://diec-rust.invalid/schemas/semantic-result-v1.schema.json#/$defs/producer"
+          "$ref": "https://die-rust.invalid/schemas/semantic-result-v1.schema.json#/$defs/producer"
         },
         "projection": {
           "$ref": "#/$defs/projectionInput"
@@ -393,7 +393,7 @@
         "issues": {
           "type": "array",
           "items": {
-            "$ref": "https://diec-rust.invalid/schemas/semantic-result-v1.schema.json#/$defs/issue"
+            "$ref": "https://die-rust.invalid/schemas/semantic-result-v1.schema.json#/$defs/issue"
           }
         }
       }
@@ -503,7 +503,7 @@
               "type": "array",
               "minItems": 1,
               "items": {
-                "$ref": "https://diec-rust.invalid/schemas/semantic-normalization-output-v1.schema.json#/$defs/appliedRule"
+                "$ref": "https://die-rust.invalid/schemas/semantic-normalization-output-v1.schema.json#/$defs/appliedRule"
               }
             }
           }

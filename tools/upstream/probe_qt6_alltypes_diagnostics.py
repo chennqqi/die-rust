@@ -33,11 +33,11 @@ DATABASE_ARGS = (
 )
 ORACLES = {
     "qt5": {
-        "image": "diec-rust/upstream-oracle-cmake:74eaf505",
+        "image": "die-rust/upstream-oracle-cmake:74eaf505",
         "binary": "/opt/die-build/src/console/diec",
     },
     "qt6": {
-        "image": "diec-rust/upstream-oracle-cmake-qt6:74eaf505",
+        "image": "die-rust/upstream-oracle-cmake-qt6:74eaf505",
         "binary": "/opt/die-build/src/console/diec",
     },
 }

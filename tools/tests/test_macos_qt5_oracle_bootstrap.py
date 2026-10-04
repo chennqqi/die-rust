@@ -2468,7 +2468,7 @@ def write_long_path_fixture_candidate_bundle(
     directory: Path,
 ) -> Path:
     generator = LONG_PATH_FIXTURE_GENERATOR
-    base = PurePosixPath("/private/tmp/diec-macos-long-path")
+    base = PurePosixPath("/private/tmp/die-macos-long-path")
     payload = BASELINE_CORPUS_GENERATOR.make_pdf()
     cases = []
 
@@ -2862,7 +2862,7 @@ class MacosQt5OracleBootstrapTests(unittest.TestCase):
             "database-cache-harness-build-candidate.json",
             "database-cache-harness-candidate",
             "database-cache-engine-candidate.json",
-            "diec-macos-candidate-evidence/build-input",
+            "die-macos-candidate-evidence/build-input",
             "cli-baseline-candidate.json",
             "cli-matrix-candidate.json",
             "cli-remaining-candidate.json",
@@ -2879,7 +2879,7 @@ class MacosQt5OracleBootstrapTests(unittest.TestCase):
             "cli-toctou-candidate.json",
             "database-cache-harness-build-candidate.json",
             "database-cache-engine-candidate.json",
-            "diec-macos-candidate-evidence/raw",
+            "die-macos-candidate-evidence/raw",
             (
                 "actions/checkout@"
                 "de0fac2e4500dabe0009e67214ff5f5447ce83dd"

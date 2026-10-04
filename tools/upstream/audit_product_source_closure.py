@@ -16,7 +16,7 @@ import tomllib
 from typing import Any
 
 
-IMAGE = "diec-rust/upstream-oracle-cmake:74eaf505"
+IMAGE = "die-rust/upstream-oracle-cmake:74eaf505"
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 DIRECT_PREFIX = "CMakeFiles/diec.dir/"
 COMPONENT_DIRECT_PREFIX = f"{DIRECT_PREFIX}__/__/"
@@ -309,10 +309,10 @@ def replay_link_with_map(
         raise ValueError("link output option drift")
     output_index = link_tokens.index("-o") + 1
     replay = list(link_tokens)
-    replay[output_index] = "/tmp/diec-product-source-closure"
+    replay[output_index] = "/tmp/die-product-source-closure"
     replay.insert(
         output_index - 1,
-        "-Wl,-Map,/tmp/diec-product-source-closure.map",
+        "-Wl,-Map,/tmp/die-product-source-closure.map",
     )
     process = subprocess.run(
         replay,
@@ -323,9 +323,9 @@ def replay_link_with_map(
     if process.stdout or process.stderr:
         raise ValueError("replayed product link wrote output")
     return (
-        pathlib.Path("/tmp/diec-product-source-closure").read_bytes(),
+        pathlib.Path("/tmp/die-product-source-closure").read_bytes(),
         pathlib.Path(
-            "/tmp/diec-product-source-closure.map"
+            "/tmp/die-product-source-closure.map"
         ).read_bytes(),
     )
 

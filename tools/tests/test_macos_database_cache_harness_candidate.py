@@ -54,16 +54,16 @@ def write_candidate(bundle: Path):
     linux = json.loads(linux_raw)
     observation = copy.deepcopy(linux["observation"])
     working = PurePosixPath(
-        "/private/tmp/diec-macos-cache-working"
+        "/private/tmp/die-macos-cache-working"
     )
     home = working / "home"
     observation["effective_uid"] = 501
     observation["effective_gid"] = 20
     observation["database_path"] = (
-        "/tmp/diec-database-cache-harness/database"
+        "/tmp/die-database-cache-harness/database"
     )
     observation["rule_path"] = (
-        "/tmp/diec-database-cache-harness/database/"
+        "/tmp/die-database-cache-harness/database/"
         "Binary/fixture.1.sg"
     )
     observation["cache_path"] = str(
@@ -264,10 +264,10 @@ class MacosDatabaseCacheHarnessCandidateTest(unittest.TestCase):
         )
         value = copy.deepcopy(linux["observation"])
         value["database_path"] = (
-            "/tmp/diec-database-cache-harness/database"
+            "/tmp/die-database-cache-harness/database"
         )
         value["rule_path"] = (
-            "/tmp/diec-database-cache-harness/database/"
+            "/tmp/die-database-cache-harness/database/"
             "Binary/fixture.1.sg"
         )
         value["cache_path"] = "/Users/runner/real/cache.cache"

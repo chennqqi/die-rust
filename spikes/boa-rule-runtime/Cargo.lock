@@ -236,7 +236,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "diec-boa-rule-runtime-spike"
+name = "die-boa-rule-runtime-spike"
 version = "0.0.0"
 dependencies = [
  "boa_engine",

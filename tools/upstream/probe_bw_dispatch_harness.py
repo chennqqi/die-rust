@@ -14,8 +14,8 @@ from typing import Any
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 FORMATS_COMMIT = "1151e7254fdee3c0294ff7095edbdd7bfccf8201"
 XSCANENGINE_COMMIT = "dfe4a419e4f491bb23688ba03c5a5bf39e34da83"
-IMAGE = "diec-rust/bw-dispatch-harness-qt5:74eaf505"
-BINARY = "/opt/die-build/src/console/diec-bw-dispatch-harness"
+IMAGE = "die-rust/bw-dispatch-harness-qt5:74eaf505"
+BINARY = "/opt/die-build/src/console/die-bw-dispatch-harness"
 INPUT_HEX = "42570000000000000000"
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HARNESS_SOURCE = ROOT / "tools" / "upstream" / "bw_dispatch_harness_main.cpp"

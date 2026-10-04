@@ -51,7 +51,7 @@ def _build_diec(tmpdir: pathlib.Path) -> pathlib.Path:
     binary = target_dir / binary_name
     if not binary.exists():
         subprocess.run(
-            ["cargo", "build", "-p", "diec-cli", "--locked"],
+            ["cargo", "build", "-p", "die-cli", "--locked"],
             cwd=str(REPO_ROOT),
             check=True,
             capture_output=True,
@@ -64,14 +64,14 @@ def _build_diec(tmpdir: pathlib.Path) -> pathlib.Path:
 
 def test_end_to_end_differential_audit() -> None:
     """The framework produces an auditable raw execution record for diec."""
-    with tempfile.TemporaryDirectory(prefix="diec-diff-e2e-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="die-diff-e2e-") as tmp:
         tmpdir = pathlib.Path(tmp)
         artifact_root = tmpdir / "artifacts"
         artifact_root.mkdir()
 
         binary = _build_diec(tmpdir)
 
-        case_id = "phase1.skeleton.diec-no-args"
+        case_id = "phase1.skeleton.die-no-args"
         case_manifest_sha = _sha256_zero()
         output_path = tmpdir / "rust-execution.json"
 
@@ -141,7 +141,7 @@ def test_end_to_end_differential_audit() -> None:
 
 def test_collect_rust_execution_rejects_missing_executable() -> None:
     """The collector rejects a non-existent executable."""
-    with tempfile.TemporaryDirectory(prefix="diec-diff-missing-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="die-diff-missing-") as tmp:
         tmpdir = pathlib.Path(tmp)
         try:
             rust_collector.collect(
@@ -163,7 +163,7 @@ def test_collect_rust_execution_rejects_missing_executable() -> None:
 
 def test_collect_rust_execution_content_addressed() -> None:
     """Artifacts are content-addressed under sha256/<digest>."""
-    with tempfile.TemporaryDirectory(prefix="diec-diff-ca-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="die-diff-ca-") as tmp:
         tmpdir = pathlib.Path(tmp)
         artifact_root = tmpdir / "artifacts"
         binary = _build_diec(tmpdir)

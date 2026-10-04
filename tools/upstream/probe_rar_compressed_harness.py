@@ -20,12 +20,12 @@ FIXTURE_SOURCE_COMMIT = (
 FIXTURE_SOURCE_REMOTE = (
     "https://github.com/ssokolow/rar-test-files.git"
 )
-IMAGE = "diec-rust/upstream-sevenzip-password-harness:74eaf505"
+IMAGE = "die-rust/upstream-sevenzip-password-harness:74eaf505"
 EXPECTED_IMAGE_ID = (
     "sha256:adf8e09f3ed7c15a54f3486c482599e1bcb122"
     "308a0b27396de1baf2ee634daf"
 )
-HARNESS_BINARY = "/opt/die-build/src/console/diec-archive-harness"
+HARNESS_BINARY = "/opt/die-build/src/console/die-archive-harness"
 HARNESS_SOURCE = "tools/upstream/archive_harness_main.cpp"
 HARNESS_DOCKERFILE = "tools/upstream/Dockerfile.archive-harness-qt5"
 FIXTURE_REPORT = (

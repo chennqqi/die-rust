@@ -61,7 +61,7 @@ RUN mkdir -p /opt/die-evidence \
         --parallel "$(nproc)" \
     && cmake -LA -N /opt/die-build > /opt/die-evidence/cmake-cache.txt \
     && cp /opt/die-build/src/console/CMakeFiles/diec.dir/link.txt \
-        /opt/die-evidence/diec-link.txt
+        /opt/die-evidence/die-link.txt
 
 RUN file /opt/die-build/src/console/diec > /opt/die-evidence/file.txt \
     && sha256sum /opt/die-build/src/console/diec > /opt/die-evidence/sha256.txt \

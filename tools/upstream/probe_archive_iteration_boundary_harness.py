@@ -36,7 +36,7 @@ CORPUS_GENERATOR = (
 )
 DEFAULT_BINARY = (
     "/opt/die-build/src/console/"
-    "diec-archive-iteration-boundary-harness"
+    "die-archive-iteration-boundary-harness"
 )
 RESOURCE_LIMITS = {
     "cpus": "1",

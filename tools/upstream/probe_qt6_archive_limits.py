@@ -19,9 +19,9 @@ PROBE_PATH = "tools/upstream/probe_archive_limits_harness.py"
 QT5_REPORT_PATH = "docs/research/data/archive-limit-engine-qt5.json"
 CORPUS_PATH = "docs/research/data/archive-limit-corpus.json"
 QT6_IMAGE = (
-    "diec-rust/upstream-archive-limits-harness-qt6:74eaf505"
+    "die-rust/upstream-archive-limits-harness-qt6:74eaf505"
 )
-QT6_BINARY = "/opt/die-build/src/console/diec-archive-limits-harness"
+QT6_BINARY = "/opt/die-build/src/console/die-archive-limits-harness"
 LOCAL_SOURCES = (
     "tools/upstream/Dockerfile.archive-limits-harness-qt6",
     "tools/upstream/archive_limits_harness_main.cpp",

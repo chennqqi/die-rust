@@ -30,7 +30,7 @@ constexpr const char *UPSTREAM_COMMIT =
     "74eaf505c250ab47e709024e9dc41657cd8f2254";
 constexpr const char *XSCANENGINE_COMMIT =
     "dfe4a419e4f491bb23688ba03c5a5bf39e34da83";
-constexpr const char *WORK_ROOT = "/tmp/diec-database-cache-harness";
+constexpr const char *WORK_ROOT = "/tmp/die-database-cache-harness";
 constexpr qint64 FIXED_MTIME_SECONDS = 1700000000;
 constexpr qint64 FIXED_MTIME_NANOSECONDS = 123000000;
 
@@ -197,7 +197,7 @@ QJsonArray scanNames(
     QJsonArray *errors
 )
 {
-    QByteArray input("diec-rust deterministic corpus\n");
+    QByteArray input("die-rust deterministic corpus\n");
     XBinary::PDSTRUCT state = XBinary::createPdStruct();
     const XScanEngine::SCAN_RESULT result = engine->scanMemory(
         input.data(),
@@ -412,7 +412,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-database-cache-harness <fixture-root>\n"
+            "usage: die-database-cache-harness <fixture-root>\n"
         );
         return 2;
     }

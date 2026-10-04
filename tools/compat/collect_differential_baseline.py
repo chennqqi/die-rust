@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Differential test baseline collector for diec-rust.
+"""Differential test baseline collector for die-rust.
 
-This script runs diec-rust on all corpus files and produces a JSON
+This script runs die-rust on all corpus files and produces a JSON
 baseline file that records the exact detections and diagnostics for
 each file. This baseline can then be compared against:
 
-1. Future diec-rust runs (regression detection)
+1. Future die-rust runs (regression detection)
 2. Upstream DIE-engine output (compatibility verification)
 
 Usage:
@@ -13,7 +13,7 @@ Usage:
 
 Output format:
 {
-    "tool": "diec-rust",
+    "tool": "die-rust",
     "version": "<version>",
     "collected_at": "<ISO timestamp>",
     "corpus_dir": "<path>",
@@ -158,7 +158,7 @@ def main():
         version = "unknown"
 
     baseline = {
-        "tool": "diec-rust",
+        "tool": "die-rust",
         "version": version,
         "collected_at": datetime.now(timezone.utc).isoformat(),
         "corpus_dir": os.path.abspath(corpus_dir),

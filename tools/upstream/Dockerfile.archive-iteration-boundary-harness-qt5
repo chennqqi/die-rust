@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake:74eaf505
+ARG BASE_IMAGE=die-rust/upstream-oracle-cmake:74eaf505
 FROM ${BASE_IMAGE}
 
 COPY archive_iteration_boundary_harness_main.cpp \
@@ -15,11 +15,11 @@ RUN set -eux; \
         -o /tmp/archive_iteration_boundary_harness_main.cpp.o; \
     sed \
         -e 's#CMakeFiles/diec.dir/main_console.cpp.o#/tmp/archive_iteration_boundary_harness_main.cpp.o#' \
-        -e 's# -o diec # -o diec-archive-iteration-boundary-harness #' \
+        -e 's# -o diec # -o die-archive-iteration-boundary-harness #' \
         "${object_dir}/link.txt" > /tmp/link-archive-iteration-boundary-harness.sh; \
     sh /tmp/link-archive-iteration-boundary-harness.sh; \
-    test -x /opt/die-build/src/console/diec-archive-iteration-boundary-harness; \
-    /opt/die-build/src/console/diec-archive-iteration-boundary-harness \
+    test -x /opt/die-build/src/console/die-archive-iteration-boundary-harness; \
+    /opt/die-build/src/console/die-archive-iteration-boundary-harness \
         /opt/die-source/README.md \
         >/tmp/archive-iteration-boundary-harness-smoke.json
 

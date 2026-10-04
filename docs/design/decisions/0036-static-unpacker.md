@@ -43,7 +43,7 @@ Defer static unpacking. No stub or placeholder UI is added for the
 
 UPX was implemented per the "one packer at a time" exit condition:
 
-- `diec-engine::unpack` module: `UPX!` pack-header parsing aligned with
+- `die-engine::unpack` module: `UPX!` pack-header parsing aligned with
   `XUPX::_read_packheader` (version-sensitive header sizes, filter/CTO/MRU),
   UCL NRV2B/2D/2E decompression (all 9 bit-reader variants, ported from
   UCL source), LZMA and raw DEFLATE dispatch, UPX PE call/jmp filter

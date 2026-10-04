@@ -30,7 +30,7 @@ class CollectWindowsResultModelHarnessesTests(unittest.TestCase):
             "child": "I:\\controlled\\fixture\\main\\rule.sg",
             "similar": "I:/controlled/fixture-like/rule.sg",
             "collection": (
-                "/tmp/diec-result-list-collection\\files\\item.bin"
+                "/tmp/die-result-list-collection\\files\\item.bin"
             ),
         }
         normalized = MODULE.replace_fixture_paths(
@@ -48,7 +48,7 @@ class CollectWindowsResultModelHarnessesTests(unittest.TestCase):
         )
         self.assertEqual(
             normalized["collection"],
-            "/tmp/diec-result-list-collection/files/item.bin",
+            "/tmp/die-result-list-collection/files/item.bin",
         )
 
     def test_uuid_normalization_preserves_parent_link(self):

@@ -1,4 +1,4 @@
-# diec-rust
+# die-rust
 
 [Detect It Easy](https://github.com/horsicq/DIE-engine) (DIE) 的 Rust 重写。
 
@@ -37,7 +37,7 @@
 - **RAR 归档解包**：上游 XArchive 的 RAR decoder 是 UnRAR 源码的近逐字翻译
   （94.21% token 覆盖率，跨 17 个 UnRAR 源文件），但标注 MIT 许可证时未保留
   UnRAR license 对修改源码分发要求的 notice 和 acknowledgments。出于许可证
-  合规，diec-rust **不复制、翻译或改写**上游 RAR decoder。RAR 成员解包改用
+  合规，die-rust **不复制、翻译或改写**上游 RAR decoder。RAR 成员解包改用
   `rars`（WTFPL），一个独立的纯 Rust RAR 实现。由于实现独立，RAR 解包行为
   在边缘场景（如 CAB LZX/Quantum 方法、加密归档、损坏头部）可能与上游有差异。
   详见 `docs/research/rar-decoder-provenance.md`（上游来源审计）和
@@ -78,8 +78,8 @@ python tools/compat/compare_upstream.py
 ## 快速开始
 
 ```sh
-git clone https://github.com/chennqqi/diec-rust.git
-cd diec-rust && cargo build --workspace --release
+git clone https://github.com/chennqqi/die-rust.git
+cd die-rust && cargo build --workspace --release
 ./target/release/diec --alltypes file.exe
 ```
 

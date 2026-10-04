@@ -1,7 +1,7 @@
 # Release Checklist
 
 This document defines the release process and verification checklist
-for diec-rust. Every item must be verified before publishing a release.
+for die-rust. Every item must be verified before publishing a release.
 
 ## Pre-Release
 
@@ -196,7 +196,7 @@ for diec-rust. Every item must be verified before publishing a release.
 - **Tests**: 614 pass, 0 failures (up from 597 in v0.6.1, +17 new tests)
 - **Phase 11 GUI deep alignment** (8 batches):
   - 11.1 FileInfo complete header parsing (HeaderField tree + PE/ELF/Mach-O)
-  - 11.2 File format detection extension (diec-formats probe + magic fallback)
+  - 11.2 File format detection extension (die-formats probe + magic fallback)
   - 11.3 PE dedicated view (9 sub-tabs: imports/exports/resources/overlay/.NET/manifest/version info/TLS/Rich Header)
   - 11.4 String search & extractor (ASCII/UTF-16LE + filter)
   - 11.5 Archive format extension (ZIP/TAR/GZIP+TAR)
@@ -277,7 +277,7 @@ for diec-rust. Every item must be verified before publishing a release.
 - **Tests**: 480 pass, 0 failures (unchanged from v0.4.0)
 - **Fuzz replay**: 7/7 pass (165 seeds)
 - **Fuzz libFuzzer**: all 6 targets compile (Docker CI simulation)
-- **Fix**: force-link diec-ffi symbols in fuzz_scan_ffi
+- **Fix**: force-link die-ffi symbols in fuzz_scan_ffi
 - **No code changes**: only fuzz linker fix + version bump
 - **Artifacts**: identical to v0.4.0
 
@@ -287,7 +287,7 @@ for diec-rust. Every item must be verified before publishing a release.
 - **Tests**: 480 pass, 0 failures (unchanged from v0.4.0)
 - **Fuzz replay**: 7/7 pass (165 seeds)
 - **Fuzz libFuzzer**: 8/9 pass in v0.4.3, fixed fuzz_scan_ffi linking
-- **Fix**: diec-ffi dev-dependency → dependency for libFuzzer linking
+- **Fix**: die-ffi dev-dependency → dependency for libFuzzer linking
 - **No code changes**: only fuzz Cargo.toml + version bump
 - **Artifacts**: identical to v0.4.0
 

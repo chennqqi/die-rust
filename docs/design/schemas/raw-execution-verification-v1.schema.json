@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://diec-rust.invalid/schemas/raw-execution-verification-v1.schema.json",
+  "$id": "https://die-rust.invalid/schemas/raw-execution-verification-v1.schema.json",
   "title": "DIEC raw execution verification v1",
   "type": "object",
   "additionalProperties": false,
@@ -27,7 +27,7 @@
       ],
       "properties": {
         "name": {
-          "const": "diec-raw-execution-verifier"
+          "const": "die-raw-execution-verifier"
         },
         "version": {
           "const": 1

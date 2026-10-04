@@ -20,7 +20,7 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT"
 publish = false
-repository = "https://github.com/chennqqi/diec-rust"
+repository = "https://github.com/chennqqi/die-rust"
 
 # Internal crate versions are centralized so members reference them by
 # `{ workspace = true }`. The dependency DAG is enforced by

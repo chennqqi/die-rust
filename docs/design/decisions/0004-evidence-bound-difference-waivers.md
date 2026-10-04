@@ -4,7 +4,7 @@ Status: Accepted
 Last updated: 2026-07-31
 ## Context
 
-diec-rust 以固定 DIE-engine 为兼容基线，但安全 hard limit、平台路径和已确认的上游
+die-rust 以固定 DIE-engine 为兼容基线，但安全 hard limit、平台路径和已确认的上游
 缺陷可能需要有意偏离。普通 allowlist 常以 glob、字符串替换或忽略整段 JSON
 隐藏差异；随着输出扩大，旧规则可能继续匹配新的回归。
 

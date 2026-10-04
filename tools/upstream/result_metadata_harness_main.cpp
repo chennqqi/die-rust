@@ -21,7 +21,7 @@ constexpr const char *FORMATS_COMMIT =
     "1151e7254fdee3c0294ff7095edbdd7bfccf8201";
 constexpr const char *XSCANENGINE_COMMIT =
     "dfe4a419e4f491bb23688ba03c5a5bf39e34da83";
-constexpr const char *FILE_PATH = "/tmp/diec-result-metadata-input.exe";
+constexpr const char *FILE_PATH = "/tmp/die-result-metadata-input.exe";
 constexpr const char *DEVICE_NAME = "named-device.exe";
 
 QByteArray makeInput()

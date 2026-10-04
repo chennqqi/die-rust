@@ -32,7 +32,7 @@ class BuildWindowsSignaturePathHarnessTests(unittest.TestCase):
     def test_builder_replaces_only_console_main_contract(self):
         text = BUILDER.read_text(encoding="utf-8")
         self.assertIn(
-            '$HarnessTarget = "diec-signature-path-harness.exe"',
+            '$HarnessTarget = "die-signature-path-harness.exe"',
             text,
         )
         self.assertIn(

@@ -1,4 +1,4 @@
-# diec-rust 分层架构
+# die-rust 分层架构
 
 Status: Accepted
 
@@ -66,55 +66,55 @@ runtime 隔离。公共 Rust API、CLI 契约和完整结果字段仍由后续 `
 
 | crate | 类型 | 职责 | 允许的 workspace 依赖 |
 | --- | --- | --- | --- |
-| `diec-core` | library | checked input、公共值模型、错误、选项、预算、取消、结果 arena | 无 |
-| `diec-formats` | library | 格式探测与安全解析，返回格式事实 | `diec-core` |
-| `diec-rules` | library | 规则数据库、语法诊断、runtime/host ports 和 backend 隔离 | `diec-core` |
-| `diec-engine` | library | 扫描编排、候选选择、嵌套队列、结果聚合 | `diec-core`, `diec-formats`, `diec-rules` |
-| `diec-output` | library | canonical JSON 和人类可读渲染 | `diec-core` |
-| `diec-cli` | binary | 参数、文件输入、退出码和终端输出 | `diec-engine`, `diec-output` |
-| `diec-ffi` | `staticlib`/library | C ABI、panic containment 和句柄生命周期 | `diec-engine`, `diec-output` |
+| `die-core` | library | checked input、公共值模型、错误、选项、预算、取消、结果 arena | 无 |
+| `die-formats` | library | 格式探测与安全解析，返回格式事实 | `die-core` |
+| `die-rules` | library | 规则数据库、语法诊断、runtime/host ports 和 backend 隔离 | `die-core` |
+| `die-engine` | library | 扫描编排、候选选择、嵌套队列、结果聚合 | `die-core`, `die-formats`, `die-rules` |
+| `die-output` | library | canonical JSON 和人类可读渲染 | `die-core` |
+| `die-cli` | binary | 参数、文件输入、退出码和终端输出 | `die-engine`, `die-output` |
+| `die-ffi` | `staticlib`/library | C ABI、panic containment 和句柄生命周期 | `die-engine`, `die-output` |
 | `xtask` | tooling binary | 上游同步、清单、oracle、语料和发布检查 | 不进入 runtime graph |
 
-初期不为每个文件格式建立 crate。格式以 `diec-formats` 内部模块隔离；只有出现独立
+初期不为每个文件格式建立 crate。格式以 `die-formats` 内部模块隔离；只有出现独立
 依赖、编译时间或复用证据后才拆分，避免大量几乎为空的 crate。
 
-`diec-core` 也不得成为杂物箱。它只容纳所有内层消费者都需要、且不依赖具体格式或
-runtime 的概念。若某个模型只服务 engine，就保留在 `diec-engine`。
+`die-core` 也不得成为杂物箱。它只容纳所有内层消费者都需要、且不依赖具体格式或
+runtime 的概念。若某个模型只服务 engine，就保留在 `die-engine`。
 
 ## 6. 依赖 DAG 与禁止边
 
 ```text
-                         diec-cli
+                         die-cli
                         /        \
-                 diec-engine   diec-output
+                 die-engine   die-output
                 /      |   \        |
-       diec-formats     |  diec-rules
+       die-formats     |  die-rules
                 \      |       /
-                    diec-core
+                    die-core
 
-                         diec-ffi
+                         die-ffi
                         /        \
-                 diec-engine   diec-output
+                 die-engine   die-output
 
        xtask/tools/tests ──> 构建与测试产物，不是 runtime 依赖
 ```
 
 箭头表示“上层依赖下层”。强制禁止：
 
-- `diec-core -> diec-formats|diec-rules|diec-engine|diec-output|diec-cli|diec-ffi`；
-- `diec-formats -> diec-rules|diec-engine|diec-output|diec-cli|diec-ffi`；
-- `diec-rules -> diec-formats|diec-engine|diec-output|diec-cli|diec-ffi`；
-- `diec-engine -> diec-cli|diec-ffi|diec-output`；
-- `diec-output -> diec-engine|diec-formats|diec-rules|diec-cli|diec-ffi`；
+- `die-core -> die-formats|die-rules|die-engine|die-output|die-cli|die-ffi`；
+- `die-formats -> die-rules|die-engine|die-output|die-cli|die-ffi`；
+- `die-rules -> die-formats|die-engine|die-output|die-cli|die-ffi`；
+- `die-engine -> die-cli|die-ffi|die-output`；
+- `die-output -> die-engine|die-formats|die-rules|die-cli|die-ffi`；
 - CLI 与 FFI 相互依赖，或任一层依赖未来 GUI；
 - runtime graph 依赖 `xtask`、oracle、测试语料生成器或上游源码树。
 
 后续用 `cargo metadata` 检查或依赖策略工具在 CI 中执行这些规则。第三方 crate 的
-类型不得出现在 `diec-core` 的公共类型和 C ABI 中。
+类型不得出现在 `die-core` 的公共类型和 C ABI 中。
 
 ## 7. Checked input 模型
 
-`diec-core` 定义只读的 `ByteSource`/`ByteView` 抽象。实现可以是借用内存、owned
+`die-core` 定义只读的 `ByteSource`/`ByteView` 抽象。实现可以是借用内存、owned
 bytes、文件或 mmap，但解析器不直接打开路径，也不自行 seek 全局文件句柄。
 
 - offset、length 和文件大小在内部统一使用 `u64`。
@@ -135,7 +135,7 @@ subdevice buffering 还会触碰 view 后一字节。`ByteSource` 因此必须�
 
 ## 8. 格式探测与解析
 
-`diec-formats` 提供面向事实的接口，例如 `FormatProbe`、轻量 header probe 和按需
+`die-formats` 提供面向事实的接口，例如 `FormatProbe`、轻量 header probe 和按需
 parser。它不决定是否扫描 overlay、是否启用 aggressive mode 或先运行哪条规则。
 
 格式候选由显式、有版本控制的有序表驱动。probe 返回：
@@ -150,7 +150,7 @@ parser。它不决定是否扫描 overlay、是否启用 aggressive mode 或先�
 
 ## 9. 规则数据库与 runtime port
 
-`diec-rules` 保存三类边界：
+`die-rules` 保存三类边界：
 
 1. 原样规则资产和来源 manifest；
 2. 规则元数据、加载诊断及可丢弃的派生缓存；
@@ -171,8 +171,8 @@ include 仍可在退出 active path 后重新求值，不能用全局 once cache
 
 `RuleRuntime` 的生命周期必须表达上游所需的 init、include、单规则求值、函数抽取、
 取消和预算；不能为了同时容纳多个候选 backend 而退化成最低公分母。`HostApi` 由
-`diec-rules` 定义，由 `diec-engine` 的 adapter 实现，因而规则层无需依赖
-`diec-formats`。
+`die-rules` 定义，由 `die-engine` 的 adapter 实现，因而规则层无需依赖
+`die-formats`。
 
 Boa 尚未通过全库求值；QuickJS 的 per-rule lexical wrapper 已让固定 292 条
 Binary 规则解析出 `detect`，但完整 HostApi 下逐条调用、其他 file type 和跨平台
@@ -214,7 +214,7 @@ context 差分达到 8/8，说明显式 context 可驱动对应规则语义；�
 file-part、overlay offset/size、scan ID、文件名和文本 context。
 后续 ADR 必须基于固定规则集、宿主 API、资源中断、static link、许可证和跨平台
 实验选型。
-native runtime、FFI glue、runtime-specific handles 只存在于 `diec-rules`
+native runtime、FFI glue、runtime-specific handles 只存在于 `die-rules`
 backend 私有模块。
 
 数据库完成校验后形成 immutable snapshot。scanner/session 引用 snapshot，不在扫描
@@ -230,7 +230,7 @@ order manifest。发现 comparator cycle 而目标清单缺失时拒绝数据库
 
 ## 10. Engine 扫描流水线
 
-`diec-engine` 是唯一的扫描编排层。一次请求按以下阶段执行：
+`die-engine` 是唯一的扫描编排层。一次请求按以下阶段执行：
 
 1. 校验选项、输入元数据和所有 hard limits。
 2. 固定 immutable database snapshot。
@@ -346,14 +346,14 @@ adapter 不得改变扫描行为或结果顺序。
 
 ## 15. Output、CLI 与 FFI adapters
 
-`diec-output` 只消费 immutable result model，生成 canonical JSON 或人类可读文本。
+`die-output` 只消费 immutable result model，生成 canonical JSON 或人类可读文本。
 它不能回读输入、执行规则或补充 detection。
 
-`diec-cli` 负责参数、路径/stdin、批处理、终端和退出码。路径行为、特殊模式及平台
+`die-cli` 负责参数、路径/stdin、批处理、终端和退出码。路径行为、特殊模式及平台
 差异以固定上游 baseline 为 oracle。CLI 不构造独立结果类型。
 
-`diec-ffi` 负责 C 类型转换、不透明句柄、panic boundary 和 allocator ownership。
-它调用与 CLI 相同的 engine，并复用 `diec-output` 的 canonical JSON。静态 `.a`/
+`die-ffi` 负责 C 类型转换、不透明句柄、panic boundary 和 allocator ownership。
+它调用与 CLI 相同的 engine，并复用 `die-output` 的 canonical JSON。静态 `.a`/
 `.lib`、C/Go/Python 的限制由 [`c-abi.md`](c-abi.md) 定义。
 
 未来 GUI 只能作为另一个 adapter 依赖 engine/output；核心层永远不反向依赖 GUI。

@@ -14,8 +14,8 @@ from typing import Any
 
 GENERATOR = "tools/upstream/probe_qt6_rule_orchestration.py"
 UNDERLYING_PROBE = "tools/upstream/probe_rule_orchestration.py"
-QT5_IMAGE = "diec-rust/upstream-oracle-cmake:74eaf505"
-QT6_IMAGE = "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+QT5_IMAGE = "die-rust/upstream-oracle-cmake:74eaf505"
+QT6_IMAGE = "die-rust/upstream-oracle-cmake-qt6:74eaf505"
 ORACLE_BINARY = "/opt/die-build/src/console/diec"
 
 

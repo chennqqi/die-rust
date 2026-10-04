@@ -247,8 +247,8 @@ post_build_status="$(
 [ -z "$post_build_status" ] ||
     fail "build modified tracked source files"
 
-report_tmp="$(mktemp "${TMPDIR:-/tmp}/diec-macos-oracle.XXXXXX")"
-otool_tmp="$(mktemp "${TMPDIR:-/tmp}/diec-macos-otool.XXXXXX")"
+report_tmp="$(mktemp "${TMPDIR:-/tmp}/die-macos-oracle.XXXXXX")"
+otool_tmp="$(mktemp "${TMPDIR:-/tmp}/die-macos-otool.XXXXXX")"
 trap 'rm -f "$report_tmp" "$otool_tmp"' EXIT
 otool -L "$artifact" >"$otool_tmp"
 

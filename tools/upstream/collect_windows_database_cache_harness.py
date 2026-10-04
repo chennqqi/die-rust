@@ -242,11 +242,11 @@ def normalize_observation(
     if result.get("effective_gid") != -1:
         raise HarnessError("Windows GID sentinel differs")
     if result.get("database_path") != (
-        "/tmp/diec-database-cache-harness/database"
+        "/tmp/die-database-cache-harness/database"
     ):
         raise HarnessError("Windows harness database path differs")
     if result.get("rule_path") != (
-        "/tmp/diec-database-cache-harness/database/Binary/fixture.1.sg"
+        "/tmp/die-database-cache-harness/database/Binary/fixture.1.sg"
     ):
         raise HarnessError("Windows harness rule path differs")
 

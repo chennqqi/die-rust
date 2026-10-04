@@ -45,7 +45,7 @@ workspace 建立时重新生成并审计，不允许浮动到其他 minor/patch 
 
 后端边界：
 
-- `diec-rules` 暴露项目自有 `RuleRuntime`、`HostApi`、context facts 和 typed
+- `die-rules` 暴露项目自有 `RuleRuntime`、`HostApi`、context facts 和 typed
   error；任何 rquickjs/QuickJS 类型不得进入 core、formats、engine、output、
   CLI、FFI 或公共 C ABI。
 - native C/`unsafe` 只存在于 backend 私有模块及依赖内部；所有项目自写

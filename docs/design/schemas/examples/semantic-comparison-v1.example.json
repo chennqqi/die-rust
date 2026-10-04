@@ -1,7 +1,7 @@
 {
   "case_id": "synthetic.raw-framing.example",
   "comparator": {
-    "name": "diec-semantic-comparator",
+    "name": "die-semantic-comparator",
     "version": 1
   },
   "comparison_schema": 1,

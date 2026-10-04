@@ -11,7 +11,7 @@ Parses:
                                    STRING_RECORD, CONST_RECORD,
                                    PE_RESOURCES_RECORD, MSRICH_RECORD)
 
-Output: crates/diec-nfd/src/gen_tables.rs and gen_names.rs
+Output: crates/die-nfd/src/gen_tables.rs and gen_names.rs
 """
 
 import os
@@ -23,7 +23,7 @@ DEP = os.path.join(REPO, "upstream", "DIE-engine", "dep")
 SPEC = os.path.join(DEP, "SpecAbstract", "modules")
 XSE = os.path.join(DEP, "XScanEngine", "xscanengine.cpp")
 XPE_DEF = os.path.join(DEP, "Formats", "exec", "xpe_def.h")
-OUT_DIR = os.path.join(REPO, "crates", "diec-nfd", "src")
+OUT_DIR = os.path.join(REPO, "crates", "die-nfd", "src")
 
 
 def read(path):

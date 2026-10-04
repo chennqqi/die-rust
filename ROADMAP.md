@@ -167,9 +167,9 @@ rquickjs 后端 + Binary host API bridge + 签名解析器 + 完整 PE/ELF/Mach-
 - 与上游 CLI 进行跨平台差分验证。
 
 **进展**：
-- diec-engine 扫描编排层完成（Database + Scanner + BufferHost）
-- diec-output JSON/text/XML/CSV/TSV 渲染完成（无 serde 依赖）
-- diec-cli 参数解析 + 退出码 + 多目标批量扫描 + 递归扫描完成
+- die-engine 扫描编排层完成（Database + Scanner + BufferHost）
+- die-output JSON/text/XML/CSV/TSV 渲染完成（无 serde 依赖）
+- die-cli 参数解析 + 退出码 + 多目标批量扫描 + 递归扫描完成
 - CLI 扫描控制标志：--deepscan, --heuristicscan, --verbose, --aggressivescan, --alltypes, --hideunknown
   - 标志通过 ScanFlags → BufferHost → HostApi 传递到规则运行时
   - --alltypes 运行所有文件类型规则（匹配上游 bIsAllTypesScan）
@@ -208,7 +208,7 @@ rquickjs 后端 + Binary host API bridge + 签名解析器 + 完整 PE/ELF/Mach-
 
 **完成项**：
 - 公共头文件 `include/die.h` 完成（ABI 版本协商、状态码、opaque handle、scan options）
-- `diec-ffi` crate 实现完整 C ABI：
+- `die-ffi` crate 实现完整 C ABI：
   - ABI 版本协商：`die_abi_version`、`die_abi_is_compatible`
   - 状态码查询：`die_v1_status_name`
   - Scan options：`die_v1_scan_options_init`（repr(C) 结构体，additive extension）
@@ -246,12 +246,12 @@ rquickjs 后端 + Binary host API bridge + 签名解析器 + 完整 PE/ELF/Mach-
 
 **进展**：
 - Benchmark 基础设施：
-  - `crates/diec-engine/benches/scan.rs`：scan_corpus（9 种格式）、scan_flags（default/heuristic/all_types/deep）、database_load
-  - `crates/diec-formats/benches/probe.rs`：probe_corpus（13 种格式）、probe_table 构造
+  - `crates/die-engine/benches/scan.rs`：scan_corpus（9 种格式）、scan_flags（default/heuristic/all_types/deep）、database_load
+  - `crates/die-formats/benches/probe.rs`：probe_corpus（13 种格式）、probe_table 构造
   - 使用 criterion 0.5，harness=false
 - 边缘语料差分测试：
   - `tools/corpus/generate_edge_corpus.py`：20 个边缘样本（truncated/malformed/oversized/empty）
-  - `crates/diec-engine/tests/edge_corpus.rs`：3 个测试（no-crash、no-spurious、no-hang）
+  - `crates/die-engine/tests/edge_corpus.rs`：3 个测试（no-crash、no-spurious、no-hang）
   - 验证截断/畸形输入不崩溃、不误检、不挂起
 - FFI 跨平台 CI：
   - `.github/workflows/ci.yml` 新增 ffi-smoke job（Linux/macOS/Windows C smoke test）
@@ -280,11 +280,11 @@ rquickjs 后端 + Binary host API bridge + 签名解析器 + 完整 PE/ELF/Mach-
 - PDF HeaderComment 检测：解析 PDF 注释行
 - JavaClass 不再运行 Binary 规则（host API 已完整实现）
 - Fuzz targets 扩展（6 个）：
-  - `fuzz_byte_source`、`fuzz_byte_view_subview`（diec-core 层）
-  - `fuzz_format_probe`（diec-formats 层）
-  - `fuzz_scan_engine`（diec-engine 层，default/heuristic/all_types 三种 flag）
-  - `fuzz_output_render`（diec-output 层，JSON/text/XML/CSV/TSV 渲染）
-  - `fuzz_scan_ffi`（diec-ffi 层，C ABI 边界 + double-free 安全）
+  - `fuzz_byte_source`、`fuzz_byte_view_subview`（die-core 层）
+  - `fuzz_format_probe`（die-formats 层）
+  - `fuzz_scan_engine`（die-engine 层，default/heuristic/all_types 三种 flag）
+  - `fuzz_output_render`（die-output 层，JSON/text/XML/CSV/TSV 渲染）
+  - `fuzz_scan_ffi`（die-ffi 层，C ABI 边界 + double-free 安全）
 - 兼容性报告 `COMPATIBILITY.md`：
   - 规则加载兼容性（1186/1186 = 100%）
   - 语料差分测试矩阵（31 基线 + 20 边缘样本，0 不匹配）
@@ -532,22 +532,22 @@ Phase 9 完成后，README.md "Known Limitations" 节列出三个已知问题。
 一个为真实功能缺陷。本 Phase 旨在清理文档并修复真实缺陷。
 
 调研依据：
-- `crates/diec-rules/src/host_api_bridge.rs` 第 4447-4636 行（Capstone 集成）
-- `crates/diec-rules/Cargo.toml` 第 12 行（capstone 0.14.0 依赖）
+- `crates/die-rules/src/host_api_bridge.rs` 第 4447-4636 行（Capstone 集成）
+- `crates/die-rules/Cargo.toml` 第 12 行（capstone 0.14.0 依赖）
 - `COMPATIBILITY.md` 第 53-67 行（4 个规则版本差异详情）
-- `crates/diec-engine/src/scanner.rs` 第 39-168 行（detect_rule_types 去重策略）
-- `crates/diec-engine/src/scanner.rs` 第 385-516 行（scan_bytes 自由函数）
-- `crates/diec-engine/src/scanner.rs` 第 603-747 行（Scanner::scan_bytes 缓存版）
-- `crates/diec-engine/src/scanner.rs` 第 224-246 行（all_rule_types 全类型列表）
-- `crates/diec-engine/src/host.rs` 第 22-39 行（ScanFlags 结构体）
-- `crates/diec-ffi/src/scan.rs` 第 70-99 行（DieScanOptions C ABI 结构体）
-- `crates/diec-ffi/src/scan.rs` 第 136-159 行（options_to_flags 位映射）
+- `crates/die-engine/src/scanner.rs` 第 39-168 行（detect_rule_types 去重策略）
+- `crates/die-engine/src/scanner.rs` 第 385-516 行（scan_bytes 自由函数）
+- `crates/die-engine/src/scanner.rs` 第 603-747 行（Scanner::scan_bytes 缓存版）
+- `crates/die-engine/src/scanner.rs` 第 224-246 行（all_rule_types 全类型列表）
+- `crates/die-engine/src/host.rs` 第 22-39 行（ScanFlags 结构体）
+- `crates/die-ffi/src/scan.rs` 第 70-99 行（DieScanOptions C ABI 结构体）
+- `crates/die-ffi/src/scan.rs` 第 136-159 行（options_to_flags 位映射）
 - `include/die.h` 第 51-58 行（DIE_SCAN_FLAG_* 宏定义，已用 6 位 0x01-0x20）
-- `crates/diec-cli/src/main.rs` 第 35-39 行（CLI flags 帮助文本）
-- `crates/diec-cli/src/main.rs` 第 153-158 行（CLI flags 解析）
-- `crates/diec-server/src/handlers.rs` 第 14-49 行（ScanFlagsRequest DTO）
+- `crates/die-cli/src/main.rs` 第 35-39 行（CLI flags 帮助文本）
+- `crates/die-cli/src/main.rs` 第 153-158 行（CLI flags 解析）
+- `crates/die-server/src/handlers.rs` 第 14-49 行（ScanFlagsRequest DTO）
 - `crates/die-gui/src/commands.rs` 第 53-102 行（ScanFlagsDto GUI DTO）
-- `crates/diec-engine/src/scanner.rs` 第 248-284 行（ScanDetection 结构体，14 字段）
+- `crates/die-engine/src/scanner.rs` 第 248-284 行（ScanDetection 结构体，14 字段）
 
 ### 10.1 文档清理：getDisasmString 已集成 Capstone — DONE
 
@@ -555,7 +555,7 @@ Phase 9 完成后，README.md "Known Limitations" 节列出三个已知问题。
 条目仍残留在 "Known Limitations" 节中，应清理为正面描述或移除。
 
 **现状**：
-- `crates/diec-rules/src/host_api_bridge.rs` 第 4447-4636 行：完整实现
+- `crates/die-rules/src/host_api_bridge.rs` 第 4447-4636 行：完整实现
   `disasm_at_va` 函数，使用 Capstone 0.14.0 反汇编 x86/x64 指令
 - Thread-local 缓存 Capstone 实例（32/64 位分别缓存）
 - 支持 Intel 语法输出
@@ -629,16 +629,16 @@ bug"，但条目仍残留在 "Known Limitations" 节中，应清理或移至正�
 
 **影响链（6 层，自底向上）**：
 
-1. **ScanFlags 结构体**（`crates/diec-engine/src/host.rs` 第 22-39 行）：
+1. **ScanFlags 结构体**（`crates/die-engine/src/host.rs` 第 22-39 行）：
    新增 `no_dedup: bool` 字段，默认 `false`（即默认去重）
 2. **scanner.rs 去重逻辑**（`scan_bytes` 第 509 行前 / `Scanner::scan_bytes`
    第 740 行前）：在 `hide_unknown` 过滤后、构造 `ScanResult` 前插入去重步骤
-3. **CLI**（`crates/diec-cli/src/main.rs`）：新增 `--no-dedup` 参数解析
+3. **CLI**（`crates/die-cli/src/main.rs`）：新增 `--no-dedup` 参数解析
    + 帮助文本
-4. **FFI C ABI**（`crates/diec-ffi/src/scan.rs` + `include/die.h`）：
+4. **FFI C ABI**（`crates/die-ffi/src/scan.rs` + `include/die.h`）：
    新增 `DIE_SCAN_FLAG_NO_DEDUP = 0x40`（第 7 位，当前已用 0x01-0x20），
    `options_to_flags` 函数新增 `0x40` 分支
-5. **Server DTO**（`crates/diec-server/src/handlers.rs` 第 16-35 行）：
+5. **Server DTO**（`crates/die-server/src/handlers.rs` 第 16-35 行）：
    `ScanFlagsRequest` 新增 `no_dedup: bool` 字段 + `From` impl 映射
 6. **GUI DTO**（`crates/die-gui/src/commands.rs` 第 62-88 行）：
    `ScanFlagsDto` 新增 `no_dedup: bool` 字段 + `From` impl 映射
@@ -646,13 +646,13 @@ bug"，但条目仍残留在 "Known Limitations" 节中，应清理或移至正�
 **实现任务（按依赖顺序）**：
 
 1. 创建 ADR 0027：记录去重偏离上游的决策、去重键设计、默认行为
-2. `ScanFlags` 新增 `no_dedup` 字段（`crates/diec-engine/src/host.rs`）
+2. `ScanFlags` 新增 `no_dedup` 字段（`crates/die-engine/src/host.rs`）
 3. 实现去重函数 `dedup_detections(&mut Vec<ScanDetection>)`（`scanner.rs`）
    - 去重键：`(type_name, name, version, options, offset, size)`
    - 使用 `HashSet` 跟踪已见键，`retain` 保留首次出现
    - 在 `scan_bytes` 和 `Scanner::scan_bytes` 的 `hide_unknown` 过滤后调用
    - `no_dedup == false` 时执行去重，`true` 时跳过
-4. CLI 新增 `--no-dedup` 参数（`crates/diec-cli/src/main.rs`）
+4. CLI 新增 `--no-dedup` 参数（`crates/die-cli/src/main.rs`）
 5. FFI 新增 `DIE_SCAN_FLAG_NO_DEDUP = 0x40`（`include/die.h` + `scan.rs`）
 6. Server `ScanFlagsRequest` 新增 `no_dedup` 字段（`handlers.rs`）
 7. GUI `ScanFlagsDto` 新增 `no_dedup` 字段（`commands.rs`）
@@ -681,16 +681,16 @@ bug"，但条目仍残留在 "Known Limitations" 节中，应清理或移至正�
   - 验证 `no_dedup == true` 时不去重
   - 验证不同 offset/size 的同名检测不被合并
   - 验证空 Vec 和无重复 Vec 的边界情况
-- **集成测试**（`crates/diec-engine/tests/`）：
+- **集成测试**（`crates/die-engine/tests/`）：
   - 构造最小 PE 文件（MZ header），`--alltypes` 扫描，验证结果无重复
   - 对比 `--alltypes` vs `--alltypes --no-dedup` 的检测数量
-- **CLI 测试**（`crates/diec-cli/tests/cli_integration.rs`）：
+- **CLI 测试**（`crates/die-cli/tests/cli_integration.rs`）：
   - `cli_alltypes_flag` 测试扩展：验证 `--alltypes` 默认去重无重复
   - 新增 `cli_no_dedup_flag` 测试：`--no-dedup` 产生 >= 默认去重的检测数
 - **差分测试**：
   - `--alltypes --no-dedup` 模式下与上游输出对比（匹配上游原始行为）
   - 规则版本差异除外（COMPATIBILITY.md 已记录的 4 个差异）
-- **FFI 测试**（`crates/diec-ffi/tests/`）：
+- **FFI 测试**（`crates/die-ffi/tests/`）：
   - 验证 `DIE_SCAN_FLAG_NO_DEDUP` 位正确映射到 `ScanFlags.no_dedup`
 - **回归测试**：
   - 现有 506 个测试全部通过
@@ -730,7 +730,7 @@ Phase 9 修复了信息展示格式和基础功能缺陷（20 项 P1/P2/P3），
   - 后端 HeaderField 树形结构 + PE/ELF/Mach-O 完整头部解析（pelite + goblin）
   - 前端 FileHeaderTree 递归树形组件 + FileInfoPanel 子标签
 - 11.2 文件格式检测扩展（P0）— ✅
-  - 集成 diec-formats probe table（20+ 格式检测）
+  - 集成 die-formats probe table（20+ 格式检测）
   - 手写 magic bytes 作为回退（PE32/PE32+ 子类型区分）
 - 11.3 PE 专用视图（P1）— ✅
   - pe_viewer.rs：imports/exports/resources/overlay/.NET/manifest/version info/TLS/Rich Header
@@ -817,8 +817,8 @@ Phase 12 完成了 GUI 的 35 项剩余功能对齐，但 diec CLI 自身仍有 
   Check format），而非当前格式特定方法列表
 
 新建模块：
-- `crates/diec-engine/src/struct_mode.rs` — StructSelector 解析 + 方法分发
-- `crates/diec-engine/src/hash_methods.rs` — 7 种哈希算法
+- `crates/die-engine/src/struct_mode.rs` — StructSelector 解析 + 方法分发
+- `crates/die-engine/src/hash_methods.rs` — 7 种哈希算法
 
 差分测试：5 个基线样本 × Hash/Hash#MD5/Info/Entropy/Check format × 6 种输出格式
 
@@ -848,10 +848,10 @@ Phase 12 完成了 GUI 的 35 项剩余功能对齐，但 diec CLI 自身仍有 
   - 新增 DEX 头解析（magic、checksum、file_size、header_size等）
 
 新建模块：
-- `crates/diec-engine/src/pe_struct.rs` — PE 专用结构方法
-- `crates/diec-engine/src/elf_struct.rs` — ELF 专用结构方法
-- `crates/diec-engine/src/macho_struct.rs` — Mach-O 专用结构方法
-- `crates/diec-engine/src/dex_struct.rs` — DEX 专用结构方法
+- `crates/die-engine/src/pe_struct.rs` — PE 专用结构方法
+- `crates/die-engine/src/elf_struct.rs` — ELF 专用结构方法
+- `crates/die-engine/src/macho_struct.rs` — Mach-O 专用结构方法
+- `crates/die-engine/src/dex_struct.rs` — DEX 专用结构方法
 
 差分测试：minimal.exe × 6 PE 方法、minimal.elf × 2 ELF 方法、
 minimal.macho × 2 Mach-O 方法、minimal.dex × 1 DEX 方法
@@ -872,7 +872,7 @@ minimal.macho × 2 Mach-O 方法、minimal.dex × 1 DEX 方法
 - **`--plaintext`**：与不传输出格式开关逐字节相同（无专用分支）
 
 新建模块：
-- `crates/diec-output/src/struct_formatter.rs` — struct 模式 5 种输出格式
+- `crates/die-output/src/struct_formatter.rs` — struct 模式 5 种输出格式
 
 差分测试：95 种输入/模式组合 × 190 次 oracle 执行（匹配 cli-special-modes.md 基线）
 
@@ -915,12 +915,12 @@ minimal.macho × 2 Mach-O 方法、minimal.dex × 1 DEX 方法
   - `--aggressivescan` + `-r` → nLimit 2000，扫描不可识别 resource
 
 修改模块：
-- `crates/diec-rules/src/pe_native.rs` — 新增 `get_file_parts()`
-- `crates/diec-engine/src/host.rs` — ScanFlags 扩展 + `is_recursive()`
-- `crates/diec-engine/src/scanner.rs` — 递归扫描逻辑
-- `crates/diec-cli/src/main.rs` — `-r` 语义变更 + `--recursive-dir`
-- `crates/diec-ffi/src/scan.rs` — FFI ScanFlags 映射
-- `crates/diec-server/` — server ScanFlags 映射
+- `crates/die-rules/src/pe_native.rs` — 新增 `get_file_parts()`
+- `crates/die-engine/src/host.rs` — ScanFlags 扩展 + `is_recursive()`
+- `crates/die-engine/src/scanner.rs` — 递归扫描逻辑
+- `crates/die-cli/src/main.rs` — `-r` 语义变更 + `--recursive-dir`
+- `crates/die-ffi/src/scan.rs` — FFI ScanFlags 映射
+- `crates/die-server/` — server ScanFlags 映射
 
 差分测试：8 个嵌套语料样本 × 4 种模式（default/aggressive/recursive/recursive+aggressive）
 
@@ -937,9 +937,9 @@ minimal.macho × 2 Mach-O 方法、minimal.dex × 1 DEX 方法
   - 非 standard SPDX，需 ADR 记录决策
 - **ADR 0030：archive 解包安全边界**
   - 压缩炸弹防护：单成员大小限制、总解压字节数限制、压缩比限制
-  - 递归深度限制（复用 diec-core limits.rs 已有框架）
+  - 递归深度限制（复用 die-core limits.rs 已有框架）
   - 成员数量限制（默认 20，aggressive 100000，匹配上游）
-- **解包器实现**（新建 `diec-unpack` crate 或扩展 `diec-formats`）：
+- **解包器实现**（新建 `die-unpack` crate 或扩展 `die-formats`）：
   - ZIP：使用 `zip` crate（die-gui 已依赖）
   - 7Z：使用 `sevenz-rust` crate
   - RAR：使用 `rars` crate（ADR 0029）
@@ -960,8 +960,8 @@ minimal.macho × 2 Mach-O 方法、minimal.dex × 1 DEX 方法
   - 密码错误时不产生 child（匹配上游行为）
 
 新建模块：
-- `crates/diec-unpack/src/` — 5 种格式解包器
-- `crates/diec-engine/src/archive_scan.rs` — archive 递归扫描逻辑
+- `crates/die-unpack/src/` — 5 种格式解包器
+- `crates/die-engine/src/archive_scan.rs` — archive 递归扫描逻辑
 
 差分测试：17 个 archive 语料样本 × archive/aggressive 组合（匹配
 archive-format-behavior.md 基线）
@@ -1148,7 +1148,7 @@ Phase 11 完成了 8 个批次的基础对齐，但 `gui-gap-analysis-v3.md` 仍
 **问题**：所有 ELF compiler/library 规则抛出 `ReferenceError: _B is not defined`，
 ELF 检测能力完全失效。
 
-**根因**：`crates/diec-rules/src/host_api_bridge.rs:3046-3509` ELF 方法定义闭包
+**根因**：`crates/die-rules/src/host_api_bridge.rs:3046-3509` ELF 方法定义闭包
 缺少 `var _B = Binary;`（PE 闭包在行 2079 正确定义）。ELF 辅助函数
 `_sectionName`/`_sectionNumber`/`_libraryNames` 使用 `_B.__elfSectionNames()` /
 `_B.__elfImportLibraries()`，但 `_B` 在 ELF 上下文未定义。
@@ -1210,7 +1210,7 @@ ELF 检测能力完全失效。
 **问题**：`diec --alltypes /usr/bin/ls`（ELF）产生 CFBF/DEX/JPEG/PDF/PNG/Java
 Class/Python bytecode 等大量格式误报，`--alltypes` 不可用于生产。
 
-**根因**：`crates/diec-engine/src/scanner.rs:427-437` `--alltypes` 模式直接返回
+**根因**：`crates/die-engine/src/scanner.rs:427-437` `--alltypes` 模式直接返回
 `all_rule_types()`（18 种全部），完全忽略 `ProbeTable` 探测结果。上游
 `bIsAllTypesScan` 语义是"先 `getFileTypes` 探测，仅为兼容/容器类型额外执行父类型
 规则"（PE→MSDOS、APK→JAR/ZIP），不执行不相关格式规则。
@@ -1268,7 +1268,7 @@ Class/Python bytecode 等大量格式误报，`--alltypes` 不可用于生产。
 
 ### 14.5 上游兼容 JSON 输出 — P1
 
-**问题**：diec-rust JSON 输出结构与上游 DIE 不兼容，无法直接替换上游工具。
+**问题**：die-rust JSON 输出结构与上游 DIE 不兼容，无法直接替换上游工具。
 
 **ADR 0032：上游兼容 JSON 输出模式**
 - 新增 `--output json-die` 选项，输出上游 DIE 兼容结构：
@@ -1284,8 +1284,8 @@ Class/Python bytecode 等大量格式误报，`--alltypes` 不可用于生产。
 - 差分测试：`json-die` 输出与上游 DIE JSON 逐字节对比（规范化后）
 
 **修复**：
-- `crates/diec-output/src/json.rs` 新增 `render_json_die_compat()` 函数
-- `crates/diec-cli/src/main.rs` 新增 `json-die` 输出格式选项
+- `crates/die-output/src/json.rs` 新增 `render_json_die_compat()` 函数
+- `crates/die-cli/src/main.rs` 新增 `json-die` 输出格式选项
 - FFI `die_v1_result_json` 可考虑新增 `json_die` 变体（可选，ADR 决定）
 
 ### 14.6 Go 绑定 reusable scanner — P1
@@ -1362,11 +1362,11 @@ Phase 15 聚焦"重建对齐方法论 + 闭合已识别缺口"，不再追加新
   - `tools/record_golden_baselines.py` 录制 golden JSON 基线
   - 固定上游 commit SHA `8925358d2`，与兼容基线一致
 - [x] `true_differential.rs` 真差分测试
-  - 加载 golden 基线，运行 diec-rust `scan_bytes`，对比检测结果
+  - 加载 golden 基线，运行 die-rust `scan_bytes`，对比检测结果
   - 39 个 golden cases，38/38 匹配（1 个 NPM 已知差距跳过）
   - filetype 映射 + 名称别名归一化
 - [x] 上游 oracle 不可用时的降级策略
-  - golden 基线文件提交到 `tests/golden/upstream-diec-baseline.json`
+  - golden 基线文件提交到 `tests/golden/upstream-die-baseline.json`
   - 测试在无 golden 文件时自动 SKIP
 
 ### 15.2 规则执行覆盖率与异常断言 — P0 ✅
@@ -1454,7 +1454,7 @@ VMProtect（2 样本漏检）和 UPX（1 样本漏检）。Phase 15 的覆盖率
 
 ### 真实语料差分基线（2026-08-23 录制）
 
-使用 `tools/diff_scan_corpus.py` 对比 diec-rust v0.9.0 与上游 diec 4.0.0：
+使用 `tools/diff_scan_corpus.py` 对比 die-rust v0.9.0 与上游 diec 4.0.0：
 
 | 语料类别 | 样本数 | 检测一致率 | packer/protector 一致率 | packer 漏检 |
 |---------|--------|-----------|------------------------|------------|
@@ -1463,7 +1463,7 @@ VMProtect（2 样本漏检）和 UPX（1 样本漏检）。Phase 15 的覆盖率
 | elf_malicious | 100 | 24.0% (24/100) | 100% (100/100) | 0 |
 | elf_benign | 100 | 48.0% (48/100) | 100% (100/100) | 0 |
 
-**packer/protector 漏检清单**（全部为 diec-rust 漏检、上游检测到）：
+**packer/protector 漏检清单**（全部为 die-rust 漏检、上游检测到）：
 
 | 样本 | 检测类型 | 名称 | 版本 | 根因 |
 |------|---------|------|------|------|
@@ -1477,18 +1477,18 @@ VMProtect（2 样本漏检）和 UPX（1 样本漏检）。Phase 15 的覆盖率
 | 09154c36... | protector | Enigma | 5.X | 问题 7 (ENIGMA 规则也用 getSectionNameCollision) |
 | 06067f26... | packer | Bat To Exe Converter | — | **新发现，待调查** |
 | 0037a630... | packer | PyInstaller | — | **新发现，待调查** |
-| 00b0fb5e... | protector | XerinFuscator | — | **新发现（diec-rust 误检）** |
+| 00b0fb5e... | protector | XerinFuscator | — | **新发现（die-rust 误检）** |
 
 **非 packer 检测差异分类**（pe_malicious 500 样本）：
 
 | 差异类型 | 数量 | 方向 | 说明 |
 |---------|------|------|------|
-| Unknown 占位 | 32 | 上游多 | 上游输出 "Unknown" 占位检测，diec-rust 不输出（表面差异） |
+| Unknown 占位 | 32 | 上游多 | 上游输出 "Unknown" 占位检测，die-rust 不输出（表面差异） |
 | MSVC compiler 版本 | 19 | 上游多 | 上游检测到更多 "by EP" 版本推断 |
-| .NET Framework 版本 | 4 | 版本差异 | 上游输出 "4.7.2, CLR 4.0.30319"，diec-rust 只输出 "CLR 4.0.30319" |
-| Records debug data | 5 | diec-rust 多 | diec-rust 过度检测 debug data |
-| Windows Authenticode | 4 | diec-rust 多 | diec-rust 过度检测签名工具 |
-| TASM32 compiler | 3 | diec-rust 多 | diec-rust 过度检测 TASM32 |
+| .NET Framework 版本 | 4 | 版本差异 | 上游输出 "4.7.2, CLR 4.0.30319"，die-rust 只输出 "CLR 4.0.30319" |
+| Records debug data | 5 | die-rust 多 | die-rust 过度检测 debug data |
+| Windows Authenticode | 4 | die-rust 多 | die-rust 过度检测签名工具 |
+| TASM32 compiler | 3 | die-rust 多 | die-rust 过度检测 TASM32 |
 | Borland Delphi 版本 | 5 | 版本差异 | 版本范围推断不同 |
 | ASProtect | 2 | 上游多 | **新发现，待调查** |
 | OpenGL library | 3 | 上游多 | 上游检测到 OpenGL 库引用 |
@@ -1499,7 +1499,7 @@ VMProtect（2 样本漏检）和 UPX（1 样本漏检）。Phase 15 的覆盖率
 | 差异类型 | 数量 | 说明 |
 |---------|------|------|
 | Unknown 占位 | 48-52 | 同 PE，上游输出 "Unknown" 占位 |
-| Rust compiler 漏检 | 24 | **新发现**：diec-rust 未检测到 ELF Rust 编译器 |
+| Rust compiler 漏检 | 24 | **新发现**：die-rust 未检测到 ELF Rust 编译器 |
 
 ### D2 差分指标（原始 24 样本）
 
@@ -1510,7 +1510,7 @@ VMProtect（2 样本漏检）和 UPX（1 样本漏检）。Phase 15 的覆盖率
 | packer 类检测不一致率 | 1/24 (4.2%) | < 5% | ✅ |
 | protector 类检测不一致率 | 2/24 (8.3%) | < 5% | ❌ |
 
-> 指标含义：对 24 个已知 packer/protector 样本，比较 diec-rust 与上游 DIE
+> 指标含义：对 24 个已知 packer/protector 样本，比较 die-rust 与上游 DIE
 > 对 packer/protector 类检测的二元决策（检测到 vs 未检测到）一致性。
 
 **ADR 需求**：
@@ -1680,7 +1680,7 @@ pub struct PeBatchInfo {
 （`/data/virus/`，~40 万文件）进行大规模差分扫描，建立统计显著的基线。
 
 **已完成**：
-- `tools/diff_scan_corpus.py` 差分扫描脚本（对比 diec-rust vs 上游 diec 4.0.0）
+- `tools/diff_scan_corpus.py` 差分扫描脚本（对比 die-rust vs 上游 diec 4.0.0）
 - 基线已录制（见上方"真实语料差分基线"表）：
   - pe_malicious 500 样本：检测一致率 80.8%，packer 一致率 98.4%
   - pe_benign 100 样本：检测一致率 64.0%，packer 一致率 98.0%
@@ -1708,13 +1708,13 @@ pub struct PeBatchInfo {
 | Bat To Exe Converter | packer | 1 | 待调查 | P2 |
 | PyInstaller | packer | 1 | 待调查 | P2 |
 | ASProtect | protector | 2 | 待调查 | P1 |
-| XerinFuscator | protector | 1 | diec-rust 误检（上游未检测） | P2 |
+| XerinFuscator | protector | 1 | die-rust 误检（上游未检测） | P2 |
 
 **修复**：
 - 逐个调查漏检根因：检查对应规则脚本调用的 host API 方法
 - ASProtect：检查 `protector_ASProtect.2.sg` 规则调用的方法是否正确实现
 - Bat To Exe Converter / PyInstaller：检查对应 packer 规则的检测逻辑
-- XerinFuscator：检查 diec-rust 是否过度检测（误报）
+- XerinFuscator：检查 die-rust 是否过度检测（误报）
 
 **验证**：
 - 每个漏检项修复后在对应样本上差分测试 0 不匹配
@@ -1728,12 +1728,12 @@ pub struct PeBatchInfo {
 
 | 差异类型 | 方向 | 数量 | 修复方案 | 优先级 |
 |---------|------|------|---------|--------|
-| Unknown 占位 | 上游多 | 32-52 | diec-rust 添加 "Unknown" 占位输出（匹配上游行为） | P2 |
+| Unknown 占位 | 上游多 | 32-52 | die-rust 添加 "Unknown" 占位输出（匹配上游行为） | P2 |
 | .NET Framework 版本 | 版本差异 | 4 | 修正 `getNETVersion` 返回完整版本（如 "4.7.2, CLR 4.0.30319"） | P1 |
 | MSVC "by EP" 版本 | 上游多 | 19 | 调查入口点版本推断逻辑 | P2 |
-| Records debug data | diec-rust 多 | 5 | 调查过度检测原因 | P2 |
-| Windows Authenticode | diec-rust 多 | 4 | 调查过度检测原因 | P2 |
-| TASM32 compiler | diec-rust 多 | 3 | 调查过度检测原因 | P2 |
+| Records debug data | die-rust 多 | 5 | 调查过度检测原因 | P2 |
+| Windows Authenticode | die-rust 多 | 4 | 调查过度检测原因 | P2 |
+| TASM32 compiler | die-rust 多 | 3 | 调查过度检测原因 | P2 |
 | Borland Delphi 版本 | 版本差异 | 5 | 对齐版本范围推断 | P2 |
 | ELF Rust compiler | 上游多 | 24 | 调查 ELF Rust 编译器检测缺失 | P1 |
 | OpenGL library | 上游多 | 3 | 调查 OpenGL 库引用检测缺失 | P2 |
@@ -1822,7 +1822,7 @@ pub struct PeBatchInfo {
 | 批次 | 内容 | 优先级 | 关键依赖 |
 |------|------|--------|---------|
 | 17.A | Demangle 扩展为 20 模式子集（MSVC32/64/ARM + Borland/Watcom + D/Java，Auto 探测对齐上游 `detectMode`） | P1 | `msvc-demangler`（纯 Rust）+ Borland/Watcom 精简移植 |
-| 17.B | `list_archive` 改调 `diec-engine::archive_unpack`，覆盖 ZIP/7Z/RAR 列表与成员提取；CAB/ISO 可选 | P1 | 引擎已有 ZIP/7Z/RAR 提取（ADR 0029 `rars`） |
+| 17.B | `list_archive` 改调 `die-engine::archive_unpack`，覆盖 ZIP/7Z/RAR 列表与成员提取；CAB/ISO 可选 | P1 | 引擎已有 ZIP/7Z/RAR 提取（ADR 0029 `rars`） |
 | 17.C | 哈希算法扩展（SHA3 系/BLAKE2/BLAKE3/Adler32/CRC64）+ FileInfo 算法勾选 UI | P2 | `sha3`/`blake2`/`blake3`/`adler2` 纯 Rust |
 | 17.D | DEX 深视图（string/type/proto/field/method/class_def/map 表） | P2 | `misc_viewer.rs` 扩展解析 |
 | 17.E | 交互细节：信息栏固定字段、格式子视图 Follow 链、Extra Information 文本导出、Hex 右键编辑入口 | P2 | — |
@@ -1884,11 +1884,11 @@ demangle 25 测试），前端 `npm run build` 通过。
 对齐 DIE `XUPX`/`XStaticUnpacker` 语义（非 `upx -d` 全部行为），
 ADR 0036 按"逐 packer"条件实施 UPX。
 
-- `diec-engine::unpack::upx`：`UPX!` pack-header 解析（版本敏感头长、
+- `die-engine::unpack::upx`：`UPX!` pack-header 解析（版本敏感头长、
   filter/CTO/MRU、方法/长度边界校验）；PE filter 还原（0x06/0x26/
   0x36/0x46/0x49，小端）；PE 重建（headers/节表/imports/relocs/
   exports/resources/overlay，目录清理与上游一致）。
-- `diec-engine::unpack::nrv`：UCL NRV2B/2D/2E 精确移植，8-bit/LE16/
+- `die-engine::unpack::nrv`：UCL NRV2B/2D/2E 精确移植，8-bit/LE16/
   LE32 三种位读取器 × 3 算法共 9 变体；重叠回拷、lookbehind/输入/
   输出越界检查；返回实际产出长度（对齐 `*pnDstSize`）。
 - LZMA（UPX 双字节属性前缀）+ 裸 DEFLATE 分派。
@@ -1906,7 +1906,7 @@ nrv 单测），前端 `npm run build` 通过。
 许可证 Gate 通过（MIT），按"读 C++ 写 Rust + 签名表 codegen"路径
 落地了有界切片：
 
-- `crates/diec-nfd`：纯 Rust 匹配核心（signature/string/const/
+- `crates/die-nfd`：纯 Rust 匹配核心（signature/string/const/
   resources/memory/exp scan，记录级去重与 ft 过滤对齐上游）。
 - `tools/nfd_codegen.py`：SpecAbstract C 签名数组 → Rust 静态表
   （35 表 / 1730 条记录 @ 5188e047，生成头含 MIT 归属）。
@@ -2031,7 +2031,7 @@ nrv 单测），前端 `npm run build` 通过。
   CRC/截断拒绝路径。**差分：76 语料文件 0 差异**。
 
 - **Phase 25 已完成**（签名 memory-map 语义 + 矩阵清扫）：
-  `diec-core::signature` 新增 `SigElem_ent::AbsAddress`（`#` 绝对
+  `die-core::signature` 新增 `SigElem_ent::AbsAddress`（`#` 绝对
   地址跳，之前近似为通配符）与 `SigCtx` 地址空间上下文（
   `off_to_addr`/`addr_to_off` 闭包 + `seg_wrap16` + `msdos_addr`）。
   `$$`（`ST_RELOFFSET`）现按上游 `compareSignature` 解析：非
@@ -2046,7 +2046,7 @@ nrv 单测），前端 `npm run build` 通过。
   `OnceLock` 缓存 ctx。COMPATIBILITY.md 检测矩阵 `⚠ partial`/
   `差分未跑` 清扫为 ✅。差分：76 文件 0 差异。
 
-验证：`cargo test -p diec-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
+验证：`cargo test -p die-nfd`（签名语义单测 + UPX/ZIP/畸形输入冒烟）、
 workspace 44 套件全绿、clippy `-D warnings` 零警告。
 
 ## Phase 26-31：遗留 deferred 项实施计划（2026-10-09 规划）
@@ -2076,7 +2076,7 @@ Phase 25 后的全部未做项均来自 ADR deferred 决议。本节按
 范围：ASPack（1068）、NsPack（1435）、yoda（672），约 3.2k 行。
 结构同 Phase 26，验收与 gate 相同。
 
-交付（`diec-engine/src/unpack/`）：
+交付（`die-engine/src/unpack/`）：
 
 - `yoda.rs`（672 行移植）：双层字节码 VM（layer1 解扰 layer2 程序
   再执行）、节名前 4 字节 DWORD 跳过表（`SKIP_NAMES`）、`push +8;
@@ -2099,7 +2099,7 @@ Phase 25 后的全部未做项均来自 ADR deferred 决议。本节按
   cache/carry range encoder（literal-only 流）。
 - 统一分派 `detect_packed`/`unpack_any` 扩至 7 壳（UPX/FSG/MEW/
   Petite/yC/ASPack/NsPack）；CLI `--unpack` 与 GUI `detect_packer`/
-  `unpack_file` 自动生效；`diec-engine` 全 detect/unpack API 导出。
+  `unpack_file` 自动生效；`die-engine` 全 detect/unpack API 导出。
 - 测试：`static_unpack.rs` 14 项（7 壳 oracle 字节差分 + 分派 +
   三类畸形输入负向）；语料 8 fixture 全部入 `corpus/`。
 - 验证：NFD 差分 94 文件 0 差异；fmt/clippy -D warnings 零警告；
@@ -2195,7 +2195,7 @@ list/extract 已于 Phase 28 接入 `list_archive_members`/
 ZIP/7Z/RAR/CAB/ISO9660 五类（`archive-gap-closure.md` 已证），
 这批格式**只需 list/extract parity，不进嵌套扫描**。
 
-交付（`crates/diec-engine/src/archive/`）：
+交付（`crates/die-engine/src/archive/`）：
 
 - **ARJ**（`arj.rs`）：块链枚举、DOS 时间戳、反斜杠→`/` 名字
   规范化；`is_directory` 恒 false（上游不设 `ISFOLDER`）；
@@ -2350,7 +2350,7 @@ oracle 失败而非能力缺失。全部剩余项重排：
   文档化扩展。
 - **Phase 39：非 x86 反汇编** — DONE（ADR 0041 v3 反转 Accepted）
   采用 `capstone` crate 0.14（bundled capstone 5.x 源码构建，
-  `arch_mips/arch_powerpc/arch_riscv + full`，与 diec-rules
+  `arch_mips/arch_powerpc/arch_riscv + full`，与 die-rules
   既有 native 例外同约定）。`Arch` 新增 11 变体逐位镜像上游
   `XCapstone::openHandle` DM 表（mips32/64±LE/BE、ppc32/64±LE/BE、
   riscv32/64/riscvc；`DM_RISKVC` 经 `new_raw`+`ExtraMode::RiscVC`
@@ -2370,7 +2370,7 @@ oracle 失败而非能力缺失。全部剩余项重排：
 ### 收尾补齐批（Phase 41-44，消除剩余可立项差距）
 
 - **Phase 41：WIM 压缩流提取** — DONE（中型）
-  `crates/diec-engine/src/archive/wim_decode.rs`：移植
+  `crates/die-engine/src/archive/wim_decode.rs`：移植
   `xxpressdecoder.cpp`（XPRESS Huffman：256B nibble 表→512 符号
   canonical 完备码、16 位字位流、终端 `sym==256 && bitbuf==0 &&
   inPos==inSize` 判据）+ `xlzxdecoder.cpp` WIM 变体（3-bit 块型
@@ -2547,7 +2547,7 @@ Windows-only 实为 parity（上游 `registerContext` 同样
   检出至 `upstream/DIE-engine/dep/XEmulator`，tools-only Qt
   oracle `tools/xemulator-oracle`（micro 指令级 + unpack 端到端
   两模式）。交付：
-  - `diec-engine::emulate` 有界 x86 核心（decode/exec/FPU/MMX/
+  - `die-engine::emulate` 有界 x86 核心（decode/exec/FPU/MMX/
     memmgr/registers ≈ 上游 6.9k 行子集），STEP 语义与 `run`
     步数语义对齐（Linux 软件回退路径、vector=-1、FRNDINT
     ties-to-even、正确 BSR）。**491/491 指令差分语料字节级

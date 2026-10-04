@@ -61,7 +61,7 @@ pub fn open_in_browser(md5: &str) {
 /// Uses `GET /api/v3/files/{md5}` with the `x-apikey` header.
 pub async fn query_scan_info(md5: &str, api_key: &str) -> VtScanInfo {
     let client = match reqwest::Client::builder()
-        .user_agent("diec-rust-gui")
+        .user_agent("die-rust-gui")
         .timeout(std::time::Duration::from_secs(30))
         .build()
     {

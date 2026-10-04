@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://diec-rust.invalid/schemas/semantic-difference-blocked-v1.schema.json",
+  "$id": "https://die-rust.invalid/schemas/semantic-difference-blocked-v1.schema.json",
   "title": "DIEC semantic difference report blocked marker v1",
   "type": "object",
   "additionalProperties": false,
@@ -25,7 +25,7 @@
       ]
     },
     "run_identity": {
-      "$ref": "https://diec-rust.invalid/schemas/difference-input-report-v1.schema.json#/$defs/run_identity"
+      "$ref": "https://die-rust.invalid/schemas/difference-input-report-v1.schema.json#/$defs/run_identity"
     },
     "case_id": {
       "type": "string",

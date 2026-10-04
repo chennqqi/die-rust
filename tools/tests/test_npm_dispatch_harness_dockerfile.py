@@ -26,12 +26,12 @@ class NpmDispatchHarnessDockerfileTests(unittest.TestCase):
                 text = dockerfile.read_text(encoding="utf-8")
                 suffix = "-qt6" if qt == "qt6" else ""
                 self.assertIn(
-                    "ARG BASE_IMAGE=diec-rust/"
+                    "ARG BASE_IMAGE=die-rust/"
                     f"upstream-oracle-cmake{suffix}:74eaf505",
                     text,
                 )
                 self.assertIn("npm_dispatch_harness_main.cpp", text)
-                self.assertIn("diec-npm-dispatch-harness", text)
+                self.assertIn("die-npm-dispatch-harness", text)
                 self.assertNotIn("apt-get", text)
                 self.assertNotIn("git clone", text)
 

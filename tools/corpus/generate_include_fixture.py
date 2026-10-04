@@ -25,7 +25,7 @@ DIRECTORIES = tuple(
 FILES = (
     (
         "input/probe.bin",
-        b"diec-rust include lifecycle fixture\n",
+        b"die-rust include lifecycle fixture\n",
         "benign Binary scan input",
     ),
     (

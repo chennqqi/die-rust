@@ -70,7 +70,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/chennqqi/diec-rust/releases/latest/download/latest.json"
+        "https://github.com/chennqqi/die-rust/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc5MjQ4MjlDOTU2QzhDODYKUldTR2pHeVZuSUlrZVowVVhaektMSStldnpFOGVicXowcXdFcjVjanpqZ1Y0WlFsc09CQWFhMEcK",
       "requireSignedVersion": true

@@ -25,7 +25,7 @@ constexpr const char *DIE_SCRIPT_COMMIT =
 constexpr const char *INPUT_SHA256 =
     "789b791f239520d2244dfa30bcec3dbf5b77db407d8cbca4aba64b29e99c8b54";
 constexpr const char *COLLECTION_ROOT =
-    "/tmp/diec-result-list-collection";
+    "/tmp/die-result-list-collection";
 
 QJsonArray serializeRecords(
     const QList<XScanEngine::SCANSTRUCT> &records
@@ -168,7 +168,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-result-lists-harness <fixture-root>\n"
+            "usage: die-result-lists-harness <fixture-root>\n"
         );
         return 2;
     }

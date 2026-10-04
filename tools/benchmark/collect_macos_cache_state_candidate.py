@@ -111,7 +111,7 @@ def build_report(root: Path) -> dict[str, Any]:
         raise CollectionError("cache-state probe source is missing")
 
     with tempfile.TemporaryDirectory(
-        prefix="diec-macos-cache-candidate-"
+        prefix="die-macos-cache-candidate-"
     ) as temporary:
         directory = Path(temporary)
         binary = directory / "cache-state-probe"

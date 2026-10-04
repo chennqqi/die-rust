@@ -1,6 +1,6 @@
 // nfd-oracle — minimal console harness that runs the upstream
 // SpecAbstract (NFD) engine and dumps the SCAN_RESULT record list as
-// JSON, for differential comparison against diec-nfd.
+// JSON, for differential comparison against die-nfd.
 //
 // Usage: nfd-oracle <file> [file...]
 //

@@ -36,8 +36,8 @@ jobs:
           set -euo pipefail
           if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
             echo "::error::secret TAURI_SIGNING_PRIVATE_KEY is not set."
-            echo "Generate a production keypair: cargo tauri signer generate -w ~/.tauri/diec.key"
-            echo "Then base64 -w0 ~/.tauri/diec.key into this secret."
+            echo "Generate a production keypair: cargo tauri signer generate -w ~/.tauri/die.key"
+            echo "Then base64 -w0 ~/.tauri/die.key into this secret."
             exit 1
           fi
           DEV_PUBKEY="dW50cnVzdGVkIGNvbW1lbnQ6IGRpZWMtcnVzdCBkZXYgdXBkYXRlciBrZXkKUldSa2FXVmpaR1YyTWZNazhSZWZvMXRpaWZqTUVyNmRvdk85WVBKb1RhTEt5WW1IWUhhVUhZd1YK"
@@ -60,22 +60,22 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-            artifact_name: diec-linux-x86_64
+            artifact_name: die-linux-x86_64
             archive_ext: tar.gz
             cross_compile: false
           - os: windows-2022
             target: x86_64-pc-windows-msvc
-            artifact_name: diec-windows-x86_64
+            artifact_name: die-windows-x86_64
             archive_ext: zip
             cross_compile: false
           - os: macos-14
             target: aarch64-apple-darwin
-            artifact_name: diec-macos-arm64
+            artifact_name: die-macos-arm64
             archive_ext: tar.gz
             cross_compile: false
           - os: macos-14
             target: x86_64-apple-darwin
-            artifact_name: diec-macos-x86_64
+            artifact_name: die-macos-x86_64
             archive_ext: tar.gz
             cross_compile: true
 
@@ -111,7 +111,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ inputs.version || github.ref_name }}"
-          staging="diec-${version}-${{ matrix.artifact_name }}"
+          staging="die-${version}-${{ matrix.artifact_name }}"
           mkdir -p "$staging/base/db"
           mkdir -p "$staging/base/db_extra"
           mkdir -p "$staging/base/db_custom"
@@ -166,7 +166,7 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ inputs.version || github.ref_name }}"
-          $staging = "diec-$version-${{ matrix.artifact_name }}"
+          $staging = "die-$version-${{ matrix.artifact_name }}"
           New-Item -ItemType Directory -Force -Path "$staging/base/db" | Out-Null
           New-Item -ItemType Directory -Force -Path "$staging/base/db_extra" | Out-Null
           New-Item -ItemType Directory -Force -Path "$staging/base/db_custom" | Out-Null
@@ -575,13 +575,13 @@ jobs:
           version="${{ steps.version.outputs.version }}"
           tag="${{ inputs.version || github.ref_name }}"
           # Extract only the current version's changelog section from
-          # RELEASE_NOTES.md (from "## diec-rust <version>" to the next
-          # "## diec-rust" heading or EOF).
+          # RELEASE_NOTES.md (from "## die-rust <version>" to the next
+          # "## die-rust" heading or EOF).
           # This keeps GitHub release pages concise — each release shows
           # only its own changes, not the full history.
           awk -v ver="$version" '
             BEGIN { found=0 }
-            /^## diec-rust / {
+            /^## die-rust / {
               if (found) exit 0      # reached next version section, stop
               if (index($0, ver)) { found=1; print; next }
             }
@@ -615,7 +615,7 @@ jobs:
           else
             echo "Creating release $tag"
             gh release create "$tag" \
-              --title "diec-rust $version" \
+              --title "die-rust $version" \
               --notes-file release_notes_current.md \
               artifacts/*/* latest.json
           fi

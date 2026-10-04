@@ -745,7 +745,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-engine-contract-harness <fixture-root>\n"
+            "usage: die-engine-contract-harness <fixture-root>\n"
         );
         return 2;
     }

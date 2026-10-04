@@ -21,7 +21,7 @@ Produced streams are verified against the pinned upstream oracle
                   is underdetermined -> output stays encrypted -> CRC
                   verify fails (negative parity, unpacked:false).
 
-Bit-level writers mirror the Rust decoder (`crates/diec-nfd/src/ancient.rs`,
+Bit-level writers mirror the Rust decoder (`crates/die-nfd/src/ancient.rs`,
 ports of `RNCDecompressOld`/`RNC1DecompressNew`): the readers share one
 stream cursor between the bit buffer and raw `byte()` reads, so literal
 bytes interleave with partially-consumed bit words — the writers allocate

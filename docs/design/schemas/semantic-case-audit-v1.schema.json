@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json",
+  "$id": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json",
   "title": "DIEC single-case semantic compatibility audit v1",
   "type": "object",
   "additionalProperties": false,
@@ -31,7 +31,7 @@
       ],
       "properties": {
         "name": {
-          "const": "diec-semantic-case-auditor"
+          "const": "die-semantic-case-auditor"
         },
         "version": {
           "const": 1
@@ -69,7 +69,7 @@
     "run_identity": {
       "oneOf": [
         {
-          "$ref": "https://diec-rust.invalid/schemas/semantic-projection-v1.schema.json#/$defs/runIdentity"
+          "$ref": "https://die-rust.invalid/schemas/semantic-projection-v1.schema.json#/$defs/runIdentity"
         },
         {
           "type": "null"
@@ -98,23 +98,23 @@
       ],
       "properties": {
         "comparison": {
-          "$ref": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifact"
+          "$ref": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifact"
         },
         "difference_report": {
-          "$ref": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifact"
+          "$ref": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifact"
         },
         "waiver_registry": {
-          "$ref": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifact"
+          "$ref": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifact"
         },
         "waiver_audit": {
-          "$ref": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifact"
+          "$ref": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifact"
         }
       }
     },
     "comparison": {
       "oneOf": [
         {
-          "$ref": "https://diec-rust.invalid/schemas/semantic-comparison-v1.schema.json"
+          "$ref": "https://die-rust.invalid/schemas/semantic-comparison-v1.schema.json"
         },
         {
           "type": "null"
@@ -124,7 +124,7 @@
     "waiver_audit": {
       "oneOf": [
         {
-          "$ref": "https://diec-rust.invalid/schemas/difference-waiver-audit-v1.schema.json"
+          "$ref": "https://die-rust.invalid/schemas/difference-waiver-audit-v1.schema.json"
         },
         {
           "type": "null"
@@ -177,17 +177,17 @@
             "format": "date"
           },
           "run_identity": {
-            "$ref": "https://diec-rust.invalid/schemas/semantic-projection-v1.schema.json#/$defs/runIdentity"
+            "$ref": "https://die-rust.invalid/schemas/semantic-projection-v1.schema.json#/$defs/runIdentity"
           },
           "case_id": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
           },
           "comparison": {
-            "$ref": "https://diec-rust.invalid/schemas/semantic-comparison-v1.schema.json"
+            "$ref": "https://die-rust.invalid/schemas/semantic-comparison-v1.schema.json"
           },
           "waiver_audit": {
-            "$ref": "https://diec-rust.invalid/schemas/difference-waiver-audit-v1.schema.json"
+            "$ref": "https://die-rust.invalid/schemas/difference-waiver-audit-v1.schema.json"
           },
           "input_files_unchanged": {
             "const": true
@@ -198,16 +198,16 @@
           "artifacts": {
             "properties": {
               "comparison": {
-                "$ref": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifactReference"
+                "$ref": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifactReference"
               },
               "difference_report": {
-                "$ref": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifactReference"
+                "$ref": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifactReference"
               },
               "waiver_registry": {
-                "$ref": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifactReference"
+                "$ref": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifactReference"
               },
               "waiver_audit": {
-                "$ref": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifactReference"
+                "$ref": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifactReference"
               }
             }
           }
@@ -267,7 +267,7 @@
     "artifact": {
       "oneOf": [
         {
-          "$ref": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifactReference"
+          "$ref": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/artifactReference"
         },
         {
           "type": "null"
@@ -283,10 +283,10 @@
       ],
       "properties": {
         "sha256": {
-          "$ref": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/sha256"
+          "$ref": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/sha256"
         },
         "canonical_sha256": {
-          "$ref": "https://diec-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/sha256"
+          "$ref": "https://die-rust.invalid/schemas/semantic-case-audit-v1.schema.json#/$defs/sha256"
         }
       }
     }

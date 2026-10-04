@@ -283,17 +283,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2ea6706d74fca54e15f1d40b5cf7fe7f764aaec61352a9fcec58fe27e042fc8"
 
 [[package]]
-name = "diec-core"
+name = "die-core"
 version = "0.8.0"
 
 [[package]]
-name = "diec-engine"
+name = "die-engine"
 version = "0.8.0"
 dependencies = [
  "crc32fast",
- "diec-core",
- "diec-formats",
- "diec-rules",
+ "die-core",
+ "die-formats",
+ "die-rules",
  "hex",
  "md-5",
  "md4",
@@ -306,48 +306,48 @@ dependencies = [
 ]
 
 [[package]]
-name = "diec-ffi"
+name = "die-ffi"
 version = "0.8.0"
 dependencies = [
- "diec-core",
- "diec-engine",
- "diec-output",
+ "die-core",
+ "die-engine",
+ "die-output",
 ]
 
 [[package]]
-name = "diec-formats"
+name = "die-formats"
 version = "0.8.0"
 dependencies = [
- "diec-core",
+ "die-core",
 ]
 
 [[package]]
-name = "diec-fuzz"
+name = "die-fuzz"
 version = "0.0.0"
 dependencies = [
- "diec-core",
- "diec-engine",
- "diec-ffi",
- "diec-formats",
- "diec-output",
+ "die-core",
+ "die-engine",
+ "die-ffi",
+ "die-formats",
+ "die-output",
  "libfuzzer-sys",
  "serde_json",
 ]
 
 [[package]]
-name = "diec-output"
+name = "die-output"
 version = "0.8.0"
 dependencies = [
- "diec-core",
- "diec-engine",
+ "die-core",
+ "die-engine",
 ]
 
 [[package]]
-name = "diec-rules"
+name = "die-rules"
 version = "0.8.0"
 dependencies = [
  "capstone",
- "diec-core",
+ "die-core",
  "goblin",
  "pelite",
  "rquickjs",

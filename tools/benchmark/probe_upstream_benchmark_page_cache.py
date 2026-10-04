@@ -18,7 +18,7 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 EXPECTED_REVISION = "74eaf505c250ab47e709024e9dc41657cd8f2254"
-EXPECTED_IMAGE = "diec-rust/upstream-benchmark-qt5:74eaf505"
+EXPECTED_IMAGE = "die-rust/upstream-benchmark-qt5:74eaf505"
 EXPECTED_IMAGE_ID = (
     "sha256:9f1d70a8d4513404cdc457074e00dec"
     "4a9b8a6f043a572ffc17465bbe699eb09"

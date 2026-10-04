@@ -11,7 +11,7 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 WORK_DIR = Path(__file__).resolve().parents[3]
-RUST_CLI = str(WORK_DIR / "diec-rust-src" / "target" / "release" / "diec")
+RUST_CLI = str(WORK_DIR / "die-rust-src" / "target" / "release" / "diec")
 DB = str(WORK_DIR / "DIE-engine-src" / "Detect-It-Easy" / "db")
 BENCH = WORK_DIR / "bench"
 ENVIRONMENT = {
@@ -19,7 +19,7 @@ ENVIRONMENT = {
     "TZ": "UTC",
 }
 PRODUCER = {
-    "implementation": "diec-rust Rust implementation (Phase 3)",
+    "implementation": "die-rust Rust implementation (Phase 3)",
     "source_commit": "9bb97c611f559dbebf805e4dd607c04aafa54468",
     "rules_commit": "c2c17dfa5ea4e078ba31eab55d87430c96622fb6",
     "build_profile": "cargo release",

@@ -1,4 +1,4 @@
-# diec-rust
+# die-rust
 
 A Rust rewrite of [Detect It Easy](https://github.com/horsicq/DIE-engine) (DIE).
 
@@ -44,7 +44,7 @@ None at this time.
   translation of UnRAR source code (94.21% token coverage across 17 UnRAR
   files) but is labeled MIT without retaining the UnRAR license notice or
   acknowledgments required for modified-source redistribution. For license
-  compliance, diec-rust does NOT copy, translate, or derive from the upstream
+  compliance, die-rust does NOT copy, translate, or derive from the upstream
   RAR decoder. Instead, RAR member extraction uses `rars` (WTFPL), an
   independent pure-Rust RAR implementation. Due to the independent
   implementation, RAR extraction behavior may differ from upstream on edge
@@ -89,8 +89,8 @@ python tools/compat/compare_upstream.py
 ## Quick Start
 
 ```sh
-git clone https://github.com/chennqqi/diec-rust.git
-cd diec-rust && cargo build --workspace --release
+git clone https://github.com/chennqqi/die-rust.git
+cd die-rust && cargo build --workspace --release
 ./target/release/diec --alltypes file.exe
 ```
 
@@ -111,7 +111,7 @@ To run on older distributions (glibc < 2.34, e.g. Ubuntu 20.04, CentOS 7):
    became the baseline), then `cargo build --workspace --release`.
 2. **Use the Docker image** which ships a compatible glibc:
    ```sh
-   docker run --rm -v "$PWD:/work" -w /work ghcr.io/chennqqi/diec-rust:latest \
+   docker run --rm -v "$PWD:/work" -w /work ghcr.io/chennqqi/die-rust:latest \
        diec --alltypes file.exe
    ```
 3. **Static linking** (advanced): build with `RUSTFLAGS='-C target-feature=+crt-static'`
@@ -125,7 +125,7 @@ requests, avoiding the 160ms per-process database load overhead.
 
 ```sh
 # Build and start the server
-cargo build --release --package diec-server
+cargo build --release --package die-server
 ./target/release/died --db upstream/Detect-It-Easy/db --bind 127.0.0.1:18080
 ```
 
@@ -133,7 +133,7 @@ Client examples (curl, PowerShell, Python, Go) and full API reference:
 [docs/died-api.md](docs/died-api.md).
 
 Windows service installation, Linux systemd setup, and DEB/RPM/MSI
-packaging: [crates/diec-server/packaging/README.md](crates/diec-server/packaging/README.md).
+packaging: [crates/die-server/packaging/README.md](crates/die-server/packaging/README.md).
 
 ## License
 

@@ -35,12 +35,12 @@ Last updated: 2026-08-08
 - `SettingsModal.tsx` — Settings 模态对话框（5 个标签：View/Scan/Database/Engine/Shortcuts）
 
 **新增依赖**：
-- `diec-formats`（workspace）— 20+ 格式 probe
+- `die-formats`（workspace）— 20+ 格式 probe
 - `tar = "0.4"` — TAR 归档支持
 - `flate2 = "1.1"` — GZIP 解压支持
 
 **扩展功能**：
-- `detect_format` 现在优先使用 diec-formats probe table（20+ 格式），手写 magic bytes 作为回退
+- `detect_format` 现在优先使用 die-formats probe table（20+ 格式），手写 magic bytes 作为回退
 - `list_archive` 扩展支持 ZIP/TAR/GZIP+TAR
 - `FileInfo` 新增 `mime_type` 字段
 - `AppSettings` 新增 `shortcuts` 字段（8 个可配置快捷键）
@@ -141,13 +141,13 @@ Mach-O 的完整头部字段。这是用户打开二进制文件时**第一眼�
 
 **实现**：
 
-1. **复用 `diec-formats` probe 结果**：
-   - diec-formats 已有 20 个格式 probe（Phase 2 实现）
+1. **复用 `die-formats` probe 结果**：
+   - die-formats 已有 20 个格式 probe（Phase 2 实现）
    - 新增 IPC 命令 `detect_file_format(path) -> String`
-   - 返回 diec-formats 识别的格式名（如 "PDF"、"PNG"、"ISO9660"）
+   - 返回 die-formats 识别的格式名（如 "PDF"、"PNG"、"ISO9660"）
 
 2. **扩展 `detect_format` 回退**：
-   - 优先使用 diec-formats probe
+   - 优先使用 die-formats probe
    - 回退到手写 magic bytes（已有）
    - 补充常见格式：PDF（%PDF）、PNG（89PNG）、JPEG（FFD8）、GIF（GIF8）、
      BMP（BM）、RIFF/WAV（RIFF）、GZIP（1F8B）、RAR（Rar!）、7Z（377A）、
@@ -158,7 +158,7 @@ Mach-O 的完整头部字段。这是用户打开二进制文件时**第一眼�
 
 **验证**：
 - 20+ 种格式样本正确识别
-- 与 diec-formats probe 输出差分
+- 与 die-formats probe 输出差分
 
 ### 11.3 PE 专用视图（P1）
 
@@ -382,7 +382,7 @@ XRegionsWidget（内存区域可视化），die-gui 均缺失。
 | 任务 | 新增依赖 | 许可证 | 说明 |
 | --- | --- | --- | --- |
 | 11.1 | `pelite`（已有） | MIT | PE 深度解析 |
-| 11.2 | 无（复用 diec-formats） | — | — |
+| 11.2 | 无（复用 die-formats） | — | — |
 | 11.3 | 无（pelite 已有） | — | — |
 | 11.4 | 无 | — | 纯 Rust 实现 |
 | 11.5 | `tar`、`flate2`、`bzip2`、`sevenz-rust` | MIT/MIT/Apache-2.0/MIT | 归档格式 |

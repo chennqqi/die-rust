@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Differential scan: compare diec-rust vs upstream DIE-engine diec on real corpus.
+"""Differential scan: compare die-rust vs upstream DIE-engine diec on real corpus.
 
 Scans samples from /data/virus/{pe,elf}_{benign,malicious} with both engines
 and reports detection discrepancies. Focuses on packer/protector detection
@@ -73,7 +73,7 @@ def run_upstream(sample_path):
 
 
 def run_diec_rust(sample_path):
-    """Run diec-rust, return parsed JSON list or None."""
+    """Run die-rust, return parsed JSON list or None."""
     env = dict(os.environ, DIE_DB_PATH=str(DB_PATH))
     try:
         cmd = [str(DIE_RUST), "--db", str(DB_PATH), "--extradb",
@@ -127,7 +127,7 @@ def normalize_upstream(data):
 
 
 def normalize_diec_rust(data):
-    """Extract detection set from diec-rust --json-upstream output.
+    """Extract detection set from die-rust --json-upstream output.
 
     Returns set of (filetype, name, type, version) tuples.
     """
@@ -209,7 +209,7 @@ def main():
         sys.exit(1)
 
     if not DIE_RUST.exists():
-        log(f"ERROR: diec-rust not found: {DIE_RUST}")
+        log(f"ERROR: die-rust not found: {DIE_RUST}")
         sys.exit(1)
 
     samples = sorted(corpus_dir.iterdir())

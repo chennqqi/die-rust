@@ -80,7 +80,7 @@ def write_candidate(directory: Path):
         "first_detect_tree"
     ]
     fixture_dir = PurePosixPath(
-        "/private/tmp/diec-macos-privilege-path"
+        "/private/tmp/die-macos-privilege-path"
     )
     report_db = COLLECTOR.database_arguments(Path("."), report=True)
     snapshots = {

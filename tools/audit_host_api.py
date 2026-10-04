@@ -279,7 +279,7 @@ def classify_implementation(bridge_path: Path, cls: str, method: str) -> str:
         return "implemented"
 
     # Check for methods implemented in host.rs (Rust native).
-    host_rs_path = bridge_path.parent.parent.parent.parent / "crates" / "diec-engine" / "src" / "host.rs"
+    host_rs_path = bridge_path.parent.parent.parent.parent / "crates" / "die-engine" / "src" / "host.rs"
     if host_rs_path.exists():
         host_text = host_rs_path.read_text(encoding="utf-8", errors="replace")
         for variant in variants:
@@ -325,7 +325,7 @@ def classify_implementation(bridge_path: Path, cls: str, method: str) -> str:
 def main():
     workspace = find_workspace_root()
     help_dir = workspace / "upstream" / "Detect-It-Easy" / "help"
-    bridge_path = workspace / "crates" / "diec-rules" / "src" / "host_api_bridge.rs"
+    bridge_path = workspace / "crates" / "die-rules" / "src" / "host_api_bridge.rs"
 
     if not help_dir.is_dir():
         print(f"ERROR: help directory not found: {help_dir}", file=sys.stderr)

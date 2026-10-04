@@ -17,8 +17,8 @@ UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 FORMATS_COMMIT = "1151e7254fdee3c0294ff7095edbdd7bfccf8201"
 XSCANENGINE_COMMIT = "dfe4a419e4f491bb23688ba03c5a5bf39e34da83"
 RULES_COMMIT = "c2c17dfa5ea4e078ba31eab55d87430c96622fb6"
-IMAGE = "diec-rust/image-dispatch-harness-qt5:74eaf505"
-BINARY = "/opt/die-build/src/console/diec-image-dispatch-harness"
+IMAGE = "die-rust/image-dispatch-harness-qt5:74eaf505"
+BINARY = "/opt/die-build/src/console/die-image-dispatch-harness"
 FIXTURE_ROOT = "/fixtures/image"
 MANIFEST_SHA256 = (
     "77e2e743897d9c85ed7c539b1213ce1270bf43aa2cf976a3bf470bdd185a9238"
@@ -148,7 +148,7 @@ def docker_bytes(entrypoint: str, *arguments: str) -> bytes:
 def verify_fixture() -> tuple[dict[str, Any], bytes]:
     image_generator = docker_bytes(
         "/usr/bin/cat",
-        "/opt/diec-image/generate_image_dispatch_fixture.py",
+        "/opt/die-image/generate_image_dispatch_fixture.py",
     )
     if image_generator != GENERATOR.read_bytes():
         raise ProbeError("image fixture generator differs from repository")

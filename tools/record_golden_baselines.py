@@ -125,7 +125,7 @@ def main():
               f"error='{last_error[:50]}'")
 
     # Save golden file.
-    output_path = workspace / "tests" / "golden" / "upstream-diec-baseline.json"
+    output_path = workspace / "tests" / "golden" / "upstream-die-baseline.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(golden, indent=2, ensure_ascii=False) + "\n",
                            encoding="utf-8")

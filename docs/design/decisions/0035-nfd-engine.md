@@ -4,7 +4,7 @@
 **Status**: Accepted (partial) — superseded 2026-10-07
 
 > **Update (Phase 21, 2026-10-07)**: the license gate cleared (SpecAbstract
-> is MIT) and a bounded port shipped. `crates/diec-nfd` re-implements the
+> is MIT) and a bounded port shipped. `crates/die-nfd` re-implements the
 > matching core in pure Rust; signature tables are generated from the C
 > arrays by `tools/nfd_codegen.py` (35 tables / 1730 records @ 5188e047,
 > MIT attribution in generated headers). Ported dispatch: BINARY

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NFD differential harness: upstream SpecAbstract oracle vs diec-nfd.
+"""NFD differential harness: upstream SpecAbstract oracle vs die-nfd.
 
 Runs `nfd-oracle` (Qt build of pinned upstream SpecAbstract) and
 `diec --nfd --json` over the same files, normalizes both sides to

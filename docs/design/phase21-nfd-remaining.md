@@ -140,7 +140,7 @@ NE、LE/LX、文本。
 
 上游 `diec` CLI **不跑** SpecAbstract（仅 GUI `nfd_widget` 用），
 无现成 CLI oracle。**已确认：允许用 Qt 构建上游 harness 做对比，
-但 Qt 只属于 oracle 侧工具，`diec-rust` 任何 crate 不得引入 Qt。**
+但 Qt 只属于 oracle 侧工具，`die-rust` 任何 crate 不得引入 Qt。**
 
 路径：
 

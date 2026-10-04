@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "diec-c-static-link-spike"
+name = "die-c-static-link-spike"
 version = "0.0.0"

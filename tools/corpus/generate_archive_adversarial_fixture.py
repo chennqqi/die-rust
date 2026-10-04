@@ -15,7 +15,7 @@ import zlib
 
 
 GENERATOR = "tools/corpus/generate_archive_adversarial_fixture.py"
-PASSWORD = b"diec-rust"
+PASSWORD = b"die-rust"
 
 
 def _load_baseline_module():

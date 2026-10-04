@@ -8,7 +8,7 @@ Last updated: 2026-07-31
 插入 filename/colon，缺失目标和数据库/脚本错误也写入 stdout，导致结构化输出
 无效。普通扫描与 entropy/info 的 formatter 优先级还不同。
 
-diec-rust 同时要求 1:1 可观察兼容、稳定 C/Go/Python 数据面和可靠命令行自动化。
+die-rust 同时要求 1:1 可观察兼容、稳定 C/Go/Python 数据面和可靠命令行自动化。
 若只提供一种 renderer，要么破坏上游 raw 差分，要么延续无效 JSON 和隐式错误。
 
 ## Decision
@@ -52,7 +52,7 @@ version 判断语义。
 
 开发初期简单，但 CLI、FFI 和语言绑定会产生不同字段、排序与错误处理。
 
-结论：拒绝；canonical bytes 由 `diec-output` 单点生成。
+结论：拒绝；canonical bytes 由 `die-output` 单点生成。
 
 ## Consequences
 

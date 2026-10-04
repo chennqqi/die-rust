@@ -1,7 +1,7 @@
 # Third-Party Notices
 
 This file lists third-party software, licenses, and attribution used by
-diec-rust. It is maintained manually and verified via `cargo license`.
+die-rust. It is maintained manually and verified via `cargo license`.
 
 ## Upstream Project
 

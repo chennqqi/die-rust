@@ -22,8 +22,8 @@ DOCKERFILES = {
 class SignaturePathHarnessDockerfileTests(unittest.TestCase):
     def test_builds_from_pinned_cmake_oracle_without_network(self):
         bases = {
-            "qt5": "diec-rust/upstream-oracle-cmake:74eaf505",
-            "qt6": "diec-rust/upstream-oracle-cmake-qt6:74eaf505",
+            "qt5": "die-rust/upstream-oracle-cmake:74eaf505",
+            "qt6": "die-rust/upstream-oracle-cmake-qt6:74eaf505",
         }
         for profile, path in DOCKERFILES.items():
             with self.subTest(profile=profile):
@@ -33,7 +33,7 @@ class SignaturePathHarnessDockerfileTests(unittest.TestCase):
                     text,
                 )
                 self.assertIn("signature_path_harness_main.cpp", text)
-                self.assertIn("diec-signature-path-harness", text)
+                self.assertIn("die-signature-path-harness", text)
                 self.assertNotIn("apt-get", text)
                 self.assertNotIn("git clone", text)
 

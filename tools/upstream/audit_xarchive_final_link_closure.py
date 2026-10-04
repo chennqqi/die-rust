@@ -16,7 +16,7 @@ import tomllib
 from typing import Any
 
 
-IMAGE = "diec-rust/upstream-oracle-cmake:74eaf505"
+IMAGE = "die-rust/upstream-oracle-cmake:74eaf505"
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 PRIOR_REPORT = (
     "docs/research/data/xarchive-license-closure-linux.json"
@@ -229,10 +229,10 @@ def replay_link_with_map(
         raise ValueError("link command output option drift")
     output_index = link_tokens.index("-o") + 1
     replay_tokens = list(link_tokens)
-    replay_tokens[output_index] = "/tmp/diec-xarchive-final-link"
+    replay_tokens[output_index] = "/tmp/die-xarchive-final-link"
     replay_tokens.insert(
         output_index - 1,
-        "-Wl,-Map,/tmp/diec-xarchive-final-link.map",
+        "-Wl,-Map,/tmp/die-xarchive-final-link.map",
     )
     process = subprocess.run(
         replay_tokens,
@@ -242,9 +242,9 @@ def replay_link_with_map(
     )
     if process.stdout or process.stderr:
         raise ValueError("replayed link command wrote output")
-    artifact = pathlib.Path("/tmp/diec-xarchive-final-link").read_bytes()
+    artifact = pathlib.Path("/tmp/die-xarchive-final-link").read_bytes()
     link_map = pathlib.Path(
-        "/tmp/diec-xarchive-final-link.map"
+        "/tmp/die-xarchive-final-link.map"
     ).read_bytes()
     return artifact, link_map
 

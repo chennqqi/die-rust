@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake:74eaf505
+ARG BASE_IMAGE=die-rust/upstream-oracle-cmake:74eaf505
 FROM ${BASE_IMAGE}
 
 COPY bw_dispatch_harness_main.cpp /tmp/bw_dispatch_harness_main.cpp
@@ -14,10 +14,10 @@ RUN set -eux; \
         -o /tmp/bw_dispatch_harness_main.cpp.o; \
     sed \
         -e 's#CMakeFiles/diec.dir/main_console.cpp.o#/tmp/bw_dispatch_harness_main.cpp.o#' \
-        -e 's# -o diec # -o diec-bw-dispatch-harness #' \
+        -e 's# -o diec # -o die-bw-dispatch-harness #' \
         "${object_dir}/link.txt" > /tmp/link-bw-dispatch-harness.sh; \
     sh /tmp/link-bw-dispatch-harness.sh; \
-    test -x /opt/die-build/src/console/diec-bw-dispatch-harness
+    test -x /opt/die-build/src/console/die-bw-dispatch-harness
 
 LABEL org.opencontainers.image.revision="74eaf505c250ab47e709024e9dc41657cd8f2254"
 LABEL org.opencontainers.image.source="https://github.com/horsicq/DIE-engine"

@@ -282,7 +282,7 @@ def trace_command(
     records: dict[str, dict[str, Any]] = {}
     volatile_paths: set[str] = set()
     with tempfile.TemporaryDirectory(
-        prefix="diec-file-access-"
+        prefix="die-file-access-"
     ) as directory:
         temporary = Path(directory)
         stdout_path = temporary / "stdout.bin"

@@ -1,7 +1,7 @@
 # Boa rule runtime spike
 
 This is an isolated Phase 0 research program, not part of the future
-`diec-rust` Cargo workspace or public API.
+`die-rust` Cargo workspace or public API.
 
 It evaluates whether a pinned pure-Rust Boa release can parse the fixed
 Detect-It-Easy rule corpus and support the host/runtime semantics required by

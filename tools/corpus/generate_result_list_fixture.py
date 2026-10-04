@@ -11,7 +11,7 @@ import sys
 
 
 DIRECTORIES = ("main", "main/Binary", "input")
-INPUT = b"diec-rust result list contract input\n"
+INPUT = b"die-rust result list contract input\n"
 
 
 def result_rule() -> bytes:

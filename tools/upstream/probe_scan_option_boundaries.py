@@ -80,12 +80,12 @@ class Case:
 ORACLES = (
     Oracle(
         "linux-qt5-qmake",
-        "diec-rust/upstream-oracle:74eaf505-repro",
+        "die-rust/upstream-oracle:74eaf505-repro",
         "/opt/die-source/build/release/diec",
     ),
     Oracle(
         "linux-qt5-cmake",
-        "diec-rust/upstream-oracle-cmake:74eaf505",
+        "die-rust/upstream-oracle-cmake:74eaf505",
         "/opt/die-build/src/console/diec",
     ),
 )

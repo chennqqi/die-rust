@@ -74,7 +74,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-result-ids-harness <nested-corpus-root>\n"
+            "usage: die-result-ids-harness <nested-corpus-root>\n"
         );
         return 2;
     }

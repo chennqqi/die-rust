@@ -240,7 +240,7 @@ FILES = (
     ),
     (
         "input/probe.bin",
-        b"diec-rust scan option boundary probe\n",
+        b"die-rust scan option boundary probe\n",
         "benign Binary input for deep filtering",
     ),
     (

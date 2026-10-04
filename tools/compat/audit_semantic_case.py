@@ -14,7 +14,7 @@ import validate_difference_waivers as waivers
 
 CASE_AUDIT_SCHEMA_VERSION = 1
 AUDITOR = {
-    "name": "diec-semantic-case-auditor",
+    "name": "die-semantic-case-auditor",
     "version": 1,
 }
 

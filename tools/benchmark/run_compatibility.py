@@ -128,7 +128,7 @@ def count_corpus_samples() -> dict:
 def scan_file_with_cli(filepath: str) -> dict:
     """Scan a single file with the CLI and return detections."""
     cmd = [
-        "cargo", "run", "--release", "-p", "diec-cli", "--",
+        "cargo", "run", "--release", "-p", "die-cli", "--",
         "--output", "json", "--alltypes", filepath,
     ]
     code, output = run_cmd_stdout(cmd, timeout=30)

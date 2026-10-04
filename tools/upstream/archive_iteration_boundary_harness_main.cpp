@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-archive-iteration-boundary-harness <file>\n"
+            "usage: die-archive-iteration-boundary-harness <file>\n"
         );
         return 2;
     }

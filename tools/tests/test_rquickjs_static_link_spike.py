@@ -37,7 +37,7 @@ class RquickjsStaticLinkSpikeTests(unittest.TestCase):
         lock = tomllib.loads(
             (SPIKE / "Cargo.lock").read_text(encoding="utf-8")
         )
-        root_name = "diec-rquickjs-static-link-spike"
+        root_name = "die-rquickjs-static-link-spike"
         locked = {
             (package["name"], package["version"])
             for package in lock["package"]

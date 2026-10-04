@@ -18,19 +18,19 @@ GENERATOR = "tools/upstream/probe_qt6_archive_option_harness.py"
 UNDERLYING_PROBE = "tools/upstream/probe_archive_harness.py"
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 RULES_COMMIT = "c2c17dfa5ea4e078ba31eab55d87430c96622fb6"
-HARNESS_BINARY = "/opt/die-build/src/console/diec-archive-harness"
+HARNESS_BINARY = "/opt/die-build/src/console/die-archive-harness"
 RELEASE_BINARY = "/opt/die-build/src/console/diec"
 QT6_WARNING = b"Unimplemented code.\n" * 4
 ORACLES = {
     "qt5": {
-        "harness_image": "diec-rust/upstream-archive-harness:74eaf505",
+        "harness_image": "die-rust/upstream-archive-harness:74eaf505",
         "harness_image_id": (
             "sha256:771b9094a2ad6ab4f6250dd89307ab727c07a1aae885a894695abfa959bab5dc"
         ),
         "harness_binary_sha256": (
             "b7ea9b151b58b630c017e9989333fa035b7d86ffab366a5d3a1f74bab9f1e96e"
         ),
-        "release_image": "diec-rust/upstream-oracle-cmake:74eaf505",
+        "release_image": "die-rust/upstream-oracle-cmake:74eaf505",
         "release_image_id": (
             "sha256:466102628c3a94b7ab1048f0c24261b1920e61a40029b128763cf79370255040"
         ),
@@ -40,7 +40,7 @@ ORACLES = {
     },
     "qt6": {
         "harness_image": (
-            "diec-rust/upstream-archive-harness-qt6:74eaf505"
+            "die-rust/upstream-archive-harness-qt6:74eaf505"
         ),
         "harness_image_id": (
             "sha256:2e46aa3e3d2fa731e92bd57c11f905bc3ff4a4064106d020314ad05a422c4488"
@@ -49,7 +49,7 @@ ORACLES = {
             "6fed831d6c11b67e0a9e0ea0aa57b2a9e380a5a6f53dd46f426122aec3839d76"
         ),
         "release_image": (
-            "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+            "die-rust/upstream-oracle-cmake-qt6:74eaf505"
         ),
         "release_image_id": (
             "sha256:e015495c313d0715f0b80f395da983a113a439f2a135eb637e9f0638c225200b"

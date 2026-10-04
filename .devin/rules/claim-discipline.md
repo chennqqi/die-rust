@@ -21,7 +21,7 @@ Only **verified** statements can support conclusions like "correct",
 
 | Claim | Required evidence |
 |-------|-------------------|
-| "1:1 compatible with upstream" | Differential test output comparing diec-rust vs upstream DIE on ≥20 files |
+| "1:1 compatible with upstream" | Differential test output comparing die-rust vs upstream DIE on ≥20 files |
 | "Feature X works correctly" | At least 1 test that verifies X's output against expected values (not just "no crash") |
 | "Bug X is fixed" | Test that reproduces X, fails before fix, passes after fix |
 | "No regressions" | Full test suite passes AND test suite covers the changed area |

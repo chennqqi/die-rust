@@ -164,7 +164,7 @@ class Qt6BwDispatchHarnessTests(unittest.TestCase):
     def test_qt6_dockerfile_replaces_only_console_main(self):
         text = DOCKERFILE_PATH.read_text(encoding="utf-8")
         self.assertIn(
-            "ARG BASE_IMAGE=diec-rust/"
+            "ARG BASE_IMAGE=die-rust/"
             "upstream-oracle-cmake-qt6:74eaf505",
             text,
         )

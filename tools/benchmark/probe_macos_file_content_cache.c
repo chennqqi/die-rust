@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
 
     char template_path[PATH_MAX];
     int formatted = snprintf(template_path, sizeof(template_path),
-                             "%s/diec-cache-probe.XXXXXX", argv[2]);
+                             "%s/die-cache-probe.XXXXXX", argv[2]);
     if (formatted < 0 || (size_t)formatted >= sizeof(template_path)) {
         fail_message("temporary fixture path is too long");
     }

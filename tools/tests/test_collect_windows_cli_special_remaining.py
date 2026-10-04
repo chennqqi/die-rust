@@ -224,8 +224,8 @@ class CollectWindowsCliSpecialRemainingTests(unittest.TestCase):
         text = REPORT.read_text(encoding="utf-8")
         self.assertNotIn("I:\\\\tmp", text)
         self.assertNotIn("I:/tmp", text)
-        self.assertNotIn("diec-windows-script-source", text)
-        self.assertNotIn("diec-windows-corpus", text)
+        self.assertNotIn("die-windows-script-source", text)
+        self.assertNotIn("die-windows-corpus", text)
         self.assertIn("<source>/Detect-It-Easy/db", text)
         self.assertIn("<corpus>/minimal.elf", text)
 

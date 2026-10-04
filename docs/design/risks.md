@@ -6,7 +6,7 @@ Last updated: 2026-07-31
 
 ## 1. 用途与依据
 
-本文集中跟踪会阻止 diec-rust 达到能力兼容、安全、静态链接或跨平台目标的风险。
+本文集中跟踪会阻止 die-rust 达到能力兼容、安全、静态链接或跨平台目标的风险。
 调研文档保存事实，架构/API/测试文档保存设计；本清单只保存风险状态、触发条件、
 应对、验证和关闭证据。
 
@@ -465,7 +465,7 @@ baseline 的变更都要检查本表。
   legacy raw/semantic 双层保真，不能只验证单个 parsed JSON。固定 formatter
   oracle 还证明 nested XML 因动态元素名而非良构，CSV/TSV 不引用包含分隔符或
   换行的字段并把嵌套树扁平化为 leaf；这些缺陷同样属于可观察 legacy 契约。
-- **缓解**：统一 arena/report；`diec-output` 单点序列化；ADR 0003 双输出；
+- **缓解**：统一 arena/report；`die-output` 单点序列化；ADR 0003 双输出；
   schema version 和 golden。
 - **验证**：Rust/C/modern CLI canonical bytes 相同；legacy raw differential；
   repeated/parallel determinism。

@@ -24,7 +24,7 @@ DATABASE_ARGS = [
 CLI = "/opt/die-build/src/console/diec"
 HARNESS = (
     "/opt/die-build/src/console/"
-    "diec-upstream-benchmark-harness"
+    "die-upstream-benchmark-harness"
 )
 ENVIRONMENT = {
     "LC_ALL": "C",

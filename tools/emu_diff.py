@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""XEmulator micro-differential: upstream xemulator-oracle vs diec-engine.
+"""XEmulator micro-differential: upstream xemulator-oracle vs die-engine.
 
 Runs `xemulator-oracle micro <hex>` (Qt build of pinned upstream
 XEmulator@655e6da) and `emu_micro` (cargo example driving the Rust port)
@@ -11,7 +11,7 @@ Usage:
         [--oracle PATH] [--rust PATH] [--snapshot DIR] [-v]
 
 `--snapshot DIR` writes one `<idx>.json` oracle dump per case for
-offline replay by crates/diec-engine/tests/x86_oracle.rs.
+offline replay by crates/die-engine/tests/x86_oracle.rs.
 """
 
 import argparse
@@ -111,7 +111,7 @@ def main() -> int:
         return 2
     if not args.rust.exists():
         print(f"rust harness not found: {args.rust}", file=sys.stderr)
-        print("build with: cargo build -p diec-engine --example emu_micro", file=sys.stderr)
+        print("build with: cargo build -p die-engine --example emu_micro", file=sys.stderr)
         return 2
 
     cases = load_cases(args.cases)

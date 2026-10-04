@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://diec-rust.invalid/schemas/difference-input-report-v1.schema.json",
-  "title": "diec-rust semantic difference input report v1",
+  "$id": "https://die-rust.invalid/schemas/difference-input-report-v1.schema.json",
+  "title": "die-rust semantic difference input report v1",
   "type": "object",
   "additionalProperties": false,
   "required": [

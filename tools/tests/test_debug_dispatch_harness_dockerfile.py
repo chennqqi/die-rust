@@ -22,8 +22,8 @@ DOCKERFILES = {
 class DebugDispatchHarnessDockerfileTests(unittest.TestCase):
     def test_builds_from_pinned_cmake_oracle_without_network(self):
         bases = {
-            "qt5": "diec-rust/upstream-oracle-cmake:74eaf505",
-            "qt6": "diec-rust/upstream-oracle-cmake-qt6:74eaf505",
+            "qt5": "die-rust/upstream-oracle-cmake:74eaf505",
+            "qt6": "die-rust/upstream-oracle-cmake-qt6:74eaf505",
         }
         for profile, path in DOCKERFILES.items():
             with self.subTest(profile=profile):
@@ -33,7 +33,7 @@ class DebugDispatchHarnessDockerfileTests(unittest.TestCase):
                     text,
                 )
                 self.assertIn("debug_dispatch_harness_main.cpp", text)
-                self.assertIn("diec-debug-dispatch-harness", text)
+                self.assertIn("die-debug-dispatch-harness", text)
                 self.assertNotIn("apt-get", text)
                 self.assertNotIn("git clone", text)
 

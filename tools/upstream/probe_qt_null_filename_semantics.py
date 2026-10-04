@@ -17,7 +17,7 @@ UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 ORACLES = {
     "qt5": {
         "image": (
-            "diec-rust/upstream-archive-iteration-boundary-harness:74eaf505"
+            "die-rust/upstream-archive-iteration-boundary-harness:74eaf505"
         ),
         "image_id": (
             "sha256:6cfc6dfb568e1287103bbe92f31e75864153b6bf5f196a744178d9c86ae19392"
@@ -32,7 +32,7 @@ ORACLES = {
     },
     "qt6": {
         "image": (
-            "diec-rust/archive-iteration-boundary-harness-qt6:74eaf505"
+            "die-rust/archive-iteration-boundary-harness-qt6:74eaf505"
         ),
         "image_id": (
             "sha256:a51310e8e03ada9fb907d6ea3d3d3b0a5d0c1917a3aaef971f3a07683486508f"

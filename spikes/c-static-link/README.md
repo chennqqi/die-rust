@@ -1,6 +1,6 @@
 # C static-link spike
 
-This is an isolated Phase 0 experiment, not the public `diec-rust` ABI or a
+This is an isolated Phase 0 experiment, not the public `die-rust` ABI or a
 scanner implementation.
 
 It builds a Rust `staticlib`, links it into a real C11 executable, and checks

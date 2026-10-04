@@ -75,8 +75,8 @@ class GenerateNpmDispatchFixtureTests(unittest.TestCase):
                             self.assertEqual(member.mtime, 0)
                             self.assertEqual(member.uid, 0)
                             self.assertEqual(member.gid, 0)
-                            self.assertEqual(member.uname, "diec-rust")
-                            self.assertEqual(member.gname, "diec-rust")
+                            self.assertEqual(member.uname, "die-rust")
+                            self.assertEqual(member.gname, "die-rust")
 
     def test_detector_controls_differ_only_as_declared(self):
         cases = {case["name"]: case for case in MODULE.CASES}
@@ -110,7 +110,7 @@ class GenerateNpmDispatchFixtureTests(unittest.TestCase):
         )
         self.assertEqual(
             json.loads(MODULE.VALID_PACKAGE_JSON),
-            {"name": "diec-fixture", "version": "1.2.3"},
+            {"name": "die-fixture", "version": "1.2.3"},
         )
         with self.assertRaises(json.JSONDecodeError):
             json.loads(MODULE.INVALID_PACKAGE_JSON)

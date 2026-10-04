@@ -4,7 +4,7 @@
 //! sample from the `corpus/` directory and verifies that the detections
 //! match the expected upstream DIE output.
 //!
-//! The expected outputs were determined by comparing `diec-rust` output
+//! The expected outputs were determined by comparing `die-rust` output
 //! against upstream DIE-engine behavior. Any deviation is a regression.
 //!
 //! See `docs/design/testing.md` section 12 and `corpus/manifest.json`.

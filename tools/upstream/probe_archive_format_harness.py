@@ -24,10 +24,10 @@ DIRECT_PASSWORD_SOURCE = (
 DIRECT_PASSWORD_DOCKERFILE = (
     "tools/upstream/Dockerfile.sevenzip-password-harness-qt5"
 )
-IMAGE = "diec-rust/upstream-sevenzip-password-harness:74eaf505"
-HARNESS_BINARY = "/opt/die-build/src/console/diec-archive-harness"
+IMAGE = "die-rust/upstream-sevenzip-password-harness:74eaf505"
+HARNESS_BINARY = "/opt/die-build/src/console/die-archive-harness"
 DIRECT_PASSWORD_BINARY = (
-    "/opt/die-build/src/console/diec-sevenzip-password-harness"
+    "/opt/die-build/src/console/die-sevenzip-password-harness"
 )
 RELEASE_BINARY = "/opt/die-build/src/console/diec"
 SEVENZIP_AES_PASSWORD = "DetectItEasy"

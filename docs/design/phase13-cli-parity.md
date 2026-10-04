@@ -15,15 +15,15 @@ Last updated: 2026-08-15
 ## 2. 架构原则
 
 - CLI 和 FFI 是核心库的薄适配层，核心层不得依赖它们或 GUI 框架。
-- 新增解包能力放在独立 crate（`diec-unpack`）或 `diec-formats` 扩展，不
-  污染 `diec-engine` 的扫描编排逻辑。
-- `--struct` 模式的结构方法实现放在 `diec-engine`，复用 `diec-rules` 的
-  原生格式解析和 `diec-formats` 的格式探测。
-- 递归扫描（resource/overlay/archive）在 `diec-engine/scanner.rs` 中编排，
+- 新增解包能力放在独立 crate（`die-unpack`）或 `die-formats` 扩展，不
+  污染 `die-engine` 的扫描编排逻辑。
+- `--struct` 模式的结构方法实现放在 `die-engine`，复用 `die-rules` 的
+  原生格式解析和 `die-formats` 的格式探测。
+- 递归扫描（resource/overlay/archive）在 `die-engine/scanner.rs` 中编排，
   通过 `ScanFlags` 控制开关，通过 `ScanDetection` 的 `parent_id`/`file_part`/
   `offset`/`size` 构建嵌套树。
-- 安全边界（ADR 0030）在 `diec-core/limits.rs` 定义，在 `diec-unpack` 和
-  `diec-engine/scanner.rs` 中强制执行。
+- 安全边界（ADR 0030）在 `die-core/limits.rs` 定义，在 `die-unpack` 和
+  `die-engine/scanner.rs` 中强制执行。
 
 ## 3. 子任务设计
 
@@ -32,7 +32,7 @@ Last updated: 2026-08-15
 **模块结构**：
 
 ```
-crates/diec-engine/src/
+crates/die-engine/src/
 ├── struct_mode.rs    # StructSelector 解析 + 方法分发
 └── hash_methods.rs   # 7 种哈希算法 (MD4/MD5/SHA1/SHA224/SHA256/SHA384/SHA512)
 ```
@@ -88,7 +88,7 @@ memory-map（非固定大小分块）。
 **模块结构**：
 
 ```
-crates/diec-engine/src/
+crates/die-engine/src/
 ├── pe_struct.rs      # PE 专用方法 (6 个)
 ├── elf_struct.rs     # ELF 专用方法 (2 个)
 ├── macho_struct.rs   # Mach-O 专用方法 (2 个)
@@ -96,7 +96,7 @@ crates/diec-engine/src/
 ```
 
 **方法分发**：`struct_mode.rs` 根据格式探测结果选择格式专用方法。格式探测
-复用 `diec-formats::ProbeTable`。
+复用 `die-formats::ProbeTable`。
 
 **PE32 方法**（复用 `pe_native.rs` pelite 解析）：
 - `Entry point` — PE 入口点地址
@@ -122,7 +122,7 @@ crates/diec-engine/src/
 **模块结构**：
 
 ```
-crates/diec-output/src/
+crates/die-output/src/
 └── struct_formatter.rs   # struct 模式 5 种输出格式
 ```
 
@@ -155,7 +155,7 @@ object（不是单个合法 JSON 文档）。
 
 **ADR 0028**：`-r` 语义对齐上游（破坏性变更）。
 
-**ScanFlags 扩展**（`diec-engine/src/host.rs`）：
+**ScanFlags 扩展**（`die-engine/src/host.rs`）：
 
 ```rust
 pub struct ScanFlags {
@@ -171,7 +171,7 @@ pub struct ScanFlags {
 
 `is_recursive()` 返回 `flags.recursive || flags.resources || flags.overlays`。
 
-**PE resource 枚举**（`diec-rules/src/pe_native.rs` 新增）：
+**PE resource 枚举**（`die-rules/src/pe_native.rs` 新增）：
 
 ```rust
 /// A file part for recursive scanning (resource or overlay).
@@ -190,7 +190,7 @@ pub fn get_file_parts(data: &[u8]) -> Vec<FilePart> { ... }
 目录），收集 data entries 的 offset/size/resource_id。上限 10000 个
 resource。Overlay 从 header/section 最大末端到文件末尾。
 
-**递归扫描逻辑**（`diec-engine/src/scanner.rs`）：
+**递归扫描逻辑**（`die-engine/src/scanner.rs`）：
 
 1. 主扫描完成后，检查 `flags.recursive || flags.resources || flags.overlays`
 2. 如果是 PE 且启用 resource/overlay，调用 `get_file_parts()`
@@ -203,7 +203,7 @@ resource。Overlay 从 header/section 最大末端到文件末尾。
    - 设置子 detection 的 `parent_id`、`file_part`、`offset`、`size`
 4. 将子 detection 嵌套在父 detection 的结果树中
 
-**CLI 适配**（`diec-cli/src/main.rs`）：
+**CLI 适配**（`die-cli/src/main.rs`）：
 
 | 选项 | 映射 | 说明 |
 | --- | --- | --- |
@@ -224,7 +224,7 @@ resource。Overlay 从 header/section 最大末端到文件末尾。
 **模块结构**：
 
 ```
-crates/diec-unpack/
+crates/die-unpack/
 ├── Cargo.toml          # 依赖: zip, sevenz-rust, rars, cab, iso9660
 ├── src/
 │   ├── lib.rs          # Unpack trait 和公共接口
@@ -261,7 +261,7 @@ pub trait ArchiveExtractor {
 - 递归深度 ≤ 32
 - 超限时跳过成员并发出 diagnostic
 
-**递归扫描编排**（`diec-engine/src/archive_scan.rs` 新建）：
+**递归扫描编排**（`die-engine/src/archive_scan.rs` 新建）：
 
 1. 主扫描完成后，检查 `flags.archives`
 2. 如果是 archive 格式（ZIP/7Z/RAR/CAB/ISO9660），调用对应 `ArchiveExtractor`
@@ -312,7 +312,7 @@ pub struct ScanFlags {
 个新样本覆盖 68 个 CAP-* 能力项。
 
 **差分测试扩展**：
-- 新增样本添加到 `crates/diec-engine/tests/corpus_differential.rs`
+- 新增样本添加到 `crates/die-engine/tests/corpus_differential.rs`
 - 更新 `docs/research/data/baseline-corpus.json`
 - 添加样本生成指南文档
 

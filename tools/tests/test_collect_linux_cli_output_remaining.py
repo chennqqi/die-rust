@@ -192,7 +192,7 @@ class CollectLinuxCliOutputRemainingTests(unittest.TestCase):
         text = REPORT.read_text(encoding="utf-8")
         self.assertNotIn("I:\\\\", text)
         self.assertNotIn("I:/", text)
-        self.assertNotIn("diec-windows-corpus", text)
+        self.assertNotIn("die-windows-corpus", text)
         self.assertIn("/corpus/minimal.elf", text)
 
 

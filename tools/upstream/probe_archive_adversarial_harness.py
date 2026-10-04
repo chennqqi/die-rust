@@ -20,8 +20,8 @@ FIXTURE_GENERATOR = (
 )
 HARNESS_SOURCE = "tools/upstream/archive_harness_main.cpp"
 HARNESS_DOCKERFILE = "tools/upstream/Dockerfile.archive-harness-qt5"
-IMAGE = "diec-rust/upstream-archive-harness:74eaf505"
-HARNESS_BINARY = "/opt/die-build/src/console/diec-archive-harness"
+IMAGE = "die-rust/upstream-archive-harness:74eaf505"
+HARNESS_BINARY = "/opt/die-build/src/console/die-archive-harness"
 RELEASE_BINARY = "/opt/die-build/src/console/diec"
 DATABASE_ARGS = (
     "--database",
@@ -131,7 +131,7 @@ def load_fixture(
         raise ProbeError("unsupported fixture schema")
     if manifest["generator"] != FIXTURE_GENERATOR:
         raise ProbeError("unexpected fixture generator")
-    if manifest["password"] != "diec-rust":
+    if manifest["password"] != "die-rust":
         raise ProbeError("fixture password changed")
     if len(manifest["samples"]) != len(EXPECTED_ARCHIVE_STREAMS):
         raise ProbeError("fixture sample count changed")

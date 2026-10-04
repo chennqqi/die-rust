@@ -19,7 +19,7 @@ HARNESS = str(
     / "DIE-engine-src"
     / "build"
     / "release"
-    / "diec-upstream-benchmark-harness"
+    / "die-upstream-benchmark-harness"
 )
 DB = str(WORK_DIR / "DIE-engine-src" / "Detect-It-Easy" / "db")
 DB_EXTRA = str(WORK_DIR / "DIE-engine-src" / "Detect-It-Easy" / "db_extra")

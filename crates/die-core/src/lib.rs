@@ -1,4 +1,4 @@
-//! `die-core` is the innermost crate of the diec-rust workspace.
+//! `die-core` is the innermost crate of the die-rust workspace.
 //!
 //! It owns the checked input model, the unified public value model, the typed
 //! error and diagnostic classification, the resource limit contracts, the

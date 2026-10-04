@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://diec-rust.invalid/schemas/raw-framing-projection-v1.schema.json",
+  "$id": "https://die-rust.invalid/schemas/raw-framing-projection-v1.schema.json",
   "title": "DIEC lossless raw framing projection v1",
   "type": "object",
   "additionalProperties": false,
@@ -30,7 +30,7 @@
       ],
       "properties": {
         "name": {
-          "const": "diec-raw-framing-projector"
+          "const": "die-raw-framing-projector"
         },
         "version": {
           "const": 1
@@ -48,7 +48,7 @@
       "$ref": "#/$defs/runIdentity"
     },
     "execution_verification": {
-      "$ref": "https://diec-rust.invalid/schemas/raw-execution-verification-v1.schema.json"
+      "$ref": "https://die-rust.invalid/schemas/raw-execution-verification-v1.schema.json"
     },
     "execution_verification_sha256": {
       "$ref": "#/$defs/sha256"

@@ -54,7 +54,7 @@ class CollectWindowsPathClosureTests(unittest.TestCase):
 
 
 WSL_LOCAL_ROOT = (
-    "diec-rust-windows-path-closure-74eaf505-evidence"
+    "die-rust-windows-path-closure-74eaf505-evidence"
 )
 
 

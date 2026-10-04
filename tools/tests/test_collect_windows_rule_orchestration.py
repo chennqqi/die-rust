@@ -235,7 +235,7 @@ class CollectWindowsRuleOrchestrationTests(unittest.TestCase):
             "I:/tmp",
             "I:\\\\tmp",
             "worker",
-            "diec-windows-source",
+            "die-windows-source",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)

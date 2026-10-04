@@ -1,6 +1,6 @@
 # Release Notes
 
-## diec-rust v0.9.0
+## die-rust v0.9.0
 
 Phase 15 alignment methodology release — host API 100% coverage, true
 differential testing framework, and `--alltypes` negative assertions.
@@ -9,7 +9,7 @@ differential testing framework, and `--alltypes` negative assertions.
 
 #### 15.1: True Differential Test Framework
 
-Established a true differential testing framework comparing diec-rust
+Established a true differential testing framework comparing die-rust
 output against upstream DIE-engine `diec` 4.0.0 (commit `c2c17dfa5`):
 
 - 31 golden baselines recorded from upstream `diec` binary
@@ -93,7 +93,7 @@ Key implementations:
 
 ---
 
-## diec-rust v0.8.0
+## die-rust v0.8.0
 
 Phase 13 CLI parity release — `--struct` mode, intra-file recursive
 scanning, archive member extraction, and GUI synchronization.
@@ -170,7 +170,7 @@ scanning:
 
 ---
 
-## diec-rust v0.7.0
+## die-rust v0.7.0
 
 Phase 11 + Phase 12 GUI deep alignment release — 43 items achieving
 full feature parity with upstream DIE-engine Qt GUI.
@@ -180,7 +180,7 @@ full feature parity with upstream DIE-engine Qt GUI.
 - **11.1 FileInfo complete header parsing (P0)**: HeaderField tree structure +
   PE/ELF/Mach-O complete header parsing (pelite + goblin); FileHeaderTree
   recursive tree component + FileInfoPanel sub-tabs
-- **11.2 File format detection extension (P0)**: Integrated diec-formats probe
+- **11.2 File format detection extension (P0)**: Integrated die-formats probe
   table (20+ format detection); hand-written magic bytes as fallback
   (PE32/PE32+ subtype distinction)
 - **11.3 PE dedicated view (P1)**: pe_viewer.rs with imports/exports/resources/
@@ -241,7 +241,7 @@ full feature parity with upstream DIE-engine Qt GUI.
 - **doc/requirements.md**: Requirements summary appended
 - **doc/requirements-analysis.md**: Analysis process appended
 
-## diec-rust v0.6.0
+## die-rust v0.6.0
 
 Phase 10 known issues fix and documentation cleanup release —
 3 items fixing known limitations and cleaning up documentation.
@@ -273,7 +273,7 @@ Phase 10 known issues fix and documentation cleanup release —
 - **README.md**: Cleaned up Known Limitations, added Known Differences section
 - **docs/design/decisions/README.md**: Added ADR 0027 reference
 
-## diec-rust v0.5.0
+## die-rust v0.5.0
 
 Phase 9 GUI upstream alignment release — 20 items aligning die-gui with
 the upstream DIE-engine Qt GUI, based on `docs/research/gui-upstream-diff.md`.
@@ -346,7 +346,7 @@ the upstream DIE-engine Qt GUI, based on `docs/research/gui-upstream-diff.md`.
 - cargo fmt/clippy: clean
 - Frontend: tsc --noEmit + vite build pass
 
-## diec-rust v0.4.7
+## die-rust v0.4.7
 
 Patch release fixing release workflow GUI build jobs.
 
@@ -372,7 +372,7 @@ Patch release fixing release workflow GUI build jobs.
 Only release.yml CI config + version bump.
 All features identical to v0.4.0.
 
-## diec-rust v0.4.6
+## die-rust v0.4.6
 
 Patch release with comprehensive CI fixes. All three workflows
 (ci, fuzz, release) now pass on all platforms.
@@ -383,7 +383,7 @@ Patch release with comprehensive CI fixes. All three workflows
   to fuzz/Cargo.toml. Without it, cargo-fuzz searched for
   `fuzz/fuzz/Cargo.toml` and failed.
 - **fuzz_scan_ffi linker**: Added `const _: ()` block to force-link
-  diec-ffi's `#[no_mangle]` symbols, preventing dead code elimination.
+  die-ffi's `#[no_mangle]` symbols, preventing dead code elimination.
 - **fuzz LeakSanitizer**: Set `ASAN_OPTIONS=detect_leaks=0` for libFuzzer
   jobs (OnceLock cached resources are by design, not leaks).
 - **ci Linux GTK deps**: Added `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`,
@@ -411,16 +411,16 @@ Patch release with comprehensive CI fixes. All three workflows
 Only CI config + fuzz linker fix + version bump.
 All features identical to v0.4.0.
 
-## diec-rust v0.4.5
+## die-rust v0.4.5
 
 Patch release fixing the last libFuzzer CI job (fuzz_scan_ffi)
-that failed due to dead code elimination removing diec-ffi's
+that failed due to dead code elimination removing die-ffi's
 #[no_mangle] symbols from the rlib.
 
 ### Fixes
 
-- **Force-link diec-ffi symbols**: fuzz_scan_ffi.rs uses `extern "C"`
-  to declare diec-ffi's C ABI functions, but the Rust linker removes
+- **Force-link die-ffi symbols**: fuzz_scan_ffi.rs uses `extern "C"`
+  to declare die-ffi's C ABI functions, but the Rust linker removes
   unreferenced `#[no_mangle]` symbols during dead code elimination.
   Added a `const _: ()` block that references `die_ffi::scan::`
   functions to force the linker to retain them, allowing the
@@ -445,16 +445,16 @@ that failed due to dead code elimination removing diec-ffi's
 Only fuzz_scan_ffi.rs linker fix + version bump.
 All features identical to v0.4.0.
 
-## diec-rust v0.4.4
+## die-rust v0.4.4
 
 Patch release fixing the last libFuzzer CI job (fuzz_scan_ffi)
-that failed due to diec-ffi not being linked as a regular dependency.
+that failed due to die-ffi not being linked as a regular dependency.
 
 ### Fixes
 
-- **diec-ffi linking**: Moved `diec-ffi` from `[dev-dependencies]` to
+- **die-ffi linking**: Moved `die-ffi` from `[dev-dependencies]` to
   `[dependencies]` in fuzz/Cargo.toml. The `fuzz_scan_ffi` target uses
-  `extern "C"` declarations referencing diec-ffi symbols, but
+  `extern "C"` declarations referencing die-ffi symbols, but
   dev-dependencies are not linked into binary targets during
   cargo-fuzz builds, causing "undefined symbol" linker errors.
 
@@ -477,7 +477,7 @@ that failed due to diec-ffi not being linked as a regular dependency.
 Only fuzz/Cargo.toml dependency placement + version bump.
 All features identical to v0.4.0.
 
-## diec-rust v0.4.3
+## die-rust v0.4.3
 
 Patch release fixing libFuzzer CI jobs that had been failing since
 v0.3.0 due to missing cargo-fuzz metadata.
@@ -507,7 +507,7 @@ v0.3.0 due to missing cargo-fuzz metadata.
 Only fuzz/Cargo.toml metadata + fuzz.yml CI config + version bump.
 All features identical to v0.4.0.
 
-## diec-rust v0.4.2
+## die-rust v0.4.2
 
 Patch release fixing fuzz CI failure caused by .gitignore excluding
 .pyc seed files from the repository.
@@ -533,7 +533,7 @@ Patch release fixing fuzz CI failure caused by .gitignore excluding
 Only .gitignore fix + 3 seed files + version bump.
 All features identical to v0.4.0.
 
-## diec-rust v0.4.1
+## die-rust v0.4.1
 
 Patch release fixing fuzz/Cargo.lock version mismatch that caused
 CI fuzz workflow to fail on v0.4.0 tag.
@@ -543,14 +543,14 @@ CI fuzz workflow to fail on v0.4.0 tag.
 - **fuzz/Cargo.lock updated to 0.4.1**: The fuzz workspace Cargo.lock
   was not updated when the workspace version was bumped, causing all
   9 fuzz CI jobs (3 replay + 6 libFuzzer) to fail with exit code 101.
-  All 6 diec-* entries updated to match the workspace version.
+  All 6 die-* entries updated to match the workspace version.
 
 ### No Code Changes
 
 No functional code changes — only version numbers and lock files.
 All features and artifacts are identical to v0.4.0.
 
-## diec-rust v0.4.0
+## die-rust v0.4.0
 
 Minor release adding the **die-gui** desktop application (Tauri v2 + React 18)
 with full feature parity to the upstream DIE GUI, plus native installer
@@ -639,7 +639,7 @@ packages and CLI auto-loading of extra rule databases.
 
 MIT — see [LICENSE](LICENSE) and [NOTICES.md](NOTICES.md)
 
-## diec-rust v0.3.0
+## die-rust v0.3.0
 
 Minor release adding the died (die daemon) HTTP/JSON scan service and
 runtime reuse optimization for batch scanning.
@@ -675,7 +675,7 @@ runtime reuse optimization for batch scanning.
 
 - Rule count: 2037 rules loaded (up from 1186 — includes db_extra)
 - Test count: 477 tests (up from 459)
-- New crate: `diec-server` (thin adapter over `diec-engine`, no core
+- New crate: `die-server` (thin adapter over `die-engine`, no core
   layer dependency on CLI or FFI)
 
 ### Artifacts
@@ -688,7 +688,7 @@ Each platform archive now also includes:
 
 - [docs/died-api.md](docs/died-api.md) — full API reference with client
   examples in curl, PowerShell, Python, and Go
-- [crates/diec-server/packaging/README.md](crates/diec-server/packaging/README.md)
+- [crates/die-server/packaging/README.md](crates/die-server/packaging/README.md)
   — DEB/RPM/MSI packaging guide
 - ADR 0016 (runtime reuse) and ADR 0017 (scan service layer) — Accepted
 
@@ -700,7 +700,7 @@ Each platform archive now also includes:
 
 MIT — see [LICENSE](LICENSE) and [NOTICES.md](NOTICES.md)
 
-## diec-rust v0.2.2
+## die-rust v0.2.2
 
 Patch release that fixes the v0.2.1 release build failure.
 
@@ -718,9 +718,9 @@ Patch release that fixes the v0.2.1 release build failure.
 No runtime, CLI, FFI, or rule changes versus v0.2.1 — this release
 exists solely to produce working artifacts that v0.2.1 could not.
 
-## diec-rust v0.2.0
+## die-rust v0.2.0
 
-First public release of diec-rust, a Rust reimplementation of Detect It Easy.
+First public release of die-rust, a Rust reimplementation of Detect It Easy.
 
 ### Features
 

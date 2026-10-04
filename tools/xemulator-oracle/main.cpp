@@ -1,6 +1,6 @@
 // xemulator-oracle — console harness driving the pinned upstream
 // XEmulator x86 core and the XStaticUnpacker emulator branches, for
-// differential comparison against the diec-engine Rust port.
+// differential comparison against the die-engine Rust port.
 //
 // Modes:
 //   xemulator-oracle micro <hex-bytes> [max-steps]

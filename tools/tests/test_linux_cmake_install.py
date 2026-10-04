@@ -104,7 +104,7 @@ class LinuxCmakeInstallTests(unittest.TestCase):
     def test_dockerfile_is_pinned_and_keeps_build_cache_independent(self):
         text = DOCKERFILE_PATH.read_text(encoding="utf-8")
         self.assertIn(
-            "ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake:74eaf505"
+            "ARG BASE_IMAGE=die-rust/upstream-oracle-cmake:74eaf505"
             "@sha256:466102628c3a94b7ab1048f0c24261b1920e61a"
             "40029b128763cf79370255040",
             text,

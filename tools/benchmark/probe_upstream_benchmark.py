@@ -19,7 +19,7 @@ EXPECTED_CLI_SHA256 = (
     "da1fab49f7ba5970d1fc1c7fe3d4f380c"
     "f5e8775dd8097207e7b3c30f08236cf"
 )
-RUNNER_PATH = "/opt/diec-benchmark/run_process_benchmark.py"
+RUNNER_PATH = "/opt/die-benchmark/run_process_benchmark.py"
 BENCH_ROOT = "/bench"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 NOISE_GUARDRAILS = {

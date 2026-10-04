@@ -45,7 +45,7 @@ Only **verified** evidence supports claims of correctness or compatibility.
 
 ### Required for correctness claims
 
-- Differential testing: run both diec-rust and upstream DIE on the same
+- Differential testing: run both die-rust and upstream DIE on the same
   files, compare outputs
 - Test matrix: cover all relevant file types, sizes, and feature combinations
 - Performance threshold: define explicit thresholds (e.g., "<10MB files
@@ -114,7 +114,7 @@ issues" is valuable. "I fixed X and assumed Y, Z are fine" is not.
 
 "Ready for release" requires ALL of the following:
 
-1. **Differential testing**: diec-rust output matches upstream DIE output
+1. **Differential testing**: die-rust output matches upstream DIE output
    on a representative corpus (at least 20 files across all supported
    formats)
 2. **Test coverage audit**: every implemented feature has at least one

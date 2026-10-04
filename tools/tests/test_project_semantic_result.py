@@ -833,7 +833,7 @@ class SemanticResultProjectionTests(unittest.TestCase):
         self.assertEqual(
             projection["properties"]["semantic"]["$ref"],
             (
-                "https://diec-rust.invalid/schemas/"
+                "https://die-rust.invalid/schemas/"
                 "semantic-result-v1.schema.json"
             ),
         )

@@ -11,13 +11,13 @@ ROADMAP.md "Future：GUI — TODO" 明确 GUI 在核心库、CLI 和 C ABI 稳�
 AGENTS.md 架构约束：
 
 - "CLI 和 FFI 是核心库的薄适配层，核心层不得依赖它们或 GUI 框架" — GUI
-  必须是薄适配层，`diec-engine` 不得依赖 GUI 框架。
+  必须是薄适配层，`die-engine` 不得依赖 GUI 框架。
 - "优先纯 Rust、跨平台依赖。引入大型依赖、native 依赖或系统库必须记录
   权衡" — GUI 框架选型需记录权衡。
 - "默认不使用 `unsafe`" — GUI 框架的 unsafe 使用需审计。
 
 上游 DIE-engine 使用 Qt（C++ + QMake/CMake），依赖约 50 个 submodule，
-构建复杂且 Qt 是大型 native 依赖。diec-rust 需要选择一个跨平台 GUI 框架
+构建复杂且 Qt 是大型 native 依赖。die-rust 需要选择一个跨平台 GUI 框架
 实现功能对等的图形界面。
 
 ### 候选框架
@@ -36,14 +36,14 @@ AGENTS.md 架构约束：
 
 - Web 前端技术栈（HTML/CSS/JS）成熟，UI/UX 表达力强，适合复杂布局
   （TreeView、Splitter、多面板、主题切换）
-- Rust 后端直接调用 `diec-engine`，无需额外 FFI 层
+- Rust 后端直接调用 `die-engine`，无需额外 FFI 层
 - 二进制体积小（相比 Electron），适合分发
-- 跨平台支持 Linux/Windows/macOS，与 diec-rust 现有 CI 矩阵对齐
+- 跨平台支持 Linux/Windows/macOS，与 die-rust 现有 CI 矩阵对齐
 - 插件生态：文件对话框、拖放、单实例、自动更新、系统托盘等
 
 ## Decision
 
-Proposed：选择 **Tauri v2** 作为 diec-rust GUI 框架，新增 `die-gui` crate
+Proposed：选择 **Tauri v2** 作为 die-rust GUI 框架，新增 `die-gui` crate
 作为薄适配层。
 
 ### 架构
@@ -55,20 +55,20 @@ Proposed：选择 **Tauri v2** 作为 diec-rust GUI 框架，新增 `die-gui` cr
 │  │  Frontend     │  │  Rust Backend       │ │
 │  │  (HTML/CSS/JS)│←→│  (tauri::commands)  │ │
 │  │  UI 渲染      │  │  ↓                   │ │
-│  │  状态管理      │  │  diec-engine        │ │
-│  │  事件处理      │  │  diec-output        │ │
-│  └───────────────┘  │  diec-core          │ │
+│  │  状态管理      │  │  die-engine        │ │
+│  │  事件处理      │  │  die-output        │ │
+│  └───────────────┘  │  die-core          │ │
 │                     └─────────────────────┘ │
 └─────────────────────────────────────────────┘
-        ↓ 依赖方向：die-gui → diec-engine
-        diec-engine 不反向依赖 die-gui
+        ↓ 依赖方向：die-gui → die-engine
+        die-engine 不反向依赖 die-gui
 ```
 
 ### crate 结构
 
 ```
 crates/die-gui/
-├── Cargo.toml          # tauri + diec-engine 依赖
+├── Cargo.toml          # tauri + die-engine 依赖
 ├── tauri.conf.json     # Tauri 配置
 ├── src/
 │   ├── main.rs         # Tauri app 入口
@@ -197,7 +197,7 @@ Tauri v2 使用系统 WebView：
 
 Tauri 框架内部使用 `unsafe` 与系统 WebView FFI 交互。die-gui crate 自身
 代码保持 `#![forbid(unsafe_code)]`，所有 unsafe 限制在 Tauri 依赖内部。
-这与 diec-rust 现有策略一致（`pelite`/`goblin` 等依赖内部有 unsafe，
+这与 die-rust 现有策略一致（`pelite`/`goblin` 等依赖内部有 unsafe，
 核心 crate 自身 forbid unsafe）。
 
 ### 依赖审计
@@ -251,7 +251,7 @@ Tauri 框架内部使用 `unsafe` 与系统 WebView FFI 交互。die-gui crate �
 
 - **正面**：
   - Web 前端提供丰富 UI 组件生态，降低复杂布局实现成本
-  - Rust 后端直接调用 `diec-engine`，无额外 FFI 层
+  - Rust 后端直接调用 `die-engine`，无额外 FFI 层
   - 二进制体积小，适合分发
   - Tauri 插件覆盖单实例、自动更新、文件对话框等需求
   - 跨平台 CI 与现有矩阵对齐
@@ -274,6 +274,6 @@ Tauri 框架内部使用 `unsafe` 与系统 WebView FFI 交互。die-gui crate �
 - 上游 GUI 源码分析：[`upstream-gui-analysis.md`](../../research/upstream-gui-analysis.md)
 - Tauri v2 文档：https://v2.tauri.app/
 - Tauri v2 IPC Channel：`tauri::ipc::Channel` 流式事件
-- diec-rust 现有架构：`docs/design/architecture.md` section 3 非目标
+- die-rust 现有架构：`docs/design/architecture.md` section 3 非目标
   "当前 workspace 不包含 `die-gui`，也不依赖 Qt 或其他 GUI 框架"
   — 本 ADR 解除该非目标限制

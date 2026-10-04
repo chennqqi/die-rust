@@ -95,7 +95,7 @@ def write_candidate(directory: Path):
     manifest = json.loads(manifest_raw)
     linux_raw = LINUX_PATH.read_bytes()
     linux = json.loads(linux_raw)
-    fixture_dir = PurePosixPath("/private/tmp/diec-macos-toctou")
+    fixture_dir = PurePosixPath("/private/tmp/die-macos-toctou")
     report_db = COLLECTOR.database_arguments(
         Path("<source>"), report=True
     )
@@ -338,7 +338,7 @@ class MacosCliToctouCandidateTest(unittest.TestCase):
                         )
 
     def test_document_parser_rejects_duplicate_and_non_finite_json(self):
-        case_dir = Path("/private/tmp/diec-macos-toctou/case")
+        case_dir = Path("/private/tmp/die-macos-toctou/case")
         prefix = str(PurePosixPath(str(case_dir).replace("\\", "/")))
         for body in (
             b'{"total":0,"total":1}',

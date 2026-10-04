@@ -55,11 +55,11 @@
   同一 file_type 的规则运行时跨文件复用，以 persistent state audit 和
   差分验证约束复用安全性（Accepted, 2026-08-04）。
 - [`0017-scan-service-layer.md`](0017-scan-service-layer.md)：
-  died (diec-server crate) HTTP/JSON 扫描服务层，支持本地路径和远程内容双模式，
+  died (die-server crate) HTTP/JSON 扫描服务层，支持本地路径和远程内容双模式，
   常驻进程避免重复 database load（Accepted, 2026-08-04）。
 - [`0018-tauri-gui-framework.md`](0018-tauri-gui-framework.md)：
-  Tauri v2 作为 diec-rust GUI 框架，新增 `die-gui` crate 作为薄适配层，
-  Web 前端 + Rust 后端直接调用 `diec-engine`（Accepted, 2026-08-05）。
+  Tauri v2 作为 die-rust GUI 框架，新增 `die-gui` crate 作为薄适配层，
+  Web 前端 + Rust 后端直接调用 `die-engine`（Accepted, 2026-08-05）。
 - [`0019-defer-gui-auto-update.md`](0019-defer-gui-auto-update.md)：
   将 tauri-plugin-updater 自动更新功能 deferred 到 Phase 8 之后，
   理由：属于发布基础设施而非核心 GUI 功能，需签名密钥管理（Accepted, 2026-08-06）。
@@ -80,7 +80,7 @@
   （Accepted, 2026-08-15）。
 - [`0035-nfd-engine.md`](0035-nfd-engine.md)：
   NFD/SpecAbstract 第二扫描引擎：许可证审计通过（MIT），Phase 21 落地
-  `diec-nfd` crate + codegen 签名表（35 表 / 1730 条）+ `engine=nfd`
+  `die-nfd` crate + codegen 签名表（35 表 / 1730 条）+ `engine=nfd`
   第二 pass（CLI `--nfd` / GUI engine 勾选）；启发式 enrich 与多数
   格式 `getInfo` 仍 deferred（Accepted partial, 2026-10-07）。
 - [`0036-static-unpacker.md`](0036-static-unpacker.md)：

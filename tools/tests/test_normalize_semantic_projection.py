@@ -356,7 +356,7 @@ class SemanticNormalizationTests(unittest.TestCase):
                 json.loads(output_path.read_text(encoding="utf-8"))[
                     "normalizer"
                 ],
-                {"name": "diec-semantic-normalizer", "version": 1},
+                {"name": "die-semantic-normalizer", "version": 1},
             )
 
     def test_refuses_to_overwrite_input_or_policy(self):

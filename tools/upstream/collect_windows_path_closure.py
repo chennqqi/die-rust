@@ -58,7 +58,7 @@ EXPECTED_TOCTOU_REPORT_SHA256 = (
 EXPECTED_WINDOWS_BASELINE_SHA256 = (
     "6beba732e88d90ed1414dd2584a4a783eac24dec70103fc54e6214eb12cca998"
 )
-WSL_ROOT = "/tmp/diec-rust-windows-path-closure-74eaf505-evidence"
+WSL_ROOT = "/tmp/die-rust-windows-path-closure-74eaf505-evidence"
 MULTI_DOCUMENT_PREFIX = re.compile(r"(?m)^(.+):\r?\n(?=\{)")
 
 

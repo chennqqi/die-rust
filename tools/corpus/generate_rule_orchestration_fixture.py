@@ -73,7 +73,7 @@ def detection_rule(
 FILES: tuple[dict[str, Any], ...] = (
     {
         "path": "input/probe.bin",
-        "data": b"diec-rust rule orchestration probe\n",
+        "data": b"die-rust rule orchestration probe\n",
         "purpose": "benign Binary scan input",
     },
     {

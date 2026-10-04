@@ -26,7 +26,7 @@ DIRECTORIES = (
     "input",
 )
 
-INPUT = b"diec-rust deterministic corpus\n"
+INPUT = b"die-rust deterministic corpus\n"
 MALFORMED_RULE = b"function detect( {\n"
 THROWING_RULE = (
     b'function detect() {\n'

@@ -75,7 +75,7 @@ def pub_payload(sk: Ed25519PrivateKey) -> bytes:
 
 def pub_text(sk: Ed25519PrivateKey) -> str:
     b64 = base64.b64encode(pub_payload(sk)).decode()
-    return f"untrusted comment: diec-rust dev updater key\n{b64}\n"
+    return f"untrusted comment: die-rust dev updater key\n{b64}\n"
 
 
 def cmd_pubkey() -> None:
@@ -90,7 +90,7 @@ def sign_artifact(sk: Ed25519PrivateKey, artifact: bytes, version: str) -> str:
     global_sig = sk.sign(sig + trusted.encode())
     b64 = base64.b64encode
     return (
-        "untrusted comment: signature from diec-rust dev key\n"
+        "untrusted comment: signature from die-rust dev key\n"
         + b64(bin1).decode()
         + "\ntrusted comment: "
         + trusted

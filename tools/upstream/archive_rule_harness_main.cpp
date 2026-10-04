@@ -206,7 +206,7 @@ int main(int argc, char *argv[])
     if (argc != 2) {
         std::fprintf(
             stderr,
-            "usage: diec-archive-rule-harness <fixture.json>\n"
+            "usage: die-archive-rule-harness <fixture.json>\n"
         );
         return 2;
     }

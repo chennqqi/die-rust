@@ -1,13 +1,13 @@
-ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake:74eaf505@sha256:466102628c3a94b7ab1048f0c24261b1920e61a40029b128763cf79370255040
+ARG BASE_IMAGE=die-rust/upstream-oracle-cmake:74eaf505@sha256:466102628c3a94b7ab1048f0c24261b1920e61a40029b128763cf79370255040
 FROM ${BASE_IMAGE}
 
 COPY corpus/generate_image_dispatch_fixture.py \
-    /opt/diec-image/generate_image_dispatch_fixture.py
+    /opt/die-image/generate_image_dispatch_fixture.py
 COPY upstream/image_dispatch_harness_main.cpp \
     /tmp/image_dispatch_harness_main.cpp
 
 RUN set -eux; \
-    python3 /opt/diec-image/generate_image_dispatch_fixture.py \
+    python3 /opt/die-image/generate_image_dispatch_fixture.py \
         /fixtures/image >/tmp/image-fixture.json; \
     object_dir=/opt/die-build/src/console/CMakeFiles/diec.dir; \
     cd /opt/die-build/src/console; \
@@ -19,11 +19,11 @@ RUN set -eux; \
         -o /tmp/image_dispatch_harness_main.cpp.o; \
     sed \
         -e 's#CMakeFiles/diec.dir/main_console.cpp.o#/tmp/image_dispatch_harness_main.cpp.o#' \
-        -e 's# -o diec # -o diec-image-dispatch-harness #' \
+        -e 's# -o diec # -o die-image-dispatch-harness #' \
         "${object_dir}/link.txt" > /tmp/link-image-dispatch-harness.sh; \
     sh /tmp/link-image-dispatch-harness.sh; \
-    test -x /opt/die-build/src/console/diec-image-dispatch-harness; \
-    /opt/die-build/src/console/diec-image-dispatch-harness \
+    test -x /opt/die-build/src/console/die-image-dispatch-harness; \
+    /opt/die-build/src/console/die-image-dispatch-harness \
         /fixtures/image >/tmp/image-dispatch-smoke.json; \
     test -s /tmp/image-dispatch-smoke.json
 

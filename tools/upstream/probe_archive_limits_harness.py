@@ -24,7 +24,7 @@ EXPECTED_SOURCE_SHA256 = (
 SOURCE_PATH = "/opt/die-source/XScanEngine/xscanengine.cpp"
 CORPUS_GENERATOR = "tools/corpus/generate_archive_limit_fixture.py"
 DEFAULT_BINARY = (
-    "/opt/die-build/src/console/diec-archive-limits-harness"
+    "/opt/die-build/src/console/die-archive-limits-harness"
 )
 RESOURCE_LIMITS = {
     "cpus": "1",

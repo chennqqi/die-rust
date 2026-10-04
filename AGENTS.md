@@ -60,14 +60,14 @@ Phase 16 的 7 条根因和改进建议见
     边界条件（跨段跳转、控制字符嵌入、多层嵌套资源、ImageBase+EP=0）。
     每轮修复后必须用真实语料库运行差分测试。
 11. **过度检测、漏检、版本差异需要三种发现策略**：过度检测需要负向差分
-    （上游不检、diec-rust 检），漏检需要正向差分（上游检、diec-rust 不检），
+    （上游不检、die-rust 检），漏检需要正向差分（上游检、die-rust 不检），
     版本差异需要值差分（比较版本字符串）。差分框架必须同时支持三种模式。
 12. **上游规则本身有 bug**：`archive_Resources.6.sg` 的循环条件
     `!bDetected` 在 `bDetected=true` 时立即退出，是规则 bug。上游的
-    `getAddressOfEntryPoint` 返回非 0 值掩盖了此 bug。diec-rust 正确实现
+    `getAddressOfEntryPoint` 返回非 0 值掩盖了此 bug。die-rust 正确实现
     后反而暴露。**所有已发现的上游 bug 必须记录到**
     [`doc/upstream-bugs.md`](doc/upstream-bugs.md)，**避免被误认为
-    diec-rust 缺陷**。发现新的上游 bug 时追加到此文件，不得静默修复。
+    die-rust 缺陷**。发现新的上游 bug 时追加到此文件，不得静默修复。
 13. **对齐是 O(n) 问题，验证是 O(n×m×k) 问题**：155 个方法 × 1186 个规则 ×
     数百个样本 = 数万次交互。每轮差分只发现当前样本集触发的错误。持续差分
     + 源码考古 + 语义对照矩阵是唯一收敛策略，不追求"100% 一致"。

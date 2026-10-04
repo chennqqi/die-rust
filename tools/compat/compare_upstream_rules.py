@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Differential comparison using upstream 3.21 rules for both sides.
 
-Runs diec-rust with upstream 3.21's rule database and compares against
+Runs die-rust with upstream 3.21's rule database and compares against
 upstream DIE 3.21 with its own rules. This isolates engine differences
 from rule version differences.
 """
@@ -13,7 +13,7 @@ import sys
 
 
 def run_rust_with_db(diec_path, db_path, file_path):
-    """Run diec-rust with a specific database directory."""
+    """Run die-rust with a specific database directory."""
     try:
         result = subprocess.run(
             [diec_path, "--db", db_path, "--output", "json", file_path],

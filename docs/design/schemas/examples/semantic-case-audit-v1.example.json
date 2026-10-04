@@ -19,7 +19,7 @@
   },
   "as_of": "2026-07-27",
   "auditor": {
-    "name": "diec-semantic-case-auditor",
+    "name": "die-semantic-case-auditor",
     "version": 1
   },
   "case_audit_schema": 1,
@@ -27,7 +27,7 @@
   "comparison": {
     "case_id": "synthetic.raw-framing.example",
     "comparator": {
-      "name": "diec-semantic-comparator",
+      "name": "die-semantic-comparator",
       "version": 1
     },
     "comparison_schema": 1,

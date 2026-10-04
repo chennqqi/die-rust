@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://diec-rust.invalid/schemas/semantic-projection-v1.schema.json",
+  "$id": "https://die-rust.invalid/schemas/semantic-projection-v1.schema.json",
   "title": "DIEC semantic projection input v1",
   "type": "object",
   "additionalProperties": false,

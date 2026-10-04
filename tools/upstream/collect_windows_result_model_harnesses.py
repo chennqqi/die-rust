@@ -33,7 +33,7 @@ EXPECTED_DIE_SCRIPT_OBJECT_SHA256 = (
 )
 PROFILES = {
     "metadata": {
-        "binary": "diec-result-metadata-harness.exe",
+        "binary": "die-result-metadata-harness.exe",
         "source": "result_metadata_harness_main.cpp",
         "probe": "probe_result_metadata_harness.py",
         "reference": "result-metadata-engine-qt5.json",
@@ -41,7 +41,7 @@ PROFILES = {
         "fixture": None,
     },
     "lists": {
-        "binary": "diec-result-lists-harness.exe",
+        "binary": "die-result-lists-harness.exe",
         "source": "result_lists_harness_main.cpp",
         "probe": "probe_result_lists_harness.py",
         "reference": "result-lists-engine-qt5.json",
@@ -50,7 +50,7 @@ PROFILES = {
         "manifest": "result-list-fixture.json",
     },
     "flags": {
-        "binary": "diec-result-flags-harness.exe",
+        "binary": "die-result-flags-harness.exe",
         "source": "result_flags_harness_main.cpp",
         "probe": "probe_result_flags_harness.py",
         "reference": "result-flags-engine-qt5.json",
@@ -59,7 +59,7 @@ PROFILES = {
         "manifest": "result-flag-fixture.json",
     },
     "ids": {
-        "binary": "diec-result-ids-harness.exe",
+        "binary": "die-result-ids-harness.exe",
         "source": "result_ids_harness_main.cpp",
         "probe": "probe_result_ids_harness.py",
         "reference": "result-ids-engine-qt5.json",
@@ -68,7 +68,7 @@ PROFILES = {
         "manifest": "nested-corpus.json",
     },
     "enums": {
-        "binary": "diec-result-enums-harness.exe",
+        "binary": "die-result-enums-harness.exe",
         "source": "result_enums_harness_main.cpp",
         "probe": "probe_result_enums_harness.py",
         "reference": "result-enums-engine-qt5.json",
@@ -232,7 +232,7 @@ def replace_fixture_paths(
         if normalized.casefold().startswith(marker.casefold()):
             return "/fixture/" + normalized[len(marker) :]
 
-    collection = "/tmp/diec-result-list-collection"
+    collection = "/tmp/die-result-list-collection"
     if value.startswith(collection):
         return value.replace("\\", "/")
     return value

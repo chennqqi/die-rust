@@ -17,7 +17,7 @@ RSDS_PAYLOAD = (
     b"RSDS"
     + bytes.fromhex("00112233445566778899aabbccddeeff")
     + struct.pack("<I", 1)
-    + b"diec-rust.pdb\0"
+    + b"die-rust.pdb\0"
 )
 FILE_ALIGNMENT = 0x200
 SECTION_ALIGNMENT = 0x1000

@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
     if (fileName.isEmpty()) {
         std::fprintf(
             stderr,
-            "usage: diec-archive-harness [--archive] [--aggressive] "
+            "usage: die-archive-harness [--archive] [--aggressive] "
             "[--recursive] <file>\n"
         );
         return 2;

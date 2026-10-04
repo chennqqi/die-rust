@@ -65,7 +65,7 @@ libfuzzer = ["dep:libfuzzer-sys"]
 # the release sign-off to verify all seed corpora are crash-free.
 replay = []
 
-# Independent workspace (not part of the main diec-rust workspace).
+# Independent workspace (not part of the main die-rust workspace).
 # cargo-fuzz requires this to avoid dependency resolution conflicts.
 [workspace]
 members = ["."]

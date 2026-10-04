@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake-qt6:74eaf505
+ARG BASE_IMAGE=die-rust/upstream-oracle-cmake-qt6:74eaf505
 FROM ${BASE_IMAGE}
 
 COPY host_api_arity_harness_main.cpp /tmp/host_api_arity_harness_main.cpp
@@ -14,10 +14,10 @@ RUN set -eux; \
         -o /tmp/host_api_arity_harness_main.cpp.o; \
     sed \
         -e 's#CMakeFiles/diec.dir/main_console.cpp.o#/tmp/host_api_arity_harness_main.cpp.o#' \
-        -e 's# -o diec # -o diec-host-api-arity-harness #' \
+        -e 's# -o diec # -o die-host-api-arity-harness #' \
         "${object_dir}/link.txt" > /tmp/link-host-api-arity-harness.sh; \
     sh /tmp/link-host-api-arity-harness.sh; \
-    test -x /opt/die-build/src/console/diec-host-api-arity-harness
+    test -x /opt/die-build/src/console/die-host-api-arity-harness
 
 LABEL org.opencontainers.image.revision="74eaf505c250ab47e709024e9dc41657cd8f2254"
 LABEL org.opencontainers.image.source="https://github.com/horsicq/DIE-engine"

@@ -176,8 +176,8 @@ class CollectWindowsCliDatabaseTests(unittest.TestCase):
     def test_report_contains_no_local_absolute_paths(self):
         text = REPORT.read_text(encoding="utf-8")
         self.assertNotIn("I:\\\\tmp", text)
-        self.assertNotIn("diec-windows-script-source", text)
-        self.assertNotIn("diec-windows-database", text)
+        self.assertNotIn("die-windows-script-source", text)
+        self.assertNotIn("die-windows-database", text)
         self.assertIn("<dbfx>/missing-main", text)
         self.assertIn("<source>/Detect-It-Easy/db", text)
 

@@ -1,6 +1,6 @@
 # Compatibility Report
 
-This document tracks compatibility between diec-rust and the upstream
+This document tracks compatibility between die-rust and the upstream
 DIE-engine project. It is updated with each release.
 
 Last updated: 2026-08-15
@@ -198,8 +198,8 @@ for the full list. Key gaps by priority:
 | D001 | Rule version differences (submodule vs 3.21) | N/A | Detection name/version diffs |
 | D002 | Format-specific rules exclude Binary rules | N/A | Eliminates duplicate detections |
 | D003 | JavaClass no longer runs Binary rules | N/A | Host API now complete |
-| D004 | `PE.isNET()` removed with upstream | N/A | Upstream @ 2550d2d removed `isNET` (commit eb58192d) and updated all rules to `isNet`; the former diec-rust alias was dropped for exact parity |
-| D005 | `PE.getEPSignature` implemented as superset | N/A | Undefined upstream at baseline — `sfx_CipherWall.1.sg` fails there (doc/upstream-bugs.md Bug 6); diec-rust intentionally implements it, producing detections upstream cannot |
+| D004 | `PE.isNET()` removed with upstream | N/A | Upstream @ 2550d2d removed `isNET` (commit eb58192d) and updated all rules to `isNet`; the former die-rust alias was dropped for exact parity |
+| D005 | `PE.getEPSignature` implemented as superset | N/A | Undefined upstream at baseline — `sfx_CipherWall.1.sg` fails there (doc/upstream-bugs.md Bug 6); die-rust intentionally implements it, producing detections upstream cannot |
 
 ## Performance Baseline
 
@@ -281,14 +281,14 @@ scanning:
 
 ### Known Differences from Upstream
 
-1. **Archive safety bounds**: diec-rust enforces stricter limits than
+1. **Archive safety bounds**: die-rust enforces stricter limits than
    upstream (which has no size/ratio limits). Highly compressed archives
    (ratio > 100:1) or very large members (> 128 MiB) are skipped. This is
    an intentional safety improvement (ADR 0030).
 
 2. **Secondary archive formats**: ARJ/LHA/ACE/CPIO/UDF/WIM are parsable
    upstream (`XFormats::createClass`) but excluded from the
-   nested-scan gate; diec-rust enumerates/extracts them through
+   nested-scan gate; die-rust enumerates/extracts them through
    `list_archive_members`/`extract_member` only. Extraction coverage
    is at parity: ARJ method 0-6, LHA all methods (stored, lh1 LZHUF,
    lh4-7 block decoder, legacy lzs/lz5/lhx/lk7/pm1/pm2), ACE stored +
@@ -342,7 +342,7 @@ scanning:
 
 GUI `list_archive`/`extract_archive_member` 复用引擎 `archive_unpack`：
 
-| Format | 上游 XArchive | diec-rust |
+| Format | 上游 XArchive | die-rust |
 |--------|--------------|-----------|
 | ZIP | ✅ | ✅ list + extract |
 | 7Z | ✅ | ✅ list + extract |
@@ -484,7 +484,7 @@ oracle` 差分锁定）：
 
 ### Annotations（19，对应上游 XInfoDB 子集）
 
-| 能力 | 上游 | diec-rust | 差异 |
+| 能力 | 上游 | die-rust | 差异 |
 |------|------|-----------|------|
 | 持久化 | XInfoDB（进程内 DB） | `<file>.diec.json` 旁车 | 跨进程持久化；无会话间共享 DB |
 | 条目类型 | bookmark/comment/label/… | bookmark/comment/label | 核心三类对齐 |
@@ -493,7 +493,7 @@ oracle` 差分锁定）：
 
 ### UPX 静态脱壳（20，对齐 XUPX/_unpackPE）
 
-| 能力 | 上游 DIE | diec-rust | 备注 |
+| 能力 | 上游 DIE | die-rust | 备注 |
 |------|----------|-----------|------|
 | pack-header | `_read_packheader` 版本敏感头长 | ✅ 对齐（v≤3:24、4–9:20/25/28、≥10:22/27/32） | |
 | NRV2B/2D/2E | UCL 9 变体 | ✅ 精确移植（含 `*pnDstSize` 语义） | |
@@ -518,7 +518,7 @@ oracle` 差分锁定）：
 
 ## Phase 21: NFD/SpecAbstract 第二引擎（2026-10-07）
 
-| 能力 | 上游 | diec-rust | 备注 |
+| 能力 | 上游 | die-rust | 备注 |
 |------|------|-----------|------|
 | 签名表 | C 数组（~1.5MB C++ 内嵌） | `tools/nfd_codegen.py` → Rust 静态表（35 表 / 1730 条） | @ 5188e047，MIT 归属保留 |
 | 通用 pass | signature/string/const/resources/memory/exp scan | ✅ 对齐（ft 过滤、记录名去重） | |
@@ -594,7 +594,7 @@ oracle` 差分锁定）：
 
 `python3 tools/nfd_diff.py corpus/`：**72 文件，0 差异**。
 
-回归测试：`crates/diec-nfd/tests/oracle_alignment.rs`（UPX MinGW/GCC
+回归测试：`crates/die-nfd/tests/oracle_alignment.rs`（UPX MinGW/GCC
 链 + C/C++ 聚合、COFF 字符串表 DWARF、空 ZIP EOCD、Mach-O clang→C/C++、
 嵌套 ZIP 短 ELF 成员 + Unknown 抑制、minimal-NE overlay Unknown）。
 

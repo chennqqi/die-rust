@@ -8,7 +8,7 @@ requests to avoid repeated loading overhead.
 
 ```sh
 # Build and start the server
-cargo build --release --package diec-server
+cargo build --release --package die-server
 ./target/release/died --db upstream/Detect-It-Easy/db --bind 127.0.0.1:18080
 ```
 
@@ -339,5 +339,5 @@ sudo systemctl enable --now died
 
 ### Packaging
 
-See [packaging/README.md](../../crates/diec-server/packaging/README.md) for
+See [packaging/README.md](../../crates/die-server/packaging/README.md) for
 DEB, RPM, and MSI build instructions.

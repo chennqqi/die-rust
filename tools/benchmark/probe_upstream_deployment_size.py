@@ -39,7 +39,7 @@ EXPECTED_DEPENDENCY_CLOSURE_SHA256 = (
     "96e11fd18f8f1d289a345ecacc10f328b"
     "d7b3e2148dcfca29a04824d6e2189b2"
 )
-INSPECTOR_PATH = "/opt/diec-size/inspect_upstream_deployment.py"
+INSPECTOR_PATH = "/opt/die-size/inspect_upstream_deployment.py"
 
 
 class ProbeError(ValueError):

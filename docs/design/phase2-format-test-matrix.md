@@ -66,8 +66,8 @@
 
 | Crate | 测试数 | 覆盖 |
 |-------|--------|------|
-| diec-core | 7 | memory_source, read_exact_at, byte_view, chunked, typed_reads, empty_source |
-| diec-formats | 4 | random_input, deterministic, all_zeros, single_byte |
+| die-core | 7 | memory_source, read_exact_at, byte_view, chunked, typed_reads, empty_source |
+| die-formats | 4 | random_input, deterministic, all_zeros, single_byte |
 
 ## Corpus Differential
 
@@ -79,9 +79,9 @@
 ## 统计
 
 - ProbeTable 注册 probe 数：20
-- diec-formats 单元测试：156
-- diec-formats 集成测试（corpus differential）：5
-- diec-core property tests：7
-- diec-formats property tests：4
+- die-formats 单元测试：156
+- die-formats 集成测试（corpus differential）：5
+- die-core property tests：7
+- die-formats property tests：4
 - Fuzz targets：3
 - 总测试数：161 + 7 = 168

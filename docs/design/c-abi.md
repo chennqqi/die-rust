@@ -71,7 +71,7 @@ share/diec/...           固定规则与来源 manifest
 
 1. **ABI version**：函数、状态码、所有权和 options layout。
 2. **Result schema version**：canonical JSON 字段和语义。
-3. **Engine/database version**：diec-rust 版本、固定 DIE-engine SHA、规则 SHA、
+3. **Engine/database version**：die-rust 版本、固定 DIE-engine SHA、规则 SHA、
    规则 manifest hash 和 runtime implementation。
 
 建议编码：

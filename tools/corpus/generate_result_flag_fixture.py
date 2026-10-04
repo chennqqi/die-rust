@@ -16,7 +16,7 @@ DIRECTORIES = (
     "empty-main",
     "input",
 )
-INPUT = b"diec-rust result flag contract input\n"
+INPUT = b"die-rust result flag contract input\n"
 
 
 def result_rule(result_type: str, name: str) -> bytes:

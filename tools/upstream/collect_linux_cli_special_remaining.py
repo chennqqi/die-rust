@@ -18,11 +18,11 @@ WINDOWS_COLLECTOR_SCRIPT = (
     ROOT / "tools/upstream/collect_windows_cli_special_remaining.py"
 )
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
-QT5_IMAGE = "diec-rust/upstream-oracle-cmake:74eaf505"
+QT5_IMAGE = "die-rust/upstream-oracle-cmake:74eaf505"
 QT5_IMAGE_ID = (
     "sha256:466102628c3a94b7ab1048f0c24261b1920e61a40029b128763cf79370255040"
 )
-QT6_IMAGE = "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+QT6_IMAGE = "die-rust/upstream-oracle-cmake-qt6:74eaf505"
 QT6_IMAGE_ID = (
     "sha256:e015495c313d0715f0b80f395da983a113a439f2a135eb637e9f0638c225200b"
 )

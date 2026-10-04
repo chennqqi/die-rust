@@ -1,6 +1,6 @@
 [package]
 name = "die-core"
-description = "Checked input, public value model, errors, limits, cancellation and result arena for diec-rust."
+description = "Checked input, public value model, errors, limits, cancellation and result arena for die-rust."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

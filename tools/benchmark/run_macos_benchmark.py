@@ -13,8 +13,8 @@ from typing import Any
 
 
 WORK_DIR = Path(__file__).resolve().parents[3]
-PLANS_PATH = WORK_DIR / "diec-rust" / "tools" / "benchmark" / "upstream-benchmark-macos-qt5-plans.json"
-RUNNER_PATH = WORK_DIR / "diec-rust" / "tools" / "benchmark" / "run_process_benchmark.py"
+PLANS_PATH = WORK_DIR / "die-rust" / "tools" / "benchmark" / "upstream-benchmark-macos-qt5-plans.json"
+RUNNER_PATH = WORK_DIR / "die-rust" / "tools" / "benchmark" / "run_process_benchmark.py"
 BENCH_DIR = WORK_DIR / "bench"
 OUTPUT_DIR = WORK_DIR / "evidence" / "macos-benchmark"
 VENV_PYTHON = WORK_DIR / "venv" / "bin" / "python3"

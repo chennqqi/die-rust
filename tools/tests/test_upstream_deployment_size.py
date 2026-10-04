@@ -127,7 +127,7 @@ class UpstreamDeploymentSizeTests(unittest.TestCase):
     def test_dockerfile_derives_from_fixed_benchmark_image(self):
         text = DOCKERFILE_PATH.read_text(encoding="utf-8")
         self.assertIn(
-            "ARG BASE_IMAGE=diec-rust/upstream-benchmark-qt5:74eaf505"
+            "ARG BASE_IMAGE=die-rust/upstream-benchmark-qt5:74eaf505"
             "@sha256:a5b33708eb148591d127041b6a54d05d68f8dd24"
             "bea7855e95ea88715d0bf8c5",
             text,

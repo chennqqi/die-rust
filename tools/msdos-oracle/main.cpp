@@ -1,5 +1,5 @@
 // msdos-oracle — dump MSDOS host API method results from the pinned
-// upstream DIE engine, for differential comparison against diec-rust.
+// upstream DIE engine, for differential comparison against die-rust.
 //
 // It instantiates XMSDOS + MSDOS_Script exactly like XScanEngine does,
 // exposes the script object to QJSEngine as "MSDOS", evaluates the real

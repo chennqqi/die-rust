@@ -16,7 +16,7 @@ from typing import Callable, Sequence
 
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
 RULES_COMMIT = "c2c17dfa5ea4e078ba31eab55d87430c96622fb6"
-IMAGE = "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+IMAGE = "die-rust/upstream-oracle-cmake-qt6:74eaf505"
 BINARY = "/opt/die-build/src/console/diec"
 INPUT_NAME = "minimal.exe"
 INPUT_SHA256 = (
@@ -136,7 +136,7 @@ def observe(
     work_root: pathlib.Path,
 ) -> Observation:
     with tempfile.TemporaryDirectory(
-        prefix="diec-rust-qt6-warning-",
+        prefix="die-rust-qt6-warning-",
         dir=work_root,
     ) as directory:
         database = pathlib.Path(directory)

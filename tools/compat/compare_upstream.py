@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Differential comparison between diec-rust and upstream DIE.
+"""Differential comparison between die-rust and upstream DIE.
 
-Runs both diec-rust and upstream DIE on the same files and compares
+Runs both die-rust and upstream DIE on the same files and compares
 detections. Reports mismatches in detections found/missing and version
 info.
 
@@ -17,7 +17,7 @@ import sys
 
 
 def run_rust(diec_path, file_path):
-    """Run diec-rust and return set of (type, name, version) tuples."""
+    """Run die-rust and return set of (type, name, version) tuples."""
     try:
         result = subprocess.run(
             [diec_path, "--output", "json", file_path],
@@ -54,7 +54,7 @@ def run_upstream(diec_path, file_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Compare diec-rust vs upstream DIE")
+    parser = argparse.ArgumentParser(description="Compare die-rust vs upstream DIE")
     parser.add_argument("--rust", default="target/release/diec.exe")
     parser.add_argument("--upstream", default="tools/upstream-die/die/diec.exe")
     parser.add_argument("--corpus", default=None)

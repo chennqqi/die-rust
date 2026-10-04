@@ -15,7 +15,7 @@ from typing import Any
 
 GENERATOR = "tools/upstream/probe_qt6_debug_dispatch_harness.py"
 UNDERLYING_PROBE = "tools/upstream/probe_debug_dispatch_harness.py"
-IMAGE = "diec-rust/debug-dispatch-harness-qt6:74eaf505"
+IMAGE = "die-rust/debug-dispatch-harness-qt6:74eaf505"
 DOCKERFILE = "tools/upstream/Dockerfile.debug-dispatch-harness-qt6"
 QT6_WARNING = b"Unimplemented code.\n" * 4
 

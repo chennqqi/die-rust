@@ -203,12 +203,12 @@ class ProbeArchiveIterationBoundaryHarnessTests(unittest.TestCase):
         }
         harness = HARNESS_PATH.read_text(encoding="utf-8")
         self.assertIn(
-            "ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake:74eaf505",
+            "ARG BASE_IMAGE=die-rust/upstream-oracle-cmake:74eaf505",
             dockerfiles["qt5"],
         )
         self.assertIn(
             "ARG BASE_IMAGE="
-            "diec-rust/upstream-oracle-cmake-qt6:74eaf505",
+            "die-rust/upstream-oracle-cmake-qt6:74eaf505",
             dockerfiles["qt6"],
         )
         for name, dockerfile in dockerfiles.items():

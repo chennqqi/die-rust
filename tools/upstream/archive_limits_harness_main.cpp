@@ -120,7 +120,7 @@ int main(int argc, char *argv[])
     if (fileName.isEmpty()) {
         std::fprintf(
             stderr,
-            "usage: diec-archive-limits-harness "
+            "usage: die-archive-limits-harness "
             "[--cancel-after-callbacks N] <file>\n"
         );
         return 2;

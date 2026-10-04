@@ -46,7 +46,7 @@ SUITES = (
         "module": "probe_npm_dispatch_harness.py",
         "baseline": "npm-dispatch-engine-qt5.json",
         "dockerfile": "Dockerfile.npm-dispatch-harness-qt6",
-        "image": "diec-rust/npm-dispatch-harness-qt6:74eaf505",
+        "image": "die-rust/npm-dispatch-harness-qt6:74eaf505",
     },
     {
         "id": "generic_archive",
@@ -56,7 +56,7 @@ SUITES = (
             "Dockerfile.generic-archive-dispatch-harness-qt6"
         ),
         "image": (
-            "diec-rust/"
+            "die-rust/"
             "generic-archive-dispatch-harness-qt6:74eaf505"
         ),
     },

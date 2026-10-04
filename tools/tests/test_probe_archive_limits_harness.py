@@ -183,7 +183,7 @@ class ProbeArchiveLimitsHarnessTests(unittest.TestCase):
         dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
         harness = HARNESS_PATH.read_text(encoding="utf-8")
         self.assertIn(
-            "ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake:74eaf505",
+            "ARG BASE_IMAGE=die-rust/upstream-oracle-cmake:74eaf505",
             dockerfile,
         )
         self.assertIn(
@@ -206,7 +206,7 @@ class ProbeArchiveLimitsHarnessTests(unittest.TestCase):
         dockerfile = QT6_DOCKERFILE_PATH.read_text(encoding="utf-8")
         self.assertIn(
             "ARG BASE_IMAGE="
-            "diec-rust/upstream-oracle-cmake-qt6:74eaf505",
+            "die-rust/upstream-oracle-cmake-qt6:74eaf505",
             dockerfile,
         )
         self.assertIn(

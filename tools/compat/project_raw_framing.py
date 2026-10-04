@@ -13,7 +13,7 @@ import verify_raw_execution as raw_verifier
 
 
 FRAMING_SCHEMA_VERSION = 1
-PROJECTOR_NAME = "diec-raw-framing-projector"
+PROJECTOR_NAME = "die-raw-framing-projector"
 PROJECTOR_VERSION = 1
 MAX_JSON_DOCUMENT_BYTES = 8 * 1024 * 1024
 MAX_JSON_DOCUMENTS = 4096

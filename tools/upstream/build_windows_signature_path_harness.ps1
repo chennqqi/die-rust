@@ -183,7 +183,7 @@ if (-not $SourceMatch.Success) {
     throw "Cannot locate main_console.cpp in the Release Makefile."
 }
 
-$HarnessTarget = "diec-signature-path-harness.exe"
+$HarnessTarget = "die-signature-path-harness.exe"
 $HarnessObjectName = "release\signature_path_harness_main.obj"
 $AccessAlias = (
     "/alternatename:" +

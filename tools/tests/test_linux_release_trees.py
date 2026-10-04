@@ -89,7 +89,7 @@ class LinuxReleaseTreeTests(unittest.TestCase):
     def test_dockerfile_is_bound_to_exact_install_image(self):
         text = DOCKERFILE_PATH.read_text(encoding="utf-8")
         self.assertIn(
-            "ARG BASE_IMAGE=diec-rust/upstream-install-qt5:74eaf505"
+            "ARG BASE_IMAGE=die-rust/upstream-install-qt5:74eaf505"
             "@sha256:6f7a378ea1c5a07745d45083c0e596430fefc652"
             "6273528366a7dc7e11230368",
             text,

@@ -27,7 +27,7 @@ class ArchiveHarnessDockerfilesTest(unittest.TestCase):
                     content,
                 )
                 self.assertIn(
-                    "/opt/die-build/src/console/diec-archive-harness",
+                    "/opt/die-build/src/console/die-archive-harness",
                     content,
                 )
                 self.assertIn(
@@ -39,12 +39,12 @@ class ArchiveHarnessDockerfilesTest(unittest.TestCase):
 
     def test_variants_are_pinned_to_the_expected_oracle_images(self):
         self.assertIn(
-            "ARG BASE_IMAGE=diec-rust/upstream-oracle-cmake:74eaf505",
+            "ARG BASE_IMAGE=die-rust/upstream-oracle-cmake:74eaf505",
             DOCKERFILES["qt5"].read_text(encoding="utf-8"),
         )
         self.assertIn(
             "ARG BASE_IMAGE="
-            "diec-rust/upstream-oracle-cmake-qt6:74eaf505",
+            "die-rust/upstream-oracle-cmake-qt6:74eaf505",
             DOCKERFILES["qt6"].read_text(encoding="utf-8"),
         )
 

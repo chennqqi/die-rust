@@ -17,9 +17,9 @@ RULES_COMMIT = "c2c17dfa5ea4e078ba31eab55d87430c96622fb6"
 PE_INIT_SHA256 = (
     "26f5912c5ac137ed44d0d9edade8d3ce65501a61ce06d0491db5e1faa59c1f90"
 )
-QT5_IMAGE = "diec-rust/upstream-host-api-arity-harness:74eaf505"
-QT6_IMAGE = "diec-rust/upstream-host-api-arity-harness-qt6:74eaf505"
-DEFAULT_BINARY = "/opt/die-build/src/console/diec-host-api-arity-harness"
+QT5_IMAGE = "die-rust/upstream-host-api-arity-harness:74eaf505"
+QT6_IMAGE = "die-rust/upstream-host-api-arity-harness-qt6:74eaf505"
+DEFAULT_BINARY = "/opt/die-build/src/console/die-host-api-arity-harness"
 QT6_STDERR = (
     b"%entry@file:u8-extra.js:1\n"
     b"Too many arguments, ignoring 1\n"

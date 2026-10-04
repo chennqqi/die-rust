@@ -128,7 +128,7 @@ RFC/官方向量测试。
 
 范围（若立项）：
 
-1. `diec-nfd` crate：SpecAbstract 规则解析（其格式与 DIE 规则
+1. `die-nfd` crate：SpecAbstract 规则解析（其格式与 DIE 规则
    不同，是二进制 signature + 结构匹配）
 2. 引擎集成：scan pipeline 第二 pass，results 标 `engine=nfd`
 3. GUI：恢复 `nfd_enabled` + scan engine selector 合并（upstream

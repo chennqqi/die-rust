@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 
 UPSTREAM_COMMIT = "74eaf505c250ab47e709024e9dc41657cd8f2254"
-QT6_IMAGE = "diec-rust/upstream-oracle-cmake-qt6:74eaf505"
+QT6_IMAGE = "die-rust/upstream-oracle-cmake-qt6:74eaf505"
 QT6_BINARY = "/opt/die-build/src/console/diec"
 DATA_DIR = "docs/research/data"
 PROBE_DIR = "tools/upstream"
