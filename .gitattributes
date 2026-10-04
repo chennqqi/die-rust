@@ -1,0 +1,6 @@
+# Corpus fixtures and oracle snapshots are byte-exact data: git must
+# never apply line-ending conversion to them. With core.autocrlf=true
+# (the windows-2022 runner image default), text-shaped snapshots under
+# corpus/extract were checked out as CRLF, which broke the
+# secondary_archives extract-parity tests on Windows CI.
+corpus/** -text
