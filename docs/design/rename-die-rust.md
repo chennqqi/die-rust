@@ -1,7 +1,9 @@
 # 项目改名 diec-rust → die-rust：调查与设计
 
-Status: Draft v3（并入评审发现：sidecar 扩展名决策、xtask 白名单、
-字符串面、规模修正，2026-10-04）
+Status: Implemented（三步提交 `c14a8f4a0`/`59ab812ff`/`40c27e92d`，
+全量验证通过：fmt/clippy/workspace test 52 binaries 0 fail、
+MSRV 1.88 clippy、fuzz replay 7/7、xtask check-deps、C smoke 17/17、
+python 12/12、go build/vet，2026-10-04；设计稿 v3）
 Date: 2026-10-04
 
 ## 背景与动机
