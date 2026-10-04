@@ -1,4 +1,7 @@
 *.sg linguist-language=js
-* text=auto
+# Vendored tree: byte-exact preservation required (rule-source-manifest
+# sha256 was computed on these bytes). Never convert line endings —
+# upstream stores a mix of LF and CRLF and both must survive checkout.
+* -text
 
 *.png binary
