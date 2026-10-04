@@ -3,7 +3,7 @@
 //! Invariant: no panic crosses the FFI boundary, no crash, no hang.
 //! The C ABI must return a valid status code for any input.
 //!
-//! This target requires the upstream database and the diec-ffi crate.
+//! This target requires the upstream database and the die-ffi crate.
 //! If the database cannot be loaded, the target exits early.
 //!
 //! See `docs/design/testing.md` section 14 and `docs/design/c-abi.md`.
@@ -14,19 +14,19 @@ use libfuzzer_sys::fuzz_target;
 use std::ffi::c_void;
 use std::sync::OnceLock;
 
-// Force the linker to retain diec-ffi's #[no_mangle] symbols.
+// Force the linker to retain die-ffi's #[no_mangle] symbols.
 // Without direct Rust references, dead code elimination removes
 // them from the rlib, causing "undefined symbol" errors when the
 // extern "C" block below tries to resolve them at link time.
 const _: () = {
-    let _ = diec_ffi::scan::diec_v1_database_builder_new;
-    let _ = diec_ffi::scan::diec_v1_database_builder_add_path_utf8;
-    let _ = diec_ffi::scan::diec_v1_database_builder_build;
-    let _ = diec_ffi::scan::diec_v1_database_builder_free;
-    let _ = diec_ffi::scan::diec_v1_database_free;
-    let _ = diec_ffi::scan::diec_v1_scan_bytes;
-    let _ = diec_ffi::scan::diec_v1_result_free;
-    let _ = diec_ffi::scan::diec_v1_error_free;
+    let _ = die_ffi::scan::diec_v1_database_builder_new;
+    let _ = die_ffi::scan::diec_v1_database_builder_add_path_utf8;
+    let _ = die_ffi::scan::diec_v1_database_builder_build;
+    let _ = die_ffi::scan::diec_v1_database_builder_free;
+    let _ = die_ffi::scan::diec_v1_database_free;
+    let _ = die_ffi::scan::diec_v1_scan_bytes;
+    let _ = die_ffi::scan::diec_v1_result_free;
+    let _ = die_ffi::scan::diec_v1_error_free;
 };
 
 /// Opaque database handle type (matches diec_v1_database).

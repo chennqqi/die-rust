@@ -1,5 +1,5 @@
 [package]
-name = "diec-fuzz"
+name = "die-fuzz"
 version = "0.0.0"
 edition = "2021"
 publish = false
@@ -49,11 +49,11 @@ required-features = ["libfuzzer"]
 
 [dependencies]
 libfuzzer-sys = { version = "0.4", optional = true }
-diec-core = { path = "../crates/diec-core" }
-diec-formats = { path = "../crates/diec-formats" }
-diec-engine = { path = "../crates/diec-engine" }
-diec-output = { path = "../crates/diec-output" }
-diec-ffi = { path = "../crates/diec-ffi" }
+die-core = { path = "../crates/die-core" }
+die-formats = { path = "../crates/die-formats" }
+die-engine = { path = "../crates/die-engine" }
+die-output = { path = "../crates/die-output" }
+die-ffi = { path = "../crates/die-ffi" }
 serde_json = "1.0"
 
 [features]

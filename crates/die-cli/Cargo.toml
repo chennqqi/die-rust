@@ -1,0 +1,18 @@
+[package]
+name = "die-cli"
+description = "Thin CLI adapter: arguments, file input, exit codes and terminal output."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "diec"
+path = "src/main.rs"
+
+[dependencies]
+die-engine = { workspace = true }
+die-output = { workspace = true }
+die-core = { workspace = true }

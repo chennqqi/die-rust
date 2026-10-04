@@ -8,7 +8,7 @@
 
 #![no_main]
 
-use diec_engine::{ScanDetection, ScanResult};
+use die_engine::{ScanDetection, ScanResult};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
@@ -24,9 +24,9 @@ fuzz_target!(|data: &[u8]| {
             structured_diagnostics: vec![],
             profiling: vec![],
         };
-        let json = diec_output::render_json(&result);
+        let json = die_output::render_json(&result);
         assert!(!json.is_empty(), "JSON output should be non-empty");
-        let text = diec_output::render_text(&result);
+        let text = die_output::render_text(&result);
         let _ = text;
         return;
     }
@@ -99,29 +99,29 @@ fuzz_target!(|data: &[u8]| {
     };
 
     // Render JSON - must not panic.
-    let json = diec_output::render_json(&result);
+    let json = die_output::render_json(&result);
     assert!(!json.is_empty(), "JSON output should be non-empty");
 
     // Verify JSON is valid by re-parsing.
     let _ = serde_json::from_str::<serde_json::Value>(&json);
 
     // Render text - must not panic.
-    let text = diec_output::render_text(&result);
+    let text = die_output::render_text(&result);
     let _ = text;
 
     // Render formatted text - must not panic.
-    let text_formatted = diec_output::render_text_formatted(&result);
+    let text_formatted = die_output::render_text_formatted(&result);
     let _ = text_formatted;
 
     // Render XML - must not panic.
-    let xml = diec_output::render_xml(&result);
+    let xml = die_output::render_xml(&result);
     let _ = xml;
 
     // Render CSV - must not panic.
-    let csv = diec_output::render_csv(&result);
+    let csv = die_output::render_csv(&result);
     let _ = csv;
 
     // Render TSV - must not panic.
-    let tsv = diec_output::render_tsv(&result);
+    let tsv = die_output::render_tsv(&result);
     let _ = tsv;
 });

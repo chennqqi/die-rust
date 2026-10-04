@@ -13,10 +13,10 @@ name = "die"
 path = "src/main.rs"
 
 [dependencies]
-diec-engine = { workspace = true }
-diec-core = { workspace = true }
-diec-output = { workspace = true }
-diec-formats = { workspace = true }
+die-engine = { workspace = true }
+die-core = { workspace = true }
+die-output = { workspace = true }
+die-formats = { workspace = true }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
@@ -69,8 +69,8 @@ tauri-plugin-updater = "2"
 winreg = "0.55"
 
 [dev-dependencies]
-diec-engine = { workspace = true }
-diec-core = { workspace = true }
+die-engine = { workspace = true }
+die-core = { workspace = true }
 tempfile = "3.27.0"
 tauri = { version = "2", features = ["test"] }
 

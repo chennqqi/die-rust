@@ -5,8 +5,8 @@
 
 #![no_main]
 
-use diec_core::input::{ByteRange, ByteSource, ByteView, MemorySource};
-use diec_formats::{FormatProbe, ProbeTable};
+use die_core::input::{ByteRange, ByteSource, ByteView, MemorySource};
+use die_formats::{FormatProbe, ProbeTable};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
@@ -21,7 +21,7 @@ fuzz_target!(|data: &[u8]| {
     for c in &candidates {
         assert_ne!(
             c.strength,
-            diec_core::format::FormatStrength::None,
+            die_core::format::FormatStrength::None,
             "candidate with None strength"
         );
     }
@@ -29,9 +29,9 @@ fuzz_target!(|data: &[u8]| {
     // Invariant: MemorySource should not produce Io errors.
     for e in &errors {
         match e {
-            diec_formats::ProbeError::Truncated { .. }
-            | diec_formats::ProbeError::InvalidHeader { .. } => {}
-            diec_formats::ProbeError::Io(_) => {
+            die_formats::ProbeError::Truncated { .. }
+            | die_formats::ProbeError::InvalidHeader { .. } => {}
+            die_formats::ProbeError::Io(_) => {
                 panic!("MemorySource should not produce Io errors: {e:?}");
             }
         }

@@ -1477,6 +1477,67 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2ea6706d74fca54e15f1d40b5cf7fe7f764aaec61352a9fcec58fe27e042fc8"
 
 [[package]]
+name = "die-cli"
+version = "0.9.1"
+dependencies = [
+ "die-core",
+ "die-engine",
+ "die-output",
+]
+
+[[package]]
+name = "die-core"
+version = "0.9.1"
+
+[[package]]
+name = "die-engine"
+version = "0.9.1"
+dependencies = [
+ "adler2",
+ "blake2",
+ "blake3",
+ "bzip2-rs",
+ "cab",
+ "crc",
+ "crc32fast",
+ "criterion",
+ "die-core",
+ "die-formats",
+ "die-nfd",
+ "die-rules",
+ "flate2",
+ "hex",
+ "lzma-rs",
+ "md-5",
+ "md4",
+ "rars",
+ "serde",
+ "serde_json",
+ "sevenz-rust",
+ "sha1 0.10.7",
+ "sha2 0.10.9",
+ "sha3",
+ "zip 4.6.1",
+]
+
+[[package]]
+name = "die-ffi"
+version = "0.9.1"
+dependencies = [
+ "die-core",
+ "die-engine",
+ "die-output",
+]
+
+[[package]]
+name = "die-formats"
+version = "0.9.1"
+dependencies = [
+ "criterion",
+ "die-core",
+]
+
+[[package]]
 name = "die-gui"
 version = "0.9.1"
 dependencies = [
@@ -1488,10 +1549,10 @@ dependencies = [
  "cpp_demangle",
  "crc",
  "crc32fast",
- "diec-core",
- "diec-engine",
- "diec-formats",
- "diec-output",
+ "die-core",
+ "die-engine",
+ "die-formats",
+ "die-output",
  "flate2",
  "goblin",
  "gost94",
@@ -1531,92 +1592,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "diec-cli"
-version = "0.9.1"
-dependencies = [
- "diec-core",
- "diec-engine",
- "diec-output",
-]
-
-[[package]]
-name = "diec-core"
-version = "0.9.1"
-
-[[package]]
-name = "diec-engine"
-version = "0.9.1"
-dependencies = [
- "adler2",
- "blake2",
- "blake3",
- "bzip2-rs",
- "cab",
- "crc",
- "crc32fast",
- "criterion",
- "diec-core",
- "diec-formats",
- "diec-nfd",
- "diec-rules",
- "flate2",
- "hex",
- "lzma-rs",
- "md-5",
- "md4",
- "rars",
- "serde",
- "serde_json",
- "sevenz-rust",
- "sha1 0.10.7",
- "sha2 0.10.9",
- "sha3",
- "zip 8.6.0",
-]
-
-[[package]]
-name = "diec-ffi"
-version = "0.9.1"
-dependencies = [
- "diec-core",
- "diec-engine",
- "diec-output",
-]
-
-[[package]]
-name = "diec-formats"
-version = "0.9.1"
-dependencies = [
- "criterion",
- "diec-core",
-]
-
-[[package]]
-name = "diec-nfd"
+name = "die-nfd"
 version = "0.9.1"
 dependencies = [
  "crc32fast",
- "diec-core",
+ "die-core",
  "fancy-regex",
  "flate2",
  "lzma-rs",
 ]
 
 [[package]]
-name = "diec-output"
+name = "die-output"
 version = "0.9.1"
 dependencies = [
- "diec-core",
- "diec-engine",
+ "die-core",
+ "die-engine",
 ]
 
 [[package]]
-name = "diec-rules"
+name = "die-rules"
 version = "0.9.1"
 dependencies = [
  "capstone",
- "diec-core",
- "diec-formats",
+ "die-core",
+ "die-formats",
  "flate2",
  "goblin",
  "md-5",
@@ -1626,12 +1626,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "diec-server"
+name = "die-server"
 version = "0.9.1"
 dependencies = [
  "axum",
- "diec-core",
- "diec-engine",
+ "die-core",
+ "die-engine",
  "serde",
  "serde_json",
  "tokio",
@@ -8328,8 +8328,10 @@ checksum = "caa8cd6af31c3b31c6631b8f483848b91589021b28fffe50adada48d4f4d2ed1"
 dependencies = [
  "arbitrary",
  "crc32fast",
+ "flate2",
  "indexmap 2.14.0",
  "memchr",
+ "zopfli",
 ]
 
 [[package]]

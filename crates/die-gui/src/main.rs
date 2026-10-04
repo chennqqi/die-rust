@@ -1,7 +1,7 @@
 //! `die-gui` is the Tauri v2 GUI adapter binary for diec.
 //!
 //! It owns the Tauri application lifecycle, IPC command registration,
-//! and managed state. It depends on `diec-engine` for scan logic and
+//! and managed state. It depends on `die-engine` for scan logic and
 //! never duplicates detection branches. See `docs/design/phase8-gui.md`.
 
 // Hide the console window on Windows in release builds.

@@ -1,0 +1,25 @@
+[package]
+name = "die-rules"
+description = "Rule database, syntax diagnostics, runtime/host ports and backend isolation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+capstone = { version = "0.14.0", default-features = false, features = ["arch_x86", "std", "full"] }
+die-core = { workspace = true }
+die-formats = { workspace = true }
+flate2 = "1.1"
+goblin = { workspace = true }
+md-5 = "0.10"
+pelite = { workspace = true }
+rquickjs = { version = "=0.12.1", default-features = false, features = ["std"] }
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+serde_json = "1.0.151"

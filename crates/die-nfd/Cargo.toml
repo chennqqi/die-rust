@@ -1,0 +1,16 @@
+[package]
+name = "die-nfd"
+description = "NFD/SpecAbstract second scan engine: table-driven signature matching ported from upstream."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+crc32fast = "1.5.2"
+die-core = { workspace = true }
+fancy-regex = "0.14"
+flate2 = "1.1"
+lzma-rs = "0.3.0"

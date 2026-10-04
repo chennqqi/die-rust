@@ -382,7 +382,7 @@ pub fn compute_sha256(data: &[u8]) -> String {
 
 /// Detect the binary format from magic bytes.
 ///
-/// First tries diec-formats probe table (20+ format probes) for Strong
+/// First tries die-formats probe table (20+ format probes) for Strong
 /// matches. If only Weak matches are found, falls back to hand-written
 /// magic byte checks for PE/ELF/Mach-O sub-typing (32 vs 64 bit).
 fn detect_format(data: &[u8]) -> String {
@@ -390,25 +390,25 @@ fn detect_format(data: &[u8]) -> String {
         return "Unknown".to_string();
     }
 
-    // --- Phase 1: diec-formats probe table ---
+    // --- Phase 1: die-formats probe table ---
     // Provides 20+ format detection (PE, ELF, Mach-O, ZIP, RAR, 7Z, GZIP,
     // TAR, ISO9660, CAB, DEX, JavaClass, PYC, PDF, CFBF, JPEG, PNG, BMP, WAV).
-    let table = diec_formats::ProbeTable::default_phase2();
-    let source = diec_core::input::MemorySource::new(data);
-    let range = diec_core::input::ByteRange::new(0, data.len() as u64).unwrap_or(
-        diec_core::input::ByteRange {
+    let table = die_formats::ProbeTable::default_phase2();
+    let source = die_core::input::MemorySource::new(data);
+    let range = die_core::input::ByteRange::new(0, data.len() as u64).unwrap_or(
+        die_core::input::ByteRange {
             start: 0,
             length: 0,
         },
     );
-    if let Some(view) = diec_core::input::ByteView::new(&source, range) {
+    if let Some(view) = die_core::input::ByteView::new(&source, range) {
         let (candidates, _errors) = table.probe_all(&view);
-        // Prefer Strong matches from diec-formats.
+        // Prefer Strong matches from die-formats.
         if let Some(strong) = candidates
             .iter()
-            .find(|c| c.strength == diec_core::format::FormatStrength::Strong)
+            .find(|c| c.strength == die_core::format::FormatStrength::Strong)
         {
-            // diec-formats returns "PE32"/"PE64" — normalize to GUI's
+            // die-formats returns "PE32"/"PE64" — normalize to GUI's
             // "PE32"/"PE32+" naming convention.
             return match strong.file_type.name.as_str() {
                 "PE64" => "PE32+".to_string(),

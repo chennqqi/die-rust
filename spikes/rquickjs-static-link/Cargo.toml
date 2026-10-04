@@ -1,5 +1,5 @@
 [package]
-name = "diec-rquickjs-static-link-spike"
+name = "die-rquickjs-static-link-spike"
 version = "0.0.0"
 edition = "2024"
 rust-version = "1.88"

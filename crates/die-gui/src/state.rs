@@ -4,8 +4,8 @@
 //! across scans via `Arc`) and the current `CancellationToken` for
 //! cooperative scan cancellation.
 
-use diec_core::cancel::CancellationToken;
-use diec_engine::{Database, DatabaseBuilder};
+use die_core::cancel::CancellationToken;
+use die_engine::{Database, DatabaseBuilder};
 use std::sync::{Arc, Mutex};
 
 /// The managed state shared across all Tauri IPC commands.

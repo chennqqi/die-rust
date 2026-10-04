@@ -18,14 +18,14 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 const RUNTIME_CRATES: &[&str] = &[
-    "diec-core",
-    "diec-formats",
-    "diec-rules",
-    "diec-engine",
-    "diec-output",
-    "diec-cli",
-    "diec-ffi",
-    "diec-server",
+    "die-core",
+    "die-formats",
+    "die-rules",
+    "die-engine",
+    "die-output",
+    "die-cli",
+    "die-ffi",
+    "die-server",
     "die-gui",
 ];
 
@@ -42,35 +42,35 @@ const DEFAULT_COMMIT: &str = "8925358d2298957d758b6bba74c393b622322efc";
 /// violation.
 fn allowed_deps() -> BTreeMap<&'static str, BTreeSet<&'static str>> {
     let mut m: BTreeMap<&'static str, BTreeSet<&'static str>> = BTreeMap::new();
-    m.insert("diec-core", BTreeSet::new());
-    m.insert("diec-formats", ["diec-core"].into_iter().collect());
-    m.insert("diec-rules", ["diec-core"].into_iter().collect());
+    m.insert("die-core", BTreeSet::new());
+    m.insert("die-formats", ["die-core"].into_iter().collect());
+    m.insert("die-rules", ["die-core"].into_iter().collect());
     m.insert(
-        "diec-engine",
-        ["diec-core", "diec-formats", "diec-rules"]
+        "die-engine",
+        ["die-core", "die-formats", "die-rules"]
             .into_iter()
             .collect(),
     );
-    m.insert("diec-output", ["diec-core"].into_iter().collect());
+    m.insert("die-output", ["die-core"].into_iter().collect());
     m.insert(
-        "diec-cli",
-        ["diec-engine", "diec-output"].into_iter().collect(),
+        "die-cli",
+        ["die-engine", "die-output"].into_iter().collect(),
     );
     m.insert(
-        "diec-ffi",
-        ["diec-engine", "diec-output"].into_iter().collect(),
+        "die-ffi",
+        ["die-engine", "die-output"].into_iter().collect(),
     );
-    // diec-server is a thin adapter over diec-engine (ADR 0017).
-    // It does not depend on diec-cli or diec-ffi.
+    // die-server is a thin adapter over die-engine (ADR 0017).
+    // It does not depend on die-cli or die-ffi.
     m.insert(
-        "diec-server",
-        ["diec-engine", "diec-core"].into_iter().collect(),
+        "die-server",
+        ["die-engine", "die-core"].into_iter().collect(),
     );
-    // die-gui is a Tauri v2 adapter over diec-engine (ADR 0018).
-    // It does not depend on diec-cli, diec-ffi, or diec-server.
+    // die-gui is a Tauri v2 adapter over die-engine (ADR 0018).
+    // It does not depend on die-cli, die-ffi, or die-server.
     m.insert(
         "die-gui",
-        ["diec-engine", "diec-core", "diec-output"]
+        ["die-engine", "die-core", "die-output"]
             .into_iter()
             .collect(),
     );
@@ -157,7 +157,7 @@ fn check_deps() -> ExitCode {
         if let Some(arr) = p["dependencies"].as_array() {
             for d in arr {
                 if let Some(dname) = d["name"].as_str()
-                    && (dname.starts_with("diec-") || dname == "xtask")
+                    && (dname.starts_with("die-") || dname == "xtask")
                 {
                     deps.insert(dname.to_string());
                 }

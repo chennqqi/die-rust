@@ -1,0 +1,48 @@
+[package]
+name = "die-engine"
+description = "Scan orchestration, candidate selection, bounded nested queue and result aggregation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+die-core = { workspace = true }
+die-formats = { workspace = true }
+die-rules = { workspace = true }
+die-nfd = { workspace = true }
+md-5 = "0.10"
+md4 = "0.10"
+sha1 = "0.10"
+sha2 = "0.10"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+# Archive extraction libraries (ADR 0029/0030).
+zip = { version = ">=2.6,<10", default-features = false, features = ["deflate"] }
+sevenz-rust = "0.6"
+rars = "0.6"
+crc32fast = "1.5.1"
+# Extended hash set for `Hash#*` struct mode and GUI parity (Phase 17.C).
+sha3 = "0.10"
+blake2 = "0.10"
+blake3 = "1.8"
+adler2 = "2.0"
+crc = "3.4"
+cab = "0.6.0"
+bzip2-rs = "0.1.2"
+lzma-rs = { version = "0.3.0", features = ["raw_decoder"] }
+# Raw DEFLATE streams for the UPX unpacker (Phase 20).
+flate2 = "1.1"
+
+[dev-dependencies]
+criterion = { workspace = true }
+serde_json = "1.0.151"
+
+[lib]
+path = "src/lib.rs"
+
+[[bench]]
+name = "scan"
+harness = false

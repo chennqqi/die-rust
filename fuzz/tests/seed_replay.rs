@@ -16,8 +16,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use diec_core::input::{ByteRange, ByteSource, ByteView, MemorySource};
-use diec_formats::ProbeTable;
+use die_core::input::{ByteRange, ByteSource, ByteView, MemorySource};
+use die_formats::ProbeTable;
 
 // ---- corpus discovery ---------------------------------------------------
 
@@ -122,15 +122,15 @@ fn harness_format_probe(data: &[u8]) {
     for c in &candidates {
         assert_ne!(
             c.strength,
-            diec_core::format::FormatStrength::None,
+            die_core::format::FormatStrength::None,
             "candidate with None strength"
         );
     }
     for e in &errors {
         match e {
-            diec_formats::ProbeError::Truncated { .. }
-            | diec_formats::ProbeError::InvalidHeader { .. } => {}
-            diec_formats::ProbeError::Io(_) => {
+            die_formats::ProbeError::Truncated { .. }
+            | die_formats::ProbeError::InvalidHeader { .. } => {}
+            die_formats::ProbeError::Io(_) => {
                 panic!("MemorySource should not produce Io errors: {e:?}");
             }
         }
@@ -139,16 +139,16 @@ fn harness_format_probe(data: &[u8]) {
 
 fn harness_output_render(data: &[u8]) {
     if data.is_empty() {
-        let result = diec_engine::ScanResult {
+        let result = die_engine::ScanResult {
             path: "empty".to_string(),
             detections: vec![],
             diagnostics: vec![],
             structured_diagnostics: vec![],
             profiling: vec![],
         };
-        let json = diec_output::render_json(&result);
+        let json = die_output::render_json(&result);
         assert!(!json.is_empty(), "JSON output should be non-empty");
-        let _ = diec_output::render_text(&result);
+        let _ = die_output::render_text(&result);
         return;
     }
     let path = String::from_utf8_lossy(data).replace('\0', "_");
@@ -168,7 +168,7 @@ fn harness_output_render(data: &[u8]) {
         }
         let name = String::from_utf8_lossy(&data[offset..name_end]).to_string();
         let type_name = String::from_utf8_lossy(&data[name_end..type_end]).to_string();
-        detections.push(diec_engine::ScanDetection {
+        detections.push(die_engine::ScanDetection {
             file_type: "fuzz".to_string(),
             type_name: if type_name.is_empty() {
                 "unknown".to_string()
@@ -198,28 +198,28 @@ fn harness_output_render(data: &[u8]) {
             break;
         }
     }
-    let result = diec_engine::ScanResult {
+    let result = die_engine::ScanResult {
         path,
         detections,
         diagnostics: vec!["fuzz diagnostic".to_string()],
         structured_diagnostics: vec![],
         profiling: vec![],
     };
-    let json = diec_output::render_json(&result);
+    let json = die_output::render_json(&result);
     assert!(!json.is_empty(), "JSON output should be non-empty");
     let _ = serde_json::from_str::<serde_json::Value>(&json);
-    let _ = diec_output::render_text(&result);
-    let _ = diec_output::render_text_formatted(&result);
-    let _ = diec_output::render_xml(&result);
-    let _ = diec_output::render_csv(&result);
-    let _ = diec_output::render_tsv(&result);
+    let _ = die_output::render_text(&result);
+    let _ = die_output::render_text_formatted(&result);
+    let _ = die_output::render_xml(&result);
+    let _ = die_output::render_csv(&result);
+    let _ = die_output::render_tsv(&result);
 }
 
 // ---- scan engine + FFI database (loaded once) ---------------------------
 
-static DATABASE: OnceLock<Option<diec_engine::Database>> = OnceLock::new();
+static DATABASE: OnceLock<Option<die_engine::Database>> = OnceLock::new();
 
-fn get_database() -> Option<&'static diec_engine::Database> {
+fn get_database() -> Option<&'static die_engine::Database> {
     let opt = DATABASE.get_or_init(|| {
         let db_path = Path::new(FUZZ_DIR)
             .parent()
@@ -227,7 +227,7 @@ fn get_database() -> Option<&'static diec_engine::Database> {
             .map(|p| p.join("upstream/Detect-It-Easy/db"))
             .unwrap_or_else(|| PathBuf::from("upstream/Detect-It-Easy/db"));
         let s = db_path.to_str().unwrap_or("upstream/Detect-It-Easy/db");
-        match diec_engine::DatabaseBuilder::new(s).build() {
+        match die_engine::DatabaseBuilder::new(s).build() {
             Ok(db) => Some(db),
             Err(e) => {
                 eprintln!("seed_replay: cannot load database: {e}");
@@ -243,12 +243,12 @@ fn harness_scan_engine(data: &[u8]) {
         Some(db) => db,
         None => return,
     };
-    let cancel = diec_core::cancel::CancellationToken::new();
-    let result = diec_engine::scan_bytes(
+    let cancel = die_core::cancel::CancellationToken::new();
+    let result = die_engine::scan_bytes(
         db,
         "fuzz_input",
         data.to_vec(),
-        diec_engine::ScanFlags::default(),
+        die_engine::ScanFlags::default(),
         &cancel,
     );
     if let Ok(result) = result {
@@ -257,23 +257,23 @@ fn harness_scan_engine(data: &[u8]) {
             assert!(!d.name.is_empty(), "empty name in detection");
         }
     }
-    let flags = diec_engine::ScanFlags {
+    let flags = die_engine::ScanFlags {
         heuristic: true,
         ..Default::default()
     };
-    let _ = diec_engine::scan_bytes(db, "fuzz_input", data.to_vec(), flags, &cancel);
-    let flags = diec_engine::ScanFlags {
+    let _ = die_engine::scan_bytes(db, "fuzz_input", data.to_vec(), flags, &cancel);
+    let flags = die_engine::ScanFlags {
         all_types: true,
         ..Default::default()
     };
-    let _ = diec_engine::scan_bytes(db, "fuzz_input", data.to_vec(), flags, &cancel);
+    let _ = die_engine::scan_bytes(db, "fuzz_input", data.to_vec(), flags, &cancel);
 }
 
-// FFI handle types (re-exported by diec-ffi at crate root). Using the
+// FFI handle types (re-exported by die-ffi at crate root). Using the
 // typed handles instead of `*mut c_void` matches the real C ABI function
 // signatures and keeps the rlib member alive so the linker does not strip
 // the `#[no_mangle]` symbols.
-use diec_ffi::{
+use die_ffi::{
     diec_v1_database_builder_add_path_utf8, diec_v1_database_builder_build,
     diec_v1_database_builder_free, diec_v1_database_builder_new, diec_v1_error_free,
     diec_v1_result_free, diec_v1_scan_bytes, DiecDatabase, DiecDatabaseBuilder, DiecError,

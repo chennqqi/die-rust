@@ -11,16 +11,16 @@
 
 #![no_main]
 
-use diec_core::cancel::CancellationToken;
-use diec_engine::{scan_bytes, DatabaseBuilder, ScanFlags};
+use die_core::cancel::CancellationToken;
+use die_engine::{scan_bytes, DatabaseBuilder, ScanFlags};
 use libfuzzer_sys::fuzz_target;
 use std::sync::OnceLock;
 
 /// Load the database once and cache it across fuzz iterations.
-static DATABASE: OnceLock<Option<diec_engine::Database>> = OnceLock::new();
+static DATABASE: OnceLock<Option<die_engine::Database>> = OnceLock::new();
 
 /// Get the cached database, or None if it cannot be loaded.
-fn get_database() -> Option<&'static diec_engine::Database> {
+fn get_database() -> Option<&'static die_engine::Database> {
     let opt = DATABASE.get_or_init(|| {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let db_path = std::path::Path::new(manifest_dir)

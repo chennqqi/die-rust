@@ -1,12 +1,12 @@
 //! Tauri IPC commands for die-gui.
 //!
 //! These commands are the bridge between the React frontend and the
-//! `diec-engine` Rust backend. The frontend calls them via
+//! `die-engine` Rust backend. The frontend calls them via
 //! `invoke('command_name', { args })`.
 
 use crate::settings::AppSettings;
 use crate::state::AppState;
-use diec_engine::{ScanDetection, ScanError, ScanFlags, ScanResult, scan_bytes, scan_once};
+use die_engine::{ScanDetection, ScanError, ScanFlags, ScanResult, scan_bytes, scan_once};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
@@ -52,7 +52,7 @@ impl From<ScanError> for GuiError {
 
 /// Scan flags mirroring upstream `XScanEngine::SF_*` and `comboBoxFlags`.
 ///
-/// Field mapping to `diec-engine::ScanFlags`:
+/// Field mapping to `die-engine::ScanFlags`:
 /// - `deep`/`heuristic`/`verbose`/`aggressive`/`alltypes`/`hide_unknown`
 ///   map directly to `ScanFlags` struct fields.
 /// - `recursive`/`overlay`/`resources`/`archives`/`first_wrapper_only`
@@ -93,7 +93,7 @@ pub struct ScanFlagsDto {
     /// Optional archive extraction bounds override (ADR 0030); absent means
     /// the engine defaults.
     #[serde(default)]
-    pub archive_limits: Option<diec_engine::ArchiveLimits>,
+    pub archive_limits: Option<die_engine::ArchiveLimits>,
 }
 
 impl From<ScanFlagsDto> for ScanFlags {
@@ -1266,12 +1266,10 @@ pub async fn nfd_scan(
 ) -> Result<Vec<ScanDetectionDto>, GuiError> {
     let result = tokio::task::spawn_blocking(move || -> Result<Vec<ScanDetectionDto>, String> {
         let data = std::fs::read(&path).map_err(|e| e.to_string())?;
-        Ok(
-            diec_engine::nfd_scan(&data, &path, deep, heuristic, verbose)
-                .into_iter()
-                .map(ScanDetectionDto::from)
-                .collect(),
-        )
+        Ok(die_engine::nfd_scan(&data, &path, deep, heuristic, verbose)
+            .into_iter()
+            .map(ScanDetectionDto::from)
+            .collect())
     })
     .await
     .map_err(|e| GuiError::new("TASK_JOIN_FAILED", e.to_string()))?;
@@ -1496,7 +1494,7 @@ pub struct ArchiveResultDto {
 }
 
 /// List the contents of an archive file.
-/// ZIP/7Z/RAR go through `diec_engine::list_archive_members` (upstream
+/// ZIP/7Z/RAR go through `die_engine::list_archive_members` (upstream
 /// `XArchive::getRecords` equivalent); TAR/GZIP+TAR stay GUI-side.
 /// For unsupported formats, returns an error.
 #[tauri::command]
@@ -1506,7 +1504,7 @@ pub async fn list_archive(path: String) -> Result<ArchiveResultDto, GuiError> {
 
         // ZIP/7Z/RAR: engine metadata listing (upstream XArchive::getRecords).
         if let Some((kind, members)) =
-            diec_engine::list_archive_members(&data, &diec_engine::ArchiveLimits::default())
+            die_engine::list_archive_members(&data, &die_engine::ArchiveLimits::default())
         {
             let entries: Vec<ArchiveEntryDto> = members
                 .into_iter()
@@ -1653,7 +1651,7 @@ pub async fn compute_hash(
 
 /// Extract a single archive member by name to an output directory
 /// (upstream `XArchive::decompress(record)` equivalent). Supports
-/// ZIP/7Z/RAR via `diec_engine::extract_member`.
+/// ZIP/7Z/RAR via `die_engine::extract_member`.
 #[tauri::command]
 pub async fn extract_archive_member(
     path: String,
@@ -1662,11 +1660,8 @@ pub async fn extract_archive_member(
 ) -> Result<String, GuiError> {
     let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
         let data = std::fs::read(&path).map_err(|e| e.to_string())?;
-        let bytes = diec_engine::extract_member(
-            &data,
-            &member_name,
-            &diec_engine::ArchiveLimits::default(),
-        );
+        let bytes =
+            die_engine::extract_member(&data, &member_name, &die_engine::ArchiveLimits::default());
         if bytes.is_empty() {
             return Err(format!("Member '{}' not found or empty.", member_name));
         }
@@ -1718,7 +1713,7 @@ pub struct UpxInfoDto {
 pub async fn detect_upx(path: String) -> Result<Option<UpxInfoDto>, GuiError> {
     tokio::task::spawn_blocking(move || {
         let data = std::fs::read(&path).map_err(|e| GuiError::new("READ_ERROR", e.to_string()))?;
-        Ok(diec_engine::detect_upx(&data).map(|info| UpxInfoDto {
+        Ok(die_engine::detect_upx(&data).map(|info| UpxInfoDto {
             version: info.version,
             format: info.format,
             method_name: info.method_name(),
@@ -1750,7 +1745,7 @@ pub struct PackedInfoDto {
 pub async fn detect_packer(path: String) -> Result<Option<PackedInfoDto>, GuiError> {
     tokio::task::spawn_blocking(move || {
         let data = std::fs::read(&path).map_err(|e| GuiError::new("READ_ERROR", e.to_string()))?;
-        Ok(diec_engine::detect_packed(&data).map(|info| PackedInfoDto {
+        Ok(die_engine::detect_packed(&data).map(|info| PackedInfoDto {
             kind: format!("{:?}", info.kind).to_lowercase(),
             name: info.name.to_string(),
             version: info.version,
@@ -1767,7 +1762,7 @@ pub async fn detect_packer(path: String) -> Result<Option<PackedInfoDto>, GuiErr
 pub async fn unpack_file(path: String, output_path: Option<String>) -> Result<String, GuiError> {
     tokio::task::spawn_blocking(move || {
         let data = std::fs::read(&path).map_err(|e| GuiError::new("READ_ERROR", e.to_string()))?;
-        let out = diec_engine::unpack_static(&data)
+        let out = die_engine::unpack_static(&data)
             .map_err(|e| GuiError::new("UNPACK_ERROR", e.to_string()))?;
         let out_path = output_path.unwrap_or_else(|| format!("{path}.unpacked"));
         std::fs::write(&out_path, &out).map_err(|e| GuiError::new("WRITE_ERROR", e.to_string()))?;
@@ -2234,8 +2229,8 @@ pub async fn virustotal_query(
 
 /// A serializable struct node tree for the `--struct` GUI mode.
 ///
-/// Mirrors `diec_engine::StructNode` but with serde derives for IPC.
-pub type StructNodeDto = diec_engine::struct_mode::StructNode;
+/// Mirrors `die_engine::StructNode` but with serde derives for IPC.
+pub type StructNodeDto = die_engine::struct_mode::StructNode;
 
 /// Evaluate a `--struct` selector on a file and return the structured result.
 ///
@@ -2246,7 +2241,7 @@ pub async fn evaluate_struct(
     path: String,
     selector: String,
 ) -> Result<Option<StructNodeDto>, GuiError> {
-    let parsed = diec_engine::struct_mode::StructSelector::parse(&selector).ok_or_else(|| {
+    let parsed = die_engine::struct_mode::StructSelector::parse(&selector).ok_or_else(|| {
         GuiError::new(
             "INVALID_SELECTOR",
             format!("Cannot parse selector: {selector}"),
@@ -2255,7 +2250,7 @@ pub async fn evaluate_struct(
 
     let result = tokio::task::spawn_blocking(move || {
         let data = std::fs::read(&path).map_err(|e| e.to_string())?;
-        Ok::<_, String>(diec_engine::struct_mode::evaluate_struct_default(
+        Ok::<_, String>(die_engine::struct_mode::evaluate_struct_default(
             &parsed, &path, &data,
         ))
     })
@@ -2272,7 +2267,7 @@ pub async fn evaluate_struct(
 /// format-specific method names.
 #[tauri::command]
 pub async fn list_struct_methods() -> Vec<String> {
-    let mut methods: Vec<String> = diec_engine::struct_mode::general_method_names()
+    let mut methods: Vec<String> = die_engine::struct_mode::general_method_names()
         .iter()
         .map(|s| s.to_string())
         .collect();
@@ -2300,7 +2295,7 @@ pub async fn list_struct_methods() -> Vec<String> {
 pub async fn get_entropy_info(path: String) -> Result<EntropyInfoDto, GuiError> {
     let result = tokio::task::spawn_blocking(move || {
         let data = std::fs::read(&path).map_err(|e| e.to_string())?;
-        let entropy = diec_engine::struct_mode::shannon_entropy(&data);
+        let entropy = die_engine::struct_mode::shannon_entropy(&data);
         Ok::<_, String>(EntropyInfoDto {
             file_size: data.len() as u64,
             entropy,

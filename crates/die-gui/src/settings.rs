@@ -99,7 +99,7 @@ pub struct ScanFlagDefaults {
     /// Optional archive extraction bounds override (ADR 0030). Absent or
     /// partially-filled fields fall back to the engine defaults.
     #[serde(default)]
-    pub archive_limits: Option<diec_engine::ArchiveLimits>,
+    pub archive_limits: Option<die_engine::ArchiveLimits>,
 }
 
 /// Database path settings (upstream `XOptions::ID_SCAN_DIE_DATABASE_*`).

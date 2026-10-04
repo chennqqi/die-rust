@@ -1,0 +1,12 @@
+[package]
+name = "die-core"
+description = "Checked input, public value model, errors, limits, cancellation and result arena for diec-rust."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+path = "src/lib.rs"

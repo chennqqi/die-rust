@@ -1,0 +1,18 @@
+[package]
+name = "die-ffi"
+description = "Stable C ABI: opaque handles, panic containment and lifetime management."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+die-core = { workspace = true }
+die-engine = { workspace = true }
+die-output = { workspace = true }
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+path = "src/lib.rs"

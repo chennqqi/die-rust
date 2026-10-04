@@ -5,7 +5,7 @@
 
 #![no_main]
 
-use diec_core::input::{ByteSource, MemorySource};
+use die_core::input::{ByteSource, MemorySource};
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {

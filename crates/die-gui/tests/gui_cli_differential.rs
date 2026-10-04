@@ -1,7 +1,7 @@
 //! GUI vs CLI differential test.
 //!
-//! Verifies that the die-gui scan path (which calls `diec_engine::scan_once`)
-//! produces identical results to the CLI scan path (`diec_engine::scan_bytes`).
+//! Verifies that the die-gui scan path (which calls `die_engine::scan_once`)
+//! produces identical results to the CLI scan path (`die_engine::scan_bytes`).
 //!
 //! Both paths use the same underlying engine, but this test guards against
 //! accidental divergence if the GUI ever introduces its own scanning logic
@@ -11,8 +11,8 @@
 
 #![forbid(unsafe_code)]
 
-use diec_core::cancel::CancellationToken;
-use diec_engine::{DatabaseBuilder, ScanFlags, scan_bytes, scan_once};
+use die_core::cancel::CancellationToken;
+use die_engine::{DatabaseBuilder, ScanFlags, scan_bytes, scan_once};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -54,7 +54,7 @@ fn corpus_files() -> Vec<PathBuf> {
 }
 
 /// Compare two detection lists by (type_name, name) pairs, ignoring order.
-fn detections_match(a: &[diec_engine::ScanDetection], b: &[diec_engine::ScanDetection]) -> bool {
+fn detections_match(a: &[die_engine::ScanDetection], b: &[die_engine::ScanDetection]) -> bool {
     let mut a_sorted: Vec<(String, String)> = a
         .iter()
         .map(|d| (d.type_name.clone(), d.name.clone()))

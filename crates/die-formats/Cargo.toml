@@ -1,0 +1,22 @@
+[package]
+name = "die-formats"
+description = "Format probing and safe parsing, returning format facts via checked input."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+die-core = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[lib]
+path = "src/lib.rs"
+
+[[bench]]
+name = "probe"
+harness = false

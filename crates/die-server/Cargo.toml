@@ -1,0 +1,60 @@
+[package]
+name = "die-server"
+description = "HTTP/JSON scan service layer for diec (ADR 0017)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "died"
+path = "src/main.rs"
+
+[dependencies]
+die-engine = { workspace = true }
+die-core = { workspace = true }
+axum = "0.8.8"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["limit"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "0.8.1"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+serde_json = "1"
+
+# ---------------------------------------------------------------------------
+# DEB packaging (cargo-deb)
+# ---------------------------------------------------------------------------
+# Build with: cargo deb --package die-server
+# Requires:   cargo install cargo-deb
+# Output:     target/debian/died_<version>_<arch>.deb
+[package.metadata.deb]
+name = "died"
+maintainer = "diec-rust maintainers"
+section = "utils"
+priority = "optional"
+extended-description = """\
+died (die daemon) is the HTTP/JSON scan service for diec (Detect It Easy).
+It provides a REST API for local and remote file identification, reusing
+the rule database across requests to avoid repeated loading overhead."""
+depends = "$auto"
+assets = [
+    ["target/release/died", "usr/bin/died", "755"],
+    ["../../README.md", "usr/share/doc/died/README.md", "644"],
+    ["../../LICENSE", "usr/share/doc/died/LICENSE", "644"],
+]
+
+# systemd unit integration for DEB packages
+[package.metadata.deb.systemd-units]
+unit-name = "died"
+unit-scripts = "packaging/"
+enable = true
+start = true
+restart-after-upgrade = true
