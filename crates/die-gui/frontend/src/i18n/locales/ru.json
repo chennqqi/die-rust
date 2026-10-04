@@ -238,7 +238,13 @@
     "updateInstall": "Download & Install",
     "updateInstalling": "Installing update...",
     "updateNone": "You are running the latest version.",
-    "viewOptions": "Параметры просмотра"
+    "viewOptions": "Параметры просмотра",
+    "archiveLimits": "Archive Limits",
+    "archiveMaxMember": "Member bytes",
+    "archiveMaxTotal": "Total bytes",
+    "archiveMaxRatio": "Max ratio",
+    "archiveMaxMembers": "Max members",
+    "archiveLimitDefault": "default"
   },
   "sigBrowser": {
     "debug": "Отладка",

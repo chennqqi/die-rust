@@ -136,6 +136,18 @@ interface GuiError {
   message: string;
 }
 
+/** Archive extraction bounds override (ADR 0030); absent fields use engine defaults. */
+interface ArchiveLimitsDto {
+  members_normal?: number;
+  members_aggressive?: number;
+  single_member_bytes?: number;
+  total_decompressed_bytes?: number;
+  compression_ratio?: number;
+  member_names?: number;
+  member_string_bytes?: number;
+  iso_max_depth?: number;
+}
+
 interface ScanFlagsDto {
   recursive: boolean;
   deep: boolean;
@@ -153,6 +165,8 @@ interface ScanFlagsDto {
   nfd?: boolean;
   /** Optional file type override. When set, only rules for this type are run. */
   file_type?: string | null;
+  /** Optional archive extraction bounds (ADR 0030). */
+  archive_limits?: ArchiveLimitsDto | null;
 }
 
 interface AppSettings {
@@ -946,15 +960,53 @@ export default function App() {
         >
           <div className="text-xs font-medium text-fg-secondary">{t("settings.scanFlags")}</div>
           <div className="grid grid-cols-4 gap-1.5 text-xs">
-            {(Object.keys(flags) as (keyof ScanFlagsDto)[]).map((key) => (
-              <label key={key} className="flex items-center gap-1.5 cursor-pointer hover:text-fg-primary">
+            {(Object.keys(flags) as (keyof ScanFlagsDto)[])
+              .filter((key) => typeof flags[key] === "boolean")
+              .map((key) => (
+                <label key={key} className="flex items-center gap-1.5 cursor-pointer hover:text-fg-primary">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(flags[key])}
+                    onChange={(e) => setFlags({ ...flags, [key]: e.target.checked })}
+                    className="accent-blue-500"
+                  />
+                  {key}
+                </label>
+              ))}
+          </div>
+          <div className="text-xs font-medium text-fg-secondary">{t("settings.archiveLimits")}</div>
+          <div className="grid grid-cols-4 gap-1.5 text-xs">
+            {(
+              [
+                ["single_member_bytes", "settings.archiveMaxMember"],
+                ["total_decompressed_bytes", "settings.archiveMaxTotal"],
+                ["compression_ratio", "settings.archiveMaxRatio"],
+                ["members_normal", "settings.archiveMaxMembers"],
+              ] as [keyof ArchiveLimitsDto, string][]
+            ).map(([field, labelKey]) => (
+              <label key={field} className="flex items-center gap-1.5" title={field}>
+                <span className="text-fg-muted whitespace-nowrap">{t(labelKey)}</span>
                 <input
-                  type="checkbox"
-                  checked={Boolean(flags[key])}
-                  onChange={(e) => setFlags({ ...flags, [key]: e.target.checked })}
-                  className="accent-blue-500"
+                  type="number"
+                  min={0}
+                  className="input py-0.5 px-1.5 w-full"
+                  value={flags.archive_limits?.[field] ?? ""}
+                  placeholder={t("settings.archiveLimitDefault")}
+                  onChange={(e) => {
+                    const limits = { ...(flags.archive_limits ?? {}) };
+                    if (e.target.value === "") {
+                      delete limits[field];
+                    } else {
+                      const v = Number(e.target.value);
+                      if (!Number.isFinite(v) || v < 0) return;
+                      limits[field] = v;
+                    }
+                    setFlags({
+                      ...flags,
+                      archive_limits: Object.keys(limits).length ? limits : null,
+                    });
+                  }}
                 />
-                {key}
               </label>
             ))}
           </div>

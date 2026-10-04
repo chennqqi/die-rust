@@ -21,7 +21,9 @@ mod scanner;
 pub mod struct_mode;
 pub mod unpack;
 
-pub use archive_unpack::{ArchiveKind, ArchiveMemberInfo, extract_member, list_archive_members};
+pub use archive_unpack::{
+    ArchiveKind, ArchiveLimits, ArchiveMemberInfo, extract_member, list_archive_members,
+};
 pub use database::{Database, DatabaseBuilder, DatabaseError, DatabaseVersion};
 pub use host::{BufferHost, ScanFlags};
 pub use scanner::{ScanDetection, ScanError, ScanResult, Scanner, nfd_scan, scan_bytes, scan_once};

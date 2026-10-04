@@ -42,7 +42,11 @@ fn print_usage() {
     eprintln!("  --recursive-dir, -R       Recursively scan directories");
     eprintln!(
         "  --archives                Extract and scan archive members (ZIP/7Z/RAR/CAB/ISO9660)
-  --nfd                     Also run the NFD/SpecAbstract engine (records tagged engine=nfd)"
+  --nfd                     Also run the NFD/SpecAbstract engine (records tagged engine=nfd)
+  --archive-max-member <n>  Per-member decompressed cap in bytes, K/M/G suffix ok
+  --archive-max-total <n>   Total decompressed cap across members
+  --archive-max-ratio <n>   Per-member max compression ratio
+  --archive-max-members <n> Member count cap (normal and aggressive modes)"
     );
     eprintln!("  --deepscan, -d            Enable deep scan mode");
     eprintln!("  --heuristicscan           Enable heuristic scan mode");
@@ -132,6 +136,28 @@ fn compute_entropy(data: &[u8]) -> f64 {
     entropy
 }
 
+/// Parse a numeric CLI argument with an optional `K`/`M`/`G` suffix
+/// (KiB/MiB/GiB). Exits with a usage error on malformed input.
+fn parse_size_arg(args: &[String], i: usize) -> u64 {
+    let raw = args.get(i).unwrap_or_else(|| {
+        eprintln!("missing value for {}", args[i - 1]);
+        std::process::exit(2);
+    });
+    let (digits, mult) = match raw.as_bytes().last() {
+        Some(b'K') | Some(b'k') => (&raw[..raw.len() - 1], 1u64 << 10),
+        Some(b'M') | Some(b'm') => (&raw[..raw.len() - 1], 1u64 << 20),
+        Some(b'G') | Some(b'g') => (&raw[..raw.len() - 1], 1u64 << 30),
+        _ => (raw.as_str(), 1u64),
+    };
+    match digits.parse::<u64>().ok().and_then(|v| v.checked_mul(mult)) {
+        Some(v) => v,
+        None => {
+            eprintln!("invalid numeric value: {raw}");
+            std::process::exit(2);
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
 
@@ -175,6 +201,25 @@ fn main() -> ExitCode {
             // --archives: extract and scan archive members (ZIP/7Z/RAR).
             "--archives" => {
                 flags.archives = true;
+            }
+            // Archive extraction safety bounds (ADR 0030). Each accepts a
+            // plain integer; byte sizes may use a K/M/G suffix.
+            "--archive-max-member" => {
+                i += 1;
+                flags.archive_limits.single_member_bytes = parse_size_arg(&args, i);
+            }
+            "--archive-max-total" => {
+                i += 1;
+                flags.archive_limits.total_decompressed_bytes = parse_size_arg(&args, i);
+            }
+            "--archive-max-ratio" => {
+                i += 1;
+                flags.archive_limits.compression_ratio = parse_size_arg(&args, i);
+            }
+            "--archive-max-members" => {
+                i += 1;
+                flags.archive_limits.members_normal = parse_size_arg(&args, i) as usize;
+                flags.archive_limits.members_aggressive = flags.archive_limits.members_normal;
             }
             // --nfd: also run the NFD/SpecAbstract table engine as a second
             // scan pass (results tagged engine="nfd").

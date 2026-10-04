@@ -13,20 +13,58 @@ use std::cell::RefCell;
 use std::io::Write;
 use std::rc::Rc;
 
-/// Maximum number of archive members to extract in normal mode.
-const MAX_MEMBERS_NORMAL: usize = 20;
+/// Safety bounds for archive/container extraction (ADR 0030).
+///
+/// Upstream DIE has no size/ratio limits; these fail-closed bounds are a
+/// deliberate hardening. `Default` reproduces the historical constants;
+/// hosts may tune them per scan (`ScanFlags::archive_limits`), per CLI
+/// flag, or per GUI setting. Limits apply to decompressed output only —
+/// detection heuristics (e.g. `is_lzma`) keep the default bound.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct ArchiveLimits {
+    /// Maximum members to extract in normal mode.
+    pub members_normal: usize,
+    /// Maximum members to extract in aggressive mode.
+    pub members_aggressive: usize,
+    /// Maximum decompressed size of a single member.
+    pub single_member_bytes: u64,
+    /// Maximum total decompressed bytes across all members.
+    pub total_decompressed_bytes: u64,
+    /// Maximum uncompressed:compressed ratio per member.
+    pub compression_ratio: u64,
+    /// Maximum members enumerated by metadata-only listing APIs.
+    pub member_names: usize,
+    /// Maximum bytes decompressed for a single member read by the
+    /// record-level APIs (`zip_member_string` etc.).
+    pub member_string_bytes: u64,
+    /// Maximum ISO9660 directory recursion depth.
+    pub iso_max_depth: usize,
+}
 
-/// Maximum number of archive members to extract in aggressive mode.
-const MAX_MEMBERS_AGGRESSIVE: usize = 100000;
+impl Default for ArchiveLimits {
+    fn default() -> Self {
+        Self {
+            members_normal: 20,
+            members_aggressive: 100000,
+            single_member_bytes: 128 * 1024 * 1024,
+            total_decompressed_bytes: 512 * 1024 * 1024,
+            compression_ratio: 100,
+            member_names: 65536,
+            member_string_bytes: 16 * 1024 * 1024,
+            iso_max_depth: 8,
+        }
+    }
+}
 
-/// Maximum single-member decompressed size (128 MiB, ADR 0030).
-const MAX_SINGLE_MEMBER_BYTES: u64 = 128 * 1024 * 1024;
-
-/// Maximum total decompressed bytes across all members (512 MiB, ADR 0030).
-const MAX_TOTAL_DECOMPRESSED_BYTES: u64 = 512 * 1024 * 1024;
-
-/// Maximum compression ratio (100:1, ADR 0030).
-const MAX_COMPRESSION_RATIO: u64 = 100;
+/// Member cap selected by scan mode.
+fn max_members(flags: &ScanFlags) -> usize {
+    if flags.aggressive {
+        flags.archive_limits.members_aggressive
+    } else {
+        flags.archive_limits.members_normal
+    }
+}
 
 /// An extracted archive member.
 #[derive(Debug, Clone)]
@@ -94,14 +132,11 @@ pub fn is_lzma(data: &[u8]) -> bool {
         return false;
     }
     let unpacked = u64::from_le_bytes(data[5..13].try_into().unwrap());
-    unpacked == u64::MAX || unpacked <= MAX_SINGLE_MEMBER_BYTES
+    unpacked == u64::MAX || unpacked <= ArchiveLimits::default().single_member_bytes
 }
 
 /// ISO9660 logical sector size in bytes.
 const ISO_SECTOR: usize = 2048;
-
-/// Maximum directory depth for the ISO9660 tree walk.
-const ISO_MAX_DEPTH: usize = 8;
 
 /// Check if data is an ISO9660 image (primary volume descriptor `CD001`).
 ///
@@ -117,12 +152,7 @@ pub fn is_iso9660(data: &[u8]) -> bool {
 /// Returns a list of extracted members. Returns empty vector on error or
 /// if safety bounds are exceeded.
 pub fn extract_zip(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
-    let max_members = if flags.aggressive {
-        MAX_MEMBERS_AGGRESSIVE
-    } else {
-        MAX_MEMBERS_NORMAL
-    };
-
+    let limits = &flags.archive_limits;
     let cursor = std::io::Cursor::new(data);
     let mut archive = match zip::ZipArchive::new(cursor) {
         Ok(a) => a,
@@ -132,7 +162,7 @@ pub fn extract_zip(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
     let mut members = Vec::new();
     let mut total_decompressed: u64 = 0;
 
-    for i in 0..archive.len().min(max_members) {
+    for i in 0..archive.len().min(max_members(flags)) {
         let mut file = match archive.by_index(i) {
             Ok(f) => f,
             Err(_) => continue,
@@ -148,24 +178,25 @@ pub fn extract_zip(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
         let uncompressed_size = file.size();
 
         // Safety check: single-member size limit.
-        if uncompressed_size > MAX_SINGLE_MEMBER_BYTES {
+        if uncompressed_size > limits.single_member_bytes {
             continue;
         }
 
         // Safety check: compression ratio limit.
         if let Some(ratio) = uncompressed_size.checked_div(compressed_size)
-            && ratio > MAX_COMPRESSION_RATIO
+            && ratio > limits.compression_ratio
         {
             continue;
         }
 
         // Safety check: total decompressed bytes limit.
-        if total_decompressed + uncompressed_size > MAX_TOTAL_DECOMPRESSED_BYTES {
+        if total_decompressed + uncompressed_size > limits.total_decompressed_bytes {
             break;
         }
 
         // Extract member data.
-        let mut buf = Vec::with_capacity(uncompressed_size.min(MAX_SINGLE_MEMBER_BYTES) as usize);
+        let mut buf =
+            Vec::with_capacity(uncompressed_size.min(limits.single_member_bytes) as usize);
         if std::io::Read::read_to_end(&mut file, &mut buf).is_err() {
             continue;
         }
@@ -177,22 +208,12 @@ pub fn extract_zip(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
     members
 }
 
-/// Maximum members enumerated by `zip_member_names` (central directory is
-/// cheap to walk; cap only guards against malicious huge archives).
-const MAX_MEMBER_NAMES: usize = 65536;
-
-/// Maximum bytes decompressed for a single member read by
-/// `zip_member_string` (16 MiB — manifests and manifests-like records are
-/// small; larger members are truncated, matching upstream's unbounded read
-/// is not acceptable for untrusted input).
-const MAX_MEMBER_STRING_BYTES: u64 = 16 * 1024 * 1024;
-
 /// List ZIP member file names without decompressing member contents.
 ///
 /// Mirrors upstream `XArchive::getRecords` name enumeration for ZIP-family
 /// archives (ZIP/JAR/APK). Returns an empty vector for non-ZIP input or
-/// parse failure.
-pub fn zip_member_names(data: &[u8]) -> Vec<String> {
+/// parse failure. `limits.member_names` caps the enumeration.
+pub fn zip_member_names(data: &[u8], limits: &ArchiveLimits) -> Vec<String> {
     if !is_zip(data) {
         return Vec::new();
     }
@@ -203,17 +224,17 @@ pub fn zip_member_names(data: &[u8]) -> Vec<String> {
     };
     archive
         .file_names()
-        .take(MAX_MEMBER_NAMES)
+        .take(limits.member_names)
         .map(|s| s.to_string())
         .collect()
 }
 
 /// Decompress a single ZIP member by exact name and return raw bytes,
-/// bounded to `MAX_MEMBER_STRING_BYTES`.
+/// bounded to `limits.member_string_bytes`.
 ///
 /// Mirrors upstream `XArchive::decompress(record)`. Returns an empty
 /// vector when the member is absent or undecodable.
-pub fn zip_member_bytes(data: &[u8], name: &str) -> Vec<u8> {
+pub fn zip_member_bytes(data: &[u8], name: &str, limits: &ArchiveLimits) -> Vec<u8> {
     if !is_zip(data) || name.is_empty() {
         return Vec::new();
     }
@@ -226,7 +247,7 @@ pub fn zip_member_bytes(data: &[u8], name: &str) -> Vec<u8> {
         Ok(f) => f,
         Err(_) => return Vec::new(),
     };
-    if file.is_dir() || file.size() > MAX_MEMBER_STRING_BYTES {
+    if file.is_dir() || file.size() > limits.member_string_bytes {
         return Vec::new();
     }
     let mut buf = Vec::with_capacity(file.size() as usize);
@@ -237,13 +258,13 @@ pub fn zip_member_bytes(data: &[u8], name: &str) -> Vec<u8> {
 }
 
 /// Decompress a single ZIP member by exact name and return it as a
-/// lossy-UTF8 string, bounded to `MAX_MEMBER_STRING_BYTES`.
+/// lossy-UTF8 string, bounded to `limits.member_string_bytes`.
 ///
 /// Mirrors upstream `XArchive::decompress(record)` for text records such as
 /// `META-INF/MANIFEST.MF` (JAR/APK) and `package/package.json` (NPM).
 /// Returns an empty string when the member is absent or undecodable.
-pub fn zip_member_string(data: &[u8], name: &str) -> String {
-    String::from_utf8_lossy(&zip_member_bytes(data, name)).into_owned()
+pub fn zip_member_string(data: &[u8], name: &str, limits: &ArchiveLimits) -> String {
+    String::from_utf8_lossy(&zip_member_bytes(data, name, limits)).into_owned()
 }
 
 /// Extract members from a 7Z archive with safety bounds (ADR 0030).
@@ -251,11 +272,8 @@ pub fn zip_member_string(data: &[u8], name: &str) -> String {
 /// Uses a temporary directory for extraction since sevenz-rust requires
 /// a filesystem path. Members are read back into memory.
 pub fn extract_7z(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
-    let max_members = if flags.aggressive {
-        MAX_MEMBERS_AGGRESSIVE
-    } else {
-        MAX_MEMBERS_NORMAL
-    };
+    let limits = &flags.archive_limits;
+    let max_members = max_members(flags);
 
     // Create a temporary directory for extraction.
     let temp_dir = std::env::temp_dir().join(format!("diec_7z_{}", std::process::id()));
@@ -287,13 +305,13 @@ pub fn extract_7z(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
             let uncompressed_size = entry.size();
 
             // Safety check: single-member size limit.
-            if uncompressed_size > MAX_SINGLE_MEMBER_BYTES {
+            if uncompressed_size > limits.single_member_bytes {
                 member_count += 1;
                 return Ok(true);
             }
 
             // Safety check: total decompressed bytes limit.
-            if total_decompressed > MAX_TOTAL_DECOMPRESSED_BYTES {
+            if total_decompressed > limits.total_decompressed_bytes {
                 stop = true;
                 return Ok(false);
             }
@@ -323,11 +341,8 @@ pub fn extract_7z(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
 
 /// Extract members from a RAR archive with safety bounds (ADR 0030).
 pub fn extract_rar(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
-    let max_members = if flags.aggressive {
-        MAX_MEMBERS_AGGRESSIVE
-    } else {
-        MAX_MEMBERS_NORMAL
-    };
+    let limits = &flags.archive_limits;
+    let max_members = max_members(flags);
 
     let archive = match rars::ArchiveReader::read(data) {
         Ok(a) => a,
@@ -361,7 +376,7 @@ pub fn extract_rar(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
         *count_clone.borrow_mut() += 1;
 
         // Safety check: total decompressed bytes limit.
-        if *total_clone.borrow() > MAX_TOTAL_DECOMPRESSED_BYTES {
+        if *total_clone.borrow() > limits.total_decompressed_bytes {
             *stop_clone.borrow_mut() = true;
             return Err(rars::Error::from(std::io::Error::other(
                 "total limit reached",
@@ -373,6 +388,7 @@ pub fn extract_rar(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
             buf: Vec::new(),
             members: members_clone.clone(),
             total: total_clone.clone(),
+            limit: limits.single_member_bytes,
         }))
     });
 
@@ -385,12 +401,13 @@ struct MemberWriter {
     buf: Vec<u8>,
     members: Rc<RefCell<Vec<ArchiveMember>>>,
     total: Rc<RefCell<u64>>,
+    limit: u64,
 }
 
 impl Write for MemberWriter {
     fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
         // Safety check: single-member size limit.
-        if (self.buf.len() + data.len()) as u64 > MAX_SINGLE_MEMBER_BYTES {
+        if (self.buf.len() + data.len()) as u64 > self.limit {
             return Err(std::io::Error::other("single member size limit exceeded"));
         }
         self.buf.extend_from_slice(data);
@@ -419,11 +436,7 @@ impl Drop for MemberWriter {
 /// Uses the pure-Rust `cab` crate (MSZIP/LZX/Quantum decompression).
 /// Returns empty vector on error or if safety bounds are exceeded.
 pub fn extract_cab(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
-    let max_members = if flags.aggressive {
-        MAX_MEMBERS_AGGRESSIVE
-    } else {
-        MAX_MEMBERS_NORMAL
-    };
+    let limits = &flags.archive_limits;
     let cursor = std::io::Cursor::new(data);
     let mut cabinet = match cab::Cabinet::new(cursor) {
         Ok(c) => c,
@@ -437,7 +450,7 @@ pub fn extract_cab(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
                 .map(|e| e.name().to_string())
                 .collect::<Vec<_>>()
         })
-        .take(max_members)
+        .take(max_members(flags))
         .collect();
     let mut members = Vec::new();
     let mut total: u64 = 0;
@@ -447,14 +460,14 @@ pub fn extract_cab(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
             Err(_) => continue,
         };
         let mut buf = Vec::new();
-        let mut take = std::io::Read::take(&mut reader, MAX_SINGLE_MEMBER_BYTES + 1);
+        let mut take = std::io::Read::take(&mut reader, limits.single_member_bytes + 1);
         if std::io::Read::read_to_end(&mut take, &mut buf).is_err()
-            || buf.len() as u64 > MAX_SINGLE_MEMBER_BYTES
+            || buf.len() as u64 > limits.single_member_bytes
         {
             continue;
         }
         total = total.saturating_add(buf.len() as u64);
-        if total > MAX_TOTAL_DECOMPRESSED_BYTES {
+        if total > limits.total_decompressed_bytes {
             break;
         }
         members.push(ArchiveMember { name, data: buf });
@@ -468,15 +481,11 @@ pub fn extract_cab(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
 /// listing APIs but no payload here. Multi-extent files are truncated to
 /// their first extent.
 pub fn extract_iso9660(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
-    let max_members = if flags.aggressive {
-        MAX_MEMBERS_AGGRESSIVE
-    } else {
-        MAX_MEMBERS_NORMAL
-    };
+    let limits = &flags.archive_limits;
     let mut members = Vec::new();
     let mut total: u64 = 0;
-    walk_iso9660(data, &mut |path, is_dir, lba, size| {
-        if is_dir || members.len() >= max_members || size > MAX_SINGLE_MEMBER_BYTES {
+    walk_iso9660(data, limits, &mut |path, is_dir, lba, size| {
+        if is_dir || members.len() >= max_members(flags) || size > limits.single_member_bytes {
             return;
         }
         let off = lba as usize * ISO_SECTOR;
@@ -485,7 +494,7 @@ pub fn extract_iso9660(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
             _ => return,
         };
         total = total.saturating_add(size);
-        if total > MAX_TOTAL_DECOMPRESSED_BYTES {
+        if total > limits.total_decompressed_bytes {
             return;
         }
         members.push(ArchiveMember {
@@ -501,9 +510,13 @@ pub fn extract_iso9660(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
 /// root directory (no leading slash).
 ///
 /// Returns `false` when the image has no valid primary volume descriptor.
-/// Stops descending at [`ISO_MAX_DEPTH`] and caps visited records at
-/// [`MAX_MEMBER_NAMES`]. Joliet/Rock Ridge names are not decoded.
-fn walk_iso9660(data: &[u8], visit: &mut dyn FnMut(&str, bool, u64, u64)) -> bool {
+/// Stops descending at `limits.iso_max_depth` and caps visited records at
+/// `limits.member_names`. Joliet/Rock Ridge names are not decoded.
+fn walk_iso9660(
+    data: &[u8],
+    limits: &ArchiveLimits,
+    visit: &mut dyn FnMut(&str, bool, u64, u64),
+) -> bool {
     if !is_iso9660(data) {
         return false;
     }
@@ -542,7 +555,7 @@ fn walk_iso9660(data: &[u8], visit: &mut dyn FnMut(&str, bool, u64, u64)) -> boo
                     continue;
                 }
                 visited += 1;
-                if visited > MAX_MEMBER_NAMES {
+                if visited > limits.member_names {
                     return true;
                 }
                 let child = if path.is_empty() {
@@ -551,7 +564,7 @@ fn walk_iso9660(data: &[u8], visit: &mut dyn FnMut(&str, bool, u64, u64)) -> boo
                     format!("{}/{}", path, rec.name)
                 };
                 visit(&child, rec.is_dir, rec.lba, rec.size);
-                if rec.is_dir && depth < ISO_MAX_DEPTH {
+                if rec.is_dir && depth < limits.iso_max_depth {
                     stack.push((rec.lba, rec.size, depth + 1, child));
                 }
             } else {
@@ -634,7 +647,7 @@ pub fn extract_archive(data: &[u8], flags: &ScanFlags) -> Vec<ArchiveMember> {
         extract_cab(data, flags)
     } else if is_iso9660(data) {
         extract_iso9660(data, flags)
-    } else if let Some(out) = decompress_stream(data) {
+    } else if let Some(out) = decompress_stream(data, &flags.archive_limits) {
         vec![ArchiveMember {
             name: "data".to_string(),
             data: out,
@@ -656,24 +669,24 @@ pub fn is_archive(data: &[u8]) -> bool {
         || is_lzma(data)
 }
 
-/// Decompress a BZ2/XZ/LZMA-Alone stream into `MAX_SINGLE_MEMBER_BYTES`.
+/// Decompress a BZ2/XZ/LZMA-Alone stream into `limits.single_member_bytes`.
 ///
 /// Returns `None` when the magic does not match or decompression fails.
 /// Output is capped; oversized payloads return `None` rather than a
 /// truncated stream so callers never emit silently-short data.
-fn decompress_stream(data: &[u8]) -> Option<Vec<u8>> {
+fn decompress_stream(data: &[u8], limits: &ArchiveLimits) -> Option<Vec<u8>> {
     if is_bz2(data) {
         let mut reader = bzip2_rs::DecoderReader::new(data);
         let mut buf = Vec::new();
-        let mut take = std::io::Read::take(&mut reader, MAX_SINGLE_MEMBER_BYTES + 1);
+        let mut take = std::io::Read::take(&mut reader, limits.single_member_bytes + 1);
         if std::io::Read::read_to_end(&mut take, &mut buf).is_err() {
             return None;
         }
-        return (buf.len() as u64 <= MAX_SINGLE_MEMBER_BYTES).then_some(buf);
+        return (buf.len() as u64 <= limits.single_member_bytes).then_some(buf);
     }
     if is_xz(data) || is_lzma(data) {
         let mut input = std::io::BufReader::new(data);
-        let mut output = CappedWriter::new(MAX_SINGLE_MEMBER_BYTES);
+        let mut output = CappedWriter::new(limits.single_member_bytes);
         let ok = if is_xz(data) {
             lzma_rs::xz_decompress(&mut input, &mut output)
         } else {
@@ -812,25 +825,28 @@ pub struct ArchiveMemberInfo {
 ///
 /// Mirrors upstream `XArchive::getRecords` name enumeration. Returns `None`
 /// for unsupported formats or unparseable archives. Member payloads are not
-/// decompressed; counts are capped at `MAX_MEMBER_NAMES`.
-pub fn list_archive_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
+/// decompressed; counts are capped at `limits.member_names`.
+pub fn list_archive_members(
+    data: &[u8],
+    limits: &ArchiveLimits,
+) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
     if is_zip(data) {
-        list_zip_members(data).map(|m| (ArchiveKind::Zip, m))
+        list_zip_members(data, limits).map(|m| (ArchiveKind::Zip, m))
     } else if is_7z(data) {
-        list_7z_members(data).map(|m| (ArchiveKind::SevenZ, m))
+        list_7z_members(data, limits).map(|m| (ArchiveKind::SevenZ, m))
     } else if is_rar(data) {
-        list_rar_members(data).map(|m| (ArchiveKind::Rar, m))
+        list_rar_members(data, limits).map(|m| (ArchiveKind::Rar, m))
     } else if is_cab(data) {
-        list_cab_members(data).map(|m| (ArchiveKind::Cab, m))
+        list_cab_members(data, limits).map(|m| (ArchiveKind::Cab, m))
     } else if is_iso9660(data) {
-        list_iso9660_members(data).map(|m| (ArchiveKind::Iso9660, m))
-    } else if let Some(m) = list_secondary_members(data) {
+        list_iso9660_members(data, limits).map(|m| (ArchiveKind::Iso9660, m))
+    } else if let Some(m) = list_secondary_members(data, limits) {
         // Phase 32 secondary formats (ARJ/LHA/CPIO/…): upstream
         // `XFormats` enumerates them but the nested-scan unpack gate
         // stays closed (ZIP/7Z/RAR/CAB/ISO9660 only), so these are
         // list/extract-only here, never part of `is_archive`.
         Some(m)
-    } else if let Some(m) = list_container_members(data) {
+    } else if let Some(m) = list_container_members(data, limits) {
         // Packer/protector containers (upstream XStaticUnpacker record
         // enumeration). These are NOT part of `is_archive`/`extract_archive`:
         // upstream only probes them under the opt-in
@@ -842,13 +858,16 @@ pub fn list_archive_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemb
         // container's MZ header can accidentally satisfy `is_lzma`.
         Some(m)
     } else {
-        list_stream_members(data)
+        list_stream_members(data, limits)
     }
 }
 
 /// List members of a Phase 32+ secondary archive
 /// (ARJ/LHA/ACE/CPIO/UDF/WIM).
-fn list_secondary_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
+fn list_secondary_members(
+    data: &[u8],
+    limits: &ArchiveLimits,
+) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
     let (kind, records) = crate::archive::list_secondary(data)?;
     let kind = match kind {
         crate::archive::SecondaryKind::Arj => ArchiveKind::Arj,
@@ -860,7 +879,7 @@ fn list_secondary_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMember
     };
     let members = records
         .into_iter()
-        .take(MAX_MEMBER_NAMES)
+        .take(limits.member_names)
         .map(|r| ArchiveMemberInfo {
             name: r.name,
             size: r.size,
@@ -878,11 +897,14 @@ fn list_secondary_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMember
 /// produced by the Phase 28 static unpackers; `packed_size` is reported as
 /// 0 because these formats do not expose a meaningful per-member packed
 /// size through the record API.
-fn list_container_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
+fn list_container_members(
+    data: &[u8],
+    limits: &ArchiveLimits,
+) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
     let (kind, records) = container_records(data)?;
     let members = records
         .iter()
-        .take(MAX_MEMBER_NAMES)
+        .take(limits.member_names)
         .map(|r| ArchiveMemberInfo {
             name: r.name.clone(),
             size: r.data.len() as u64,
@@ -926,7 +948,10 @@ fn container_records(data: &[u8]) -> Option<(ArchiveKind, Vec<crate::unpack::Con
 ///
 /// Single-stream formats carry no file table; the decompressed size is
 /// discovered by a bounded decode (mirrors upstream showing one record).
-fn list_stream_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
+fn list_stream_members(
+    data: &[u8],
+    limits: &ArchiveLimits,
+) -> Option<(ArchiveKind, Vec<ArchiveMemberInfo>)> {
     let kind = if is_bz2(data) {
         ArchiveKind::Bz2
     } else if is_xz(data) {
@@ -936,7 +961,7 @@ fn list_stream_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemberInf
     } else {
         return None;
     };
-    let out = decompress_stream(data)?;
+    let out = decompress_stream(data, limits)?;
     Some((
         kind,
         vec![ArchiveMemberInfo {
@@ -950,11 +975,11 @@ fn list_stream_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMemberInf
 }
 
 /// List ZIP members from the central directory (metadata only).
-fn list_zip_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
+fn list_zip_members(data: &[u8], limits: &ArchiveLimits) -> Option<Vec<ArchiveMemberInfo>> {
     let cursor = std::io::Cursor::new(data);
     let mut archive = zip::ZipArchive::new(cursor).ok()?;
-    let mut members = Vec::with_capacity(archive.len().min(MAX_MEMBER_NAMES));
-    for i in 0..archive.len().min(MAX_MEMBER_NAMES) {
+    let mut members = Vec::with_capacity(archive.len().min(limits.member_names));
+    for i in 0..archive.len().min(limits.member_names) {
         if let Ok(f) = archive.by_index(i) {
             members.push(ArchiveMemberInfo {
                 name: f.name().to_string(),
@@ -969,13 +994,13 @@ fn list_zip_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
 }
 
 /// List 7Z members by reading the archive header only.
-fn list_7z_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
+fn list_7z_members(data: &[u8], limits: &ArchiveLimits) -> Option<Vec<ArchiveMemberInfo>> {
     let mut cursor = std::io::Cursor::new(data);
     let archive = sevenz_rust::Archive::read(&mut cursor, data.len() as u64, &[] as &[u8]).ok()?;
     let members = archive
         .files
         .iter()
-        .take(MAX_MEMBER_NAMES)
+        .take(limits.member_names)
         .map(|e| ArchiveMemberInfo {
             name: e.name().to_string(),
             size: e.size(),
@@ -991,11 +1016,11 @@ fn list_7z_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
 }
 
 /// List RAR members via `rars` header metadata.
-fn list_rar_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
+fn list_rar_members(data: &[u8], limits: &ArchiveLimits) -> Option<Vec<ArchiveMemberInfo>> {
     let archive = rars::ArchiveReader::read(data).ok()?;
     let members = archive
         .members()
-        .take(MAX_MEMBER_NAMES)
+        .take(limits.member_names)
         .map(|m| {
             let meta = &m.meta;
             ArchiveMemberInfo {
@@ -1011,13 +1036,13 @@ fn list_rar_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
 }
 
 /// List CAB members from the file-entry tables (metadata only).
-fn list_cab_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
+fn list_cab_members(data: &[u8], limits: &ArchiveLimits) -> Option<Vec<ArchiveMemberInfo>> {
     let cursor = std::io::Cursor::new(data);
     let cabinet = cab::Cabinet::new(cursor).ok()?;
     let mut members = Vec::new();
     'outer: for folder in cabinet.folder_entries() {
         for file in folder.file_entries() {
-            if members.len() >= MAX_MEMBER_NAMES {
+            if members.len() >= limits.member_names {
                 break 'outer;
             }
             members.push(ArchiveMemberInfo {
@@ -1044,10 +1069,10 @@ fn list_cab_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
 }
 
 /// List ISO9660 members by walking the base-spec directory tree.
-fn list_iso9660_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
+fn list_iso9660_members(data: &[u8], limits: &ArchiveLimits) -> Option<Vec<ArchiveMemberInfo>> {
     let mut members = Vec::new();
-    if !walk_iso9660(data, &mut |path, is_dir, _lba, size| {
-        if members.len() < MAX_MEMBER_NAMES {
+    if !walk_iso9660(data, limits, &mut |path, is_dir, _lba, size| {
+        if members.len() < limits.member_names {
             members.push(ArchiveMemberInfo {
                 name: path.to_string(),
                 size,
@@ -1063,24 +1088,24 @@ fn list_iso9660_members(data: &[u8]) -> Option<Vec<ArchiveMemberInfo>> {
 }
 
 /// Extract a single member's bytes by exact name, bounded to
-/// `MAX_SINGLE_MEMBER_BYTES`.
+/// `limits.single_member_bytes`.
 ///
 /// Mirrors upstream `XArchive::decompress(record)` for GUI member extraction.
 /// Returns an empty vector when the member is absent or undecodable.
-pub fn extract_member(data: &[u8], name: &str) -> Vec<u8> {
+pub fn extract_member(data: &[u8], name: &str, limits: &ArchiveLimits) -> Vec<u8> {
     if name.is_empty() {
         return Vec::new();
     }
     if is_zip(data) {
-        extract_member_zip(data, name)
+        extract_member_zip(data, name, limits)
     } else if is_7z(data) {
-        extract_member_7z(data, name)
+        extract_member_7z(data, name, limits)
     } else if is_rar(data) {
-        extract_member_rar(data, name)
+        extract_member_rar(data, name, limits)
     } else if is_cab(data) {
-        extract_member_cab(data, name)
+        extract_member_cab(data, name, limits)
     } else if is_iso9660(data) {
-        extract_member_iso9660(data, name)
+        extract_member_iso9660(data, name, limits)
     } else if let Some((kind, _records)) = crate::archive::list_secondary(data) {
         // Secondary formats: stored members extract byte-exactly;
         // compressed members return empty until the decoder ships.
@@ -1096,15 +1121,15 @@ pub fn extract_member(data: &[u8], name: &str) -> Vec<u8> {
     } else {
         // Single-stream formats expose exactly one pseudo-member, `data`.
         if name == "data" {
-            decompress_stream(data).unwrap_or_default()
+            decompress_stream(data, limits).unwrap_or_default()
         } else {
             Vec::new()
         }
     }
 }
 
-/// Extract one ZIP member bounded to `MAX_SINGLE_MEMBER_BYTES`.
-fn extract_member_zip(data: &[u8], name: &str) -> Vec<u8> {
+/// Extract one ZIP member bounded to `limits.single_member_bytes`.
+fn extract_member_zip(data: &[u8], name: &str, limits: &ArchiveLimits) -> Vec<u8> {
     let cursor = std::io::Cursor::new(data);
     let mut archive = match zip::ZipArchive::new(cursor) {
         Ok(a) => a,
@@ -1114,7 +1139,7 @@ fn extract_member_zip(data: &[u8], name: &str) -> Vec<u8> {
         Ok(f) => f,
         Err(_) => return Vec::new(),
     };
-    if file.is_dir() || file.size() > MAX_SINGLE_MEMBER_BYTES {
+    if file.is_dir() || file.size() > limits.single_member_bytes {
         return Vec::new();
     }
     let mut buf = Vec::with_capacity(file.size() as usize);
@@ -1124,8 +1149,8 @@ fn extract_member_zip(data: &[u8], name: &str) -> Vec<u8> {
     buf
 }
 
-/// Extract one 7Z member bounded to `MAX_SINGLE_MEMBER_BYTES`.
-fn extract_member_7z(data: &[u8], name: &str) -> Vec<u8> {
+/// Extract one 7Z member bounded to `limits.single_member_bytes`.
+fn extract_member_7z(data: &[u8], name: &str, limits: &ArchiveLimits) -> Vec<u8> {
     let temp_dir = std::env::temp_dir().join(format!("diec_7z_member_{}", std::process::id()));
     if std::fs::create_dir_all(&temp_dir).is_err() {
         return Vec::new();
@@ -1141,7 +1166,7 @@ fn extract_member_7z(data: &[u8], name: &str) -> Vec<u8> {
                 return Ok(true);
             }
             let mut buf = Vec::new();
-            let mut take = std::io::Read::take(reader, MAX_SINGLE_MEMBER_BYTES);
+            let mut take = std::io::Read::take(reader, limits.single_member_bytes);
             if std::io::Read::read_to_end(&mut take, &mut buf).is_ok() {
                 *found_clone.borrow_mut() = buf;
             }
@@ -1153,8 +1178,8 @@ fn extract_member_7z(data: &[u8], name: &str) -> Vec<u8> {
     found.take()
 }
 
-/// Extract one RAR member bounded to `MAX_SINGLE_MEMBER_BYTES`.
-fn extract_member_rar(data: &[u8], name: &str) -> Vec<u8> {
+/// Extract one RAR member bounded to `limits.single_member_bytes`.
+fn extract_member_rar(data: &[u8], name: &str, limits: &ArchiveLimits) -> Vec<u8> {
     let archive = match rars::ArchiveReader::read(data) {
         Ok(a) => a,
         Err(_) => return Vec::new(),
@@ -1168,13 +1193,14 @@ fn extract_member_rar(data: &[u8], name: &str) -> Vec<u8> {
         Ok(Box::new(SingleMemberWriter {
             buf: Vec::new(),
             out: found_clone.clone(),
+            limit: limits.single_member_bytes,
         }) as Box<dyn Write>)
     });
     found.take()
 }
 
-/// Extract one CAB member bounded to `MAX_SINGLE_MEMBER_BYTES`.
-fn extract_member_cab(data: &[u8], name: &str) -> Vec<u8> {
+/// Extract one CAB member bounded to `limits.single_member_bytes`.
+fn extract_member_cab(data: &[u8], name: &str, limits: &ArchiveLimits) -> Vec<u8> {
     let cursor = std::io::Cursor::new(data);
     let mut cabinet = match cab::Cabinet::new(cursor) {
         Ok(c) => c,
@@ -1189,7 +1215,7 @@ fn extract_member_cab(data: &[u8], name: &str) -> Vec<u8> {
                 .map(|e| (e.name().to_string(), e.uncompressed_size()))
                 .collect::<Vec<_>>()
         })
-        .any(|(n, sz)| n == name && u64::from(sz) > MAX_SINGLE_MEMBER_BYTES);
+        .any(|(n, sz)| n == name && u64::from(sz) > limits.single_member_bytes);
     if oversized {
         return Vec::new();
     }
@@ -1198,21 +1224,21 @@ fn extract_member_cab(data: &[u8], name: &str) -> Vec<u8> {
         Err(_) => return Vec::new(),
     };
     let mut buf = Vec::new();
-    let mut take = std::io::Read::take(&mut reader, MAX_SINGLE_MEMBER_BYTES + 1);
+    let mut take = std::io::Read::take(&mut reader, limits.single_member_bytes + 1);
     if std::io::Read::read_to_end(&mut take, &mut buf).is_err()
-        || buf.len() as u64 > MAX_SINGLE_MEMBER_BYTES
+        || buf.len() as u64 > limits.single_member_bytes
     {
         return Vec::new();
     }
     buf
 }
 
-/// Extract one ISO9660 member bounded to `MAX_SINGLE_MEMBER_BYTES`.
-fn extract_member_iso9660(data: &[u8], name: &str) -> Vec<u8> {
+/// Extract one ISO9660 member bounded to `limits.single_member_bytes`.
+fn extract_member_iso9660(data: &[u8], name: &str, limits: &ArchiveLimits) -> Vec<u8> {
     let target = name.trim_matches('/');
     let mut found: Vec<u8> = Vec::new();
-    walk_iso9660(data, &mut |path, is_dir, lba, size| {
-        if !found.is_empty() || is_dir || path != target || size > MAX_SINGLE_MEMBER_BYTES {
+    walk_iso9660(data, limits, &mut |path, is_dir, lba, size| {
+        if !found.is_empty() || is_dir || path != target || size > limits.single_member_bytes {
             return;
         }
         let off = lba as usize * ISO_SECTOR;
@@ -1227,11 +1253,12 @@ fn extract_member_iso9660(data: &[u8], name: &str) -> Vec<u8> {
 struct SingleMemberWriter {
     buf: Vec<u8>,
     out: Rc<RefCell<Vec<u8>>>,
+    limit: u64,
 }
 
 impl Write for SingleMemberWriter {
     fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
-        if (self.buf.len() + data.len()) as u64 > MAX_SINGLE_MEMBER_BYTES {
+        if (self.buf.len() + data.len()) as u64 > self.limit {
             return Err(std::io::Error::other("single member size limit exceeded"));
         }
         self.buf.extend_from_slice(data);
@@ -1386,12 +1413,12 @@ mod tests {
 
     #[test]
     fn max_members_normal_is_20() {
-        assert_eq!(MAX_MEMBERS_NORMAL, 20);
+        assert_eq!(ArchiveLimits::default().members_normal, 20);
     }
 
     #[test]
     fn max_compression_ratio_is_100() {
-        assert_eq!(MAX_COMPRESSION_RATIO, 100);
+        assert_eq!(ArchiveLimits::default().compression_ratio, 100);
     }
 
     #[test]
@@ -1427,7 +1454,7 @@ mod tests {
     #[test]
     fn list_zip_members_roundtrip() {
         let data = make_test_zip();
-        let (kind, members) = list_archive_members(&data).unwrap();
+        let (kind, members) = list_archive_members(&data, &ArchiveLimits::default()).unwrap();
         assert_eq!(kind, ArchiveKind::Zip);
         assert!(members.iter().any(|m| m.name == "dir/hello.txt"));
         let file = members.iter().find(|m| m.name == "dir/hello.txt").unwrap();
@@ -1439,37 +1466,77 @@ mod tests {
     #[test]
     fn extract_member_zip_roundtrip() {
         let data = make_test_zip();
-        let bytes = extract_member(&data, "dir/hello.txt");
+        let bytes = extract_member(&data, "dir/hello.txt", &ArchiveLimits::default());
         assert_eq!(bytes, b"hello world");
-        assert!(extract_member(&data, "missing").is_empty());
+        assert!(extract_member(&data, "missing", &ArchiveLimits::default()).is_empty());
+    }
+
+    #[test]
+    fn archive_limits_are_configurable() {
+        let data = make_test_zip();
+
+        // A tiny single-member cap rejects extraction everywhere.
+        let tight = ArchiveLimits {
+            single_member_bytes: 4,
+            ..Default::default()
+        };
+        assert!(extract_member(&data, "dir/hello.txt", &tight).is_empty());
+        let mut flags = ScanFlags {
+            archive_limits: tight,
+            ..Default::default()
+        };
+        assert!(extract_zip(&data, &flags).is_empty());
+
+        // member_names = 1 truncates the listing.
+        let one = ArchiveLimits {
+            member_names: 1,
+            ..Default::default()
+        };
+        let (_kind, members) = list_archive_members(&data, &one).unwrap();
+        assert_eq!(members.len(), 1);
+
+        // A relaxed member cap extracts normally.
+        flags.archive_limits = ArchiveLimits {
+            single_member_bytes: 64,
+            ..Default::default()
+        };
+        let members = extract_zip(&data, &flags);
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].data, b"hello world");
     }
 
     #[test]
     fn extract_member_zip_directory_is_empty() {
         let data = make_test_zip();
-        assert!(extract_member(&data, "dir/").is_empty());
+        assert!(extract_member(&data, "dir/", &ArchiveLimits::default()).is_empty());
     }
 
     #[test]
     fn list_archive_members_rejects_non_archive() {
-        assert!(list_archive_members(b"not an archive").is_none());
+        assert!(list_archive_members(b"not an archive", &ArchiveLimits::default()).is_none());
     }
 
     #[test]
     fn extract_member_rejects_non_archive() {
-        assert!(extract_member(b"not an archive", "x").is_empty());
-        assert!(extract_member(b"PK\x03\x04", "").is_empty());
+        assert!(extract_member(b"not an archive", "x", &ArchiveLimits::default()).is_empty());
+        assert!(extract_member(b"PK\x03\x04", "", &ArchiveLimits::default()).is_empty());
     }
 
     #[test]
     fn list_archive_members_malformed_does_not_panic() {
         // Truncated ZIP header — must not panic.
         assert!(
-            list_archive_members(b"PK\x03\x04\xff\xff").is_none()
-                || list_archive_members(b"PK\x03\x04\xff\xff").is_some()
+            list_archive_members(b"PK\x03\x04\xff\xff", &ArchiveLimits::default()).is_none()
+                || list_archive_members(b"PK\x03\x04\xff\xff", &ArchiveLimits::default()).is_some()
         );
-        assert!(list_archive_members(b"Rar!\x1a\x07\x00\xff").is_none());
-        assert!(list_archive_members(b"7z\xbc\xaf\x27\x1c\x00\xff\xff\xff\xff").is_none());
+        assert!(list_archive_members(b"Rar!\x1a\x07\x00\xff", &ArchiveLimits::default()).is_none());
+        assert!(
+            list_archive_members(
+                b"7z\xbc\xaf\x27\x1c\x00\xff\xff\xff\xff",
+                &ArchiveLimits::default()
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -1479,11 +1546,13 @@ mod tests {
         // archive view silently skipped them.
         let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
         let udf = std::fs::read(corpus.join("test.udf")).unwrap();
-        let (kind, members) = list_archive_members(&udf).expect("UDF must list");
+        let (kind, members) =
+            list_archive_members(&udf, &ArchiveLimits::default()).expect("UDF must list");
         assert_eq!(kind, ArchiveKind::Udf);
         assert_eq!(members.len(), 3);
         let wim = std::fs::read(corpus.join("test.wim")).unwrap();
-        let (kind, members) = list_archive_members(&wim).expect("WIM must list");
+        let (kind, members) =
+            list_archive_members(&wim, &ArchiveLimits::default()).expect("WIM must list");
         assert_eq!(kind, ArchiveKind::Wim);
         assert_eq!(members.len(), 3);
     }
@@ -1526,12 +1595,15 @@ mod tests {
         let data = make_test_cab();
         assert!(is_cab(&data));
         assert!(is_archive(&data));
-        let (kind, members) = list_archive_members(&data).unwrap();
+        let (kind, members) = list_archive_members(&data, &ArchiveLimits::default()).unwrap();
         assert_eq!(kind, ArchiveKind::Cab);
         assert_eq!(members.len(), 1);
         assert_eq!(members[0].name, "hello.txt");
         assert_eq!(members[0].size, 11);
-        assert_eq!(extract_member(&data, "hello.txt"), b"hello world");
+        assert_eq!(
+            extract_member(&data, "hello.txt", &ArchiveLimits::default()),
+            b"hello world"
+        );
         let flags = ScanFlags::default();
         let extracted = extract_cab(&data, &flags);
         assert_eq!(extracted.len(), 1);
@@ -1544,8 +1616,8 @@ mod tests {
         for cut in [8, data.len() / 2] {
             let flags = ScanFlags::default();
             let _ = extract_cab(&data[..cut], &flags);
-            let _ = list_archive_members(&data[..cut]);
-            let _ = extract_member(&data[..cut], "hello.txt");
+            let _ = list_archive_members(&data[..cut], &ArchiveLimits::default());
+            let _ = extract_member(&data[..cut], "hello.txt", &ArchiveLimits::default());
         }
     }
 
@@ -1611,14 +1683,20 @@ mod tests {
         let data = make_test_iso();
         assert!(is_iso9660(&data));
         assert!(is_archive(&data));
-        let (kind, members) = list_archive_members(&data).unwrap();
+        let (kind, members) = list_archive_members(&data, &ArchiveLimits::default()).unwrap();
         assert_eq!(kind, ArchiveKind::Iso9660);
         let names: Vec<&str> = members.iter().map(|m| m.name.as_str()).collect();
         assert!(names.contains(&"HELLO.TXT"), "{:?}", names);
         assert!(names.contains(&"SUBDIR"), "{:?}", names);
         assert!(names.contains(&"SUBDIR/INNER.BIN"), "{:?}", names);
-        assert_eq!(extract_member(&data, "HELLO.TXT"), b"hello world");
-        assert_eq!(extract_member(&data, "SUBDIR/INNER.BIN"), b"INNR");
+        assert_eq!(
+            extract_member(&data, "HELLO.TXT", &ArchiveLimits::default()),
+            b"hello world"
+        );
+        assert_eq!(
+            extract_member(&data, "SUBDIR/INNER.BIN", &ArchiveLimits::default()),
+            b"INNR"
+        );
         let flags = ScanFlags::default();
         let extracted = extract_iso9660(&data, &flags);
         assert_eq!(extracted.len(), 2);
@@ -1629,8 +1707,8 @@ mod tests {
         let data = make_test_iso();
         // Truncations at key boundaries.
         for cut in [0x8000, 0x8006, 20 * ISO_SECTOR + 10, data.len() - 1] {
-            let _ = list_archive_members(&data[..cut]);
-            let _ = extract_member(&data[..cut], "HELLO.TXT");
+            let _ = list_archive_members(&data[..cut], &ArchiveLimits::default());
+            let _ = extract_member(&data[..cut], "HELLO.TXT", &ArchiveLimits::default());
             let flags = ScanFlags::default();
             let _ = extract_iso9660(&data[..cut], &flags);
         }
@@ -1638,13 +1716,13 @@ mod tests {
         let mut bad = data.clone();
         bad[16 * ISO_SECTOR + 156 + 2..16 * ISO_SECTOR + 156 + 6]
             .copy_from_slice(&0xFFFFu32.to_le_bytes());
-        assert!(list_archive_members(&bad).is_some());
-        assert!(extract_member(&bad, "HELLO.TXT").is_empty());
+        assert!(list_archive_members(&bad, &ArchiveLimits::default()).is_some());
+        assert!(extract_member(&bad, "HELLO.TXT", &ArchiveLimits::default()).is_empty());
         // Zero-length / oversized directory records must not hang.
         let mut bad2 = data;
         bad2[20 * ISO_SECTOR] = 0;
-        assert!(list_archive_members(&bad2).is_some());
-        assert!(extract_member(&bad2, "HELLO.TXT").is_empty());
+        assert!(list_archive_members(&bad2, &ArchiveLimits::default()).is_some());
+        assert!(extract_member(&bad2, "HELLO.TXT", &ArchiveLimits::default()).is_empty());
     }
 
     #[test]
@@ -1673,14 +1751,17 @@ mod tests {
         assert!(is_bz2(BZ2_HELLO));
         assert!(!is_bz2(b"BZh0"));
         assert!(is_archive(BZ2_HELLO));
-        let (kind, members) = list_archive_members(BZ2_HELLO).unwrap();
+        let (kind, members) = list_archive_members(BZ2_HELLO, &ArchiveLimits::default()).unwrap();
         assert_eq!(kind, ArchiveKind::Bz2);
         assert_eq!(members.len(), 1);
         assert_eq!(members[0].name, "data");
         assert_eq!(members[0].size, 11);
-        assert_eq!(extract_member(BZ2_HELLO, "data"), b"hello world");
+        assert_eq!(
+            extract_member(BZ2_HELLO, "data", &ArchiveLimits::default()),
+            b"hello world"
+        );
         // Only the `data` pseudo-member exists.
-        assert!(extract_member(BZ2_HELLO, "other").is_empty());
+        assert!(extract_member(BZ2_HELLO, "other", &ArchiveLimits::default()).is_empty());
         let flags = ScanFlags::default();
         let all = extract_archive(BZ2_HELLO, &flags);
         assert_eq!(all.len(), 1);
@@ -1693,10 +1774,13 @@ mod tests {
         let mut out = Vec::new();
         lzma_rs::xz_compress(&mut input, &mut out).unwrap();
         assert!(is_xz(&out));
-        let (kind, members) = list_archive_members(&out).unwrap();
+        let (kind, members) = list_archive_members(&out, &ArchiveLimits::default()).unwrap();
         assert_eq!(kind, ArchiveKind::Xz);
         assert_eq!(members[0].size, 11);
-        assert_eq!(extract_member(&out, "data"), b"hello world");
+        assert_eq!(
+            extract_member(&out, "data", &ArchiveLimits::default()),
+            b"hello world"
+        );
     }
 
     #[test]
@@ -1705,22 +1789,25 @@ mod tests {
         let mut out = Vec::new();
         lzma_rs::lzma_compress(&mut input, &mut out).unwrap();
         assert!(is_lzma(&out));
-        let (kind, members) = list_archive_members(&out).unwrap();
+        let (kind, members) = list_archive_members(&out, &ArchiveLimits::default()).unwrap();
         assert_eq!(kind, ArchiveKind::Lzma);
         assert_eq!(members[0].size, 11);
-        assert_eq!(extract_member(&out, "data"), b"hello world");
+        assert_eq!(
+            extract_member(&out, "data", &ArchiveLimits::default()),
+            b"hello world"
+        );
     }
 
     #[test]
     fn stream_truncated_does_not_panic() {
         for cut in [4, 10, 20, 47] {
-            let _ = list_archive_members(&BZ2_HELLO[..cut]);
-            let _ = extract_member(&BZ2_HELLO[..cut], "data");
+            let _ = list_archive_members(&BZ2_HELLO[..cut], &ArchiveLimits::default());
+            let _ = extract_member(&BZ2_HELLO[..cut], "data", &ArchiveLimits::default());
             let flags = ScanFlags::default();
             let _ = extract_archive(&BZ2_HELLO[..cut], &flags);
         }
         // Random garbage must not decode.
-        assert!(decompress_stream(b"not a stream").is_none());
+        assert!(decompress_stream(b"not a stream", &ArchiveLimits::default()).is_none());
         // LZMA heuristic rejects out-of-range props byte.
         assert!(!is_lzma(&[0xE1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
     }
@@ -1740,22 +1827,28 @@ mod tests {
     #[test]
     fn container_members_list_and_extract() {
         let evb = corpus("enigmavb-minimal.exe");
-        let (kind, members) = list_archive_members(&evb).expect("enigmavb list");
+        let (kind, members) =
+            list_archive_members(&evb, &ArchiveLimits::default()).expect("enigmavb list");
         assert_eq!(kind, ArchiveKind::EnigmaVb);
         assert!(members.iter().any(|m| m.name == "readme.txt"));
         assert!(members.iter().any(|m| m.name == "data.bin"));
-        assert!(!extract_member(&evb, "readme.txt").is_empty());
-        assert!(extract_member(&evb, "missing.bin").is_empty());
+        assert!(!extract_member(&evb, "readme.txt", &ArchiveLimits::default()).is_empty());
+        assert!(extract_member(&evb, "missing.bin", &ArchiveLimits::default()).is_empty());
 
         let bxp = corpus("boxedapp-minimal.exe");
-        let (kind, members) = list_archive_members(&bxp).expect("boxedapp list");
+        let (kind, members) =
+            list_archive_members(&bxp, &ArchiveLimits::default()).expect("boxedapp list");
         assert_eq!(kind, ArchiveKind::BoxedApp);
         assert!(!members.is_empty());
         let first = members[0].name.clone();
-        assert_eq!(extract_member(&bxp, &first).len() as u64, members[0].size);
+        assert_eq!(
+            extract_member(&bxp, &first, &ArchiveLimits::default()).len() as u64,
+            members[0].size
+        );
 
         let au = corpus("autoit-ea06.bin");
-        let (kind, members) = list_archive_members(&au).expect("autoit list");
+        let (kind, members) =
+            list_archive_members(&au, &ArchiveLimits::default()).expect("autoit list");
         assert_eq!(kind, ArchiveKind::AutoIt);
         assert!(!members.is_empty());
 

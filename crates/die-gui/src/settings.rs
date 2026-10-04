@@ -96,6 +96,10 @@ pub struct ScanFlagDefaults {
     pub hide_unknown: bool,
     /// Disable result deduplication (--no-dedup).
     pub no_dedup: bool,
+    /// Optional archive extraction bounds override (ADR 0030). Absent or
+    /// partially-filled fields fall back to the engine defaults.
+    #[serde(default)]
+    pub archive_limits: Option<diec_engine::ArchiveLimits>,
 }
 
 /// Database path settings (upstream `XOptions::ID_SCAN_DIE_DATABASE_*`).
@@ -183,6 +187,7 @@ impl Default for AppSettings {
                     first_wrapper_only: false,
                     hide_unknown: false,
                     no_dedup: false,
+                    archive_limits: None,
                 },
             },
             database: DatabaseSettings {

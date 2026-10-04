@@ -47,6 +47,9 @@ pub struct ScanFlagsRequest {
     /// Scan archive members.
     #[serde(default)]
     pub archives: bool,
+    /// Optional archive extraction bounds override (ADR 0030).
+    #[serde(default)]
+    pub archive_limits: Option<diec_engine::ArchiveLimits>,
 }
 
 impl From<ScanFlagsRequest> for diec_engine::ScanFlags {
@@ -65,6 +68,7 @@ impl From<ScanFlagsRequest> for diec_engine::ScanFlags {
             resources: req.resources,
             overlays: req.overlays,
             archives: req.archives,
+            archive_limits: req.archive_limits.unwrap_or_default(),
         }
     }
 }
@@ -265,6 +269,9 @@ pub async fn scan_bytes(
         resources: params.resources.unwrap_or(false),
         overlays: params.overlays.unwrap_or(false),
         archives: params.archives.unwrap_or(false),
+        // Query params are scalar; the request-body /scan/path API carries
+        // the typed override instead.
+        archive_limits: Default::default(),
     };
 
     let file_name = params.name.unwrap_or_else(|| "uploaded.bin".to_string());

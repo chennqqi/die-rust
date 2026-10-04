@@ -2126,6 +2126,66 @@ mod tests {
     }
 
     #[test]
+    fn test_tlsh_reference_vectors() {
+        // Expected digests produced by the trendmicro/tlsh reference
+        // implementation (pin `ebdec8fd`, `tlsh_unittest -f`) — see
+        // `docs/design/decisions/0039-fuzzy-hashes.md`.
+        fn lcg_bytes(n: usize, seed: u32) -> Vec<u8> {
+            let mut x = (seed & 0x7fffffff) as u64;
+            (0..n)
+                .map(|_| {
+                    x = (x * 1103515245 + 12345) & 0x7fffffff;
+                    ((x >> 8) & 0xFF) as u8
+                })
+                .collect()
+        }
+        let cases: Vec<(Vec<u8>, &str)> = vec![
+            (
+                b"Lorem ipsum dolor sit amet, consectetur adipiscing elit".to_vec(),
+                "T12D900249414E0BD59A46503F3ADA802AE50825242B2590561CF690599112214C051556",
+            ),
+            (
+                lcg_bytes(300, 3),
+                "T179E0E7F00CC1D04039F449D51701328546CDC488FD6001CCBE01DC10D64F1576DEE19A",
+            ),
+            (
+                lcg_bytes(8192, 7),
+                "T1B3F1AFC891496F9770011B8F807F169FEB5634BED0F75212417CEC6D74FB082AA5C69A",
+            ),
+            (
+                lcg_bytes(65536, 11),
+                "T1275301DDCC50B575D0520F2746BE4684CADABE83C0D64091A20A8DBDFEF2281C66CB6B",
+            ),
+            (
+                (0u8..=255).cycle().take(256 * 7).collect(),
+                "T15A319524E6514D7D1F175ADCD04E44DF554FCDE302C5002517F186D1C510294440ED1D",
+            ),
+            (
+                lcg_bytes(50, 5),
+                "T115900221D4A2A219D10210C4490050B575597055908264074126901D904A405A23911F",
+            ),
+            (
+                b"the quick brown fox jumps over the lazy dog, and then some more bytes!".to_vec(),
+                "T115A0220B332823C8238E08C0038EA0B3B3C8C83230220C023830F023280882ECCA8820",
+            ),
+        ];
+        for (data, expected) in cases {
+            assert_eq!(
+                compute_named_hash(&data, "TLSH").as_deref(),
+                Some(expected),
+                "len={}",
+                data.len()
+            );
+        }
+        // Reference behavior parity: uniform input cannot produce
+        // quartile buckets ("cannot hash"), sub-50-byte input is too
+        // small — both must surface as `None`.
+        assert!(compute_named_hash(&[b'A'; 192], "TLSH").is_none());
+        assert!(compute_named_hash(&[b'A'; 5000], "TLSH").is_none());
+        assert!(compute_named_hash(&[b'x'; 49], "TLSH").is_none());
+    }
+
+    #[test]
     fn test_hash_algorithms_all_implemented() {
         // Every advertised algorithm must produce a value. TLSH needs at
         // least 50 bytes of input, so the probe payload exceeds that.

@@ -1,5 +1,11 @@
 {
   "drafts": [
+    "settings.archiveLimitDefault",
+    "settings.archiveLimits",
+    "settings.archiveMaxMember",
+    "settings.archiveMaxMembers",
+    "settings.archiveMaxRatio",
+    "settings.archiveMaxTotal",
     "settings.customThemeVars",
     "settings.themeCustom",
     "settings.update",

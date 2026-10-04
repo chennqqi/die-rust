@@ -413,9 +413,12 @@ map_list 七张表，条目数有界（1M 上限 + 文件边界钳制），畸�
   **Phase 45**
 - ADR 0019：Tauri 自动更新 — ✅ 代码侧（Phase 48）；生产签名
   密钥/端点/CI 管线仍为部署决策（Conditional）
-- ADR 0030：归档安全上限 — **Permanent** 有意加固
+- ADR 0030：归档安全上限 — **Permanent** 有意加固；
+  默认值不变，`ArchiveLimits` 已可配置（引擎 `ScanFlags` /
+  CLI `--archive-max-*` / server body / GUI 设置）
 - ADR 0039：SSDeep 已 clean-room 落地（Phase 38）；TLSH
-  **Conditional**（待可用纯 Rust 实现 + oracle）
+  ✅ `tlsh2`（Phase 29）+ 参考实现 oracle 向量（trendmicro/tlsh
+  `ebdec8fd`）
 
 ## Phase 18: Deferred Parity（2026-10-05）
 

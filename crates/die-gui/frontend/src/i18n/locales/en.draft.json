@@ -1,5 +1,12 @@
 {
-  "drafts": [],
+  "drafts": [
+    "settings.archiveLimitDefault",
+    "settings.archiveLimits",
+    "settings.archiveMaxMember",
+    "settings.archiveMaxMembers",
+    "settings.archiveMaxRatio",
+    "settings.archiveMaxTotal"
+  ],
   "same": [
     "advancedToolbar.aggressive",
     "advancedToolbar.allTypes",

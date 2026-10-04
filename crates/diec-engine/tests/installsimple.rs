@@ -120,7 +120,8 @@ fn archive_probe_reaches_installsimple() {
     // The archive container chain must expose the fixture as
     // INSTALLSIMPLE with one member.
     let (kind, members) =
-        diec_engine::list_archive_members(FIXTURE).expect("archive listing failed");
+        diec_engine::list_archive_members(FIXTURE, &diec_engine::ArchiveLimits::default())
+            .expect("archive listing failed");
     assert_eq!(kind.display_name(), "INSTALLSIMPLE");
     assert_eq!(members.len(), 1);
     assert_eq!(members[0].name, "payload.bin");

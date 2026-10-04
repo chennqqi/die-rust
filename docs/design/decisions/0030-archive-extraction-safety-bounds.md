@@ -121,3 +121,26 @@ higher thresholds.
   unbounded allocations."
 - `docs/research/archive-adversarial-behavior.md`: ZIP deflate/ZipCrypto,
   high compression ratio, CRC/compression stream malformed inputs
+
+## Amendment (2026-10-12): bounds are now host-configurable
+
+All constants moved into `diec_engine::archive_unpack::ArchiveLimits`
+(`members_normal`, `members_aggressive`, `single_member_bytes`,
+`total_decompressed_bytes`, `compression_ratio`, `member_names`,
+`member_string_bytes`, `iso_max_depth`). `Default` reproduces the
+original values byte-for-byte, so the safe-default policy is unchanged;
+hosts may now override per invocation:
+
+- Engine: `ScanFlags::archive_limits`
+- CLI: `--archive-max-member/--archive-max-total/--archive-max-ratio/
+  --archive-max-members` (plain integers, K/M/G suffixes)
+- Server: `ScanFlagsRequest.archive_limits` (JSON body field on
+  `/scan/path`; the scalar `/scan/bytes` query keeps defaults)
+- GUI: `ScanFlagDefaults.archive_limits` (persisted settings) +
+  `ScanFlagsDto.archive_limits` per-scan override + settings-panel
+  numeric inputs
+- Record-level APIs (`list_archive_members`, `extract_member`,
+  `zip_member_*`) take `&ArchiveLimits` explicitly
+
+Detection heuristics (`is_lzma`) keep the default bound so loosened
+extraction limits never widen the detection surface.

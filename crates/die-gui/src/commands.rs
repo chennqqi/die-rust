@@ -90,6 +90,10 @@ pub struct ScanFlagsDto {
     /// Optional file type override (e.g. "PE", "ELF"). When set, only rules
     /// for the specified file type are run, bypassing auto-detection.
     pub file_type: Option<String>,
+    /// Optional archive extraction bounds override (ADR 0030); absent means
+    /// the engine defaults.
+    #[serde(default)]
+    pub archive_limits: Option<diec_engine::ArchiveLimits>,
 }
 
 impl From<ScanFlagsDto> for ScanFlags {
@@ -108,6 +112,7 @@ impl From<ScanFlagsDto> for ScanFlags {
             overlays: dto.overlay,
             archives: dto.archives,
             nfd: dto.nfd,
+            archive_limits: dto.archive_limits.unwrap_or_default(),
         }
     }
 }
@@ -1500,7 +1505,9 @@ pub async fn list_archive(path: String) -> Result<ArchiveResultDto, GuiError> {
         let data = std::fs::read(&path).map_err(|e| e.to_string())?;
 
         // ZIP/7Z/RAR: engine metadata listing (upstream XArchive::getRecords).
-        if let Some((kind, members)) = diec_engine::list_archive_members(&data) {
+        if let Some((kind, members)) =
+            diec_engine::list_archive_members(&data, &diec_engine::ArchiveLimits::default())
+        {
             let entries: Vec<ArchiveEntryDto> = members
                 .into_iter()
                 .map(|m| ArchiveEntryDto {
@@ -1655,7 +1662,11 @@ pub async fn extract_archive_member(
 ) -> Result<String, GuiError> {
     let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
         let data = std::fs::read(&path).map_err(|e| e.to_string())?;
-        let bytes = diec_engine::extract_member(&data, &member_name);
+        let bytes = diec_engine::extract_member(
+            &data,
+            &member_name,
+            &diec_engine::ArchiveLimits::default(),
+        );
         if bytes.is_empty() {
             return Err(format!("Member '{}' not found or empty.", member_name));
         }

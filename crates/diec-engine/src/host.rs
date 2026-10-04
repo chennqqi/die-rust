@@ -62,6 +62,12 @@ pub struct ScanFlags {
     /// When true, detections produced by the table-driven NFD engine are
     /// appended to the DIE results with `engine = "nfd"`. See ADR 0035.
     pub nfd: bool,
+    /// Archive extraction safety bounds (ADR 0030).
+    ///
+    /// Applied by `--archives` member extraction and the ZIP-family
+    /// record APIs. `ArchiveLimits::default()` reproduces the historical
+    /// constants; hosts may tighten or relax them per scan.
+    pub archive_limits: crate::archive_unpack::ArchiveLimits,
 }
 
 /// A host API implementation backed by an in-memory byte buffer.
@@ -220,17 +226,21 @@ impl HostApi for BufferHost {
 
     /// ZIP-family member name enumeration (upstream `XArchive::getRecords`).
     fn archive_record_names(&self) -> Vec<String> {
-        crate::archive_unpack::zip_member_names(self.data())
+        crate::archive_unpack::zip_member_names(self.data(), &self.flags.archive_limits)
     }
 
     /// ZIP-family member decompression (upstream `XArchive::decompress`).
     fn archive_record_string(&self, name: &str) -> String {
-        crate::archive_unpack::zip_member_string(self.data(), name)
+        crate::archive_unpack::zip_member_string(self.data(), name, &self.flags.archive_limits)
     }
 
     /// Decoded AndroidManifest.xml (upstream `XAndroidBinary::getDecoded`).
     fn android_manifest(&self) -> String {
-        let bytes = crate::archive_unpack::zip_member_bytes(self.data(), "AndroidManifest.xml");
+        let bytes = crate::archive_unpack::zip_member_bytes(
+            self.data(),
+            "AndroidManifest.xml",
+            &self.flags.archive_limits,
+        );
         if bytes.is_empty() {
             return String::new();
         }

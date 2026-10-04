@@ -1453,3 +1453,10 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
 - 确认 XEmulator 为 horsicq 库组件（非独立 EXE）后执行 Phase 50：
   pin XEmulator `655e6da` 至 dep/ + tools-only Qt oracle + 有界 x86
   核心移植 + InstallSimple/ASPack 2.11/Petite 模拟器分支 + 差分。
+
+## 2026-10-12 Permanent 项处理
+- 用户：归档安全上限应可配置/参数化；XStyles/InfoDB 可接受；TLSH 有开源
+  参考应落地；"规则库漂移重同步"待解释。
+- 执行：ArchiveLimits 全链路可配置（engine ScanFlags / CLI flags /
+  server body / GUI settings+DTO+设置面板）；TLSH 确认已由 tlsh2 落地
+  并补参考实现 oracle 向量；ADR 0030 修订 + ADR 0042 #1/#11 更新。

@@ -32,6 +32,16 @@ interface ScanFlagDefaults {
   first_wrapper_only: boolean;
   hide_unknown: boolean;
   no_dedup: boolean;
+  archive_limits?: {
+    members_normal?: number;
+    members_aggressive?: number;
+    single_member_bytes?: number;
+    total_decompressed_bytes?: number;
+    compression_ratio?: number;
+    member_names?: number;
+    member_string_bytes?: number;
+    iso_max_depth?: number;
+  } | null;
 }
 
 interface ScanSettings {
@@ -318,7 +328,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                       Log profiling
                     </label>
                     <h4>Default Scan Flags</h4>
-                    {Object.entries(settings.scan.flags).map(([key, value]) => (
+                    {Object.entries(settings.scan.flags).filter(([, value]) => typeof value === 'boolean').map(([key, value]) => (
                       <label key={key}>
                         <input
                           type="checkbox"
