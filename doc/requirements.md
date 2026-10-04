@@ -1490,3 +1490,9 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   preflight（secret 缺失/dev pubkey 残留 fail-fast）+ 三平台签名 env +
   updater artifacts 收集上传 + `tools/updater/gen_latest_json.py`
   生成 manifest 随 release 上传；`createUpdaterArtifacts: true`。
+
+- 2026-10-04: 用户报告 push 后 GitHub Actions 再次失败，要求获取失败信息、分析原因并修复。
+  - 日志 API 403（无 admin token），改用：CI job 元数据 + check-run annotation（exit code）+ 本地复现。
+  - 根因 A：MSRV 1.88 clippy `nonminimal_bool` ×8（pe_handlers/lzh_decode/wim/x86 decode），1.97 不报。已修并本地 1.88 验证。
+  - 根因 B：windows-2022 默认 `core.autocrlf=true` 把 `corpus/extract/*` 文本快照转成 CRLF，secondary_archives 15 个 extract-parity 测试字节比对失败。本地 autocrlf clone 复现；`.gitattributes` 标 `corpus/** -text` 修复并验证全绿。
+  - 残余疑点：`default (windows-2022)` 的 `cargo test` 报 exit 127（非 101），疑与 die-gui test exe 相关，待新 CI run 确认。
