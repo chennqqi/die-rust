@@ -1526,3 +1526,10 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   target 输出 `cargo:rustc-link-arg-tests=resource.lib`，测试 exe
   获得相同 v6 manifest。交叉构建验证 .rsrc/Common-Controls 6.0.0.0
   已嵌入；Linux 本地 updater_flow 5/5 通过。
+
+- 2026-10-04: 用户对 rename-die-rust.md 选择"评审/修订文档"。
+  对照实际代码盘点后并入 v3：补 `.diec.json` sidecar 决策（默认
+  改 `.die.json` + 读侧 fallback）、xtask 内嵌 crate 白名单/DAG
+  遗漏、替换规则表（防 sed 误伤）、DIEC_MAC_*/spikes 范围决策、
+  规模修正（diec 出现 1005 处而非 ~170）、lockfile 时序、updater
+  兼容断点显式声明、验证清单补 xtask/metadata diff/反向检查。
