@@ -512,7 +512,7 @@ oracle` 差分锁定）：
 | AutoIt v2/EA05/EA06 | `XAUTOIT` | ✅ v2 流加密 + MT(EA05) + LAME(EA06) + 位读取器 + JB01/变体 inflate + 多记录枚举 | oracle 记录名+大小逐字节差分（3 格式）|
 | EnigmaVB | `XEnigmaVB` | ✅ 节载容器 + 目录树（深度≤1024/节点≤100000）+ aPLib + 输出界限 | oracle 记录差分（stored+compressed 合成）|
 | BoxedApp | `XBoxedApp` | ✅ `.bxpck` 节 + `.main` 认证 + 节点表 STORE/ZLIB | oracle 记录差分（合成）|
-| InstallSimple | `XInstallSimple` | ✅ Phase 50：XEmulator x86 子集（`dep/XEmulator` pin `655e6da`，tools-only）+ 全量移植 init/driver 调用、IS_* 布局、共享 100M 步预算、manifest 文法、记录上限 | 合成 fixture 端到端 oracle parity（`corpus/installsimple-minimal.exe`）；真实样本语料缺口已记录 |
+| InstallSimple | `XInstallSimple` | ✅ Phase 50：XEmulator x86 子集（`dep/XEmulator` pin `655e6da`，tools-only）+ 全量移植 init/driver 调用、IS_* 布局、共享 100M 步预算、manifest 文法、记录上限 | 合成 fixture 端到端 oracle parity（`corpus/installsimple-minimal.exe`）+ 6 个真实样本 observable parity（`corpus/real-unpack/`，均 init_unpack:false——上游同样不支持这些变体） |
 | 容器归档浏览 | 归档 widget `getRecords` | ✅ `list_archive_members`/`extract_member`/`ArchiveKind`（AutoIt/EnigmaVB/BoxedApp） | 刻意不入 `is_archive` 嵌套扫描门（上游 `FT_FLAG_STATICUNPACKERS` opt-in）|
 | PE 节名大小写 | `SECTION_RECORD.sName` 原始大小写 | ✅ 修复全局大写化偏差；全部比较点按上游区分大小写 | `.enigma1`/`.bxpck` 等表条目此前漏检 |
 
@@ -605,5 +605,5 @@ oracle` 差分锁定）：
 | i18n 键位覆盖 | ✅ 24 locale × 269 键全齐 | en/zh-CN/ru/de/fr 审校 + 19 术语锚定草稿（Phase 45：`dict_*.po` 锚定 27–35%，余 en+draft manifest；`.ts` 为全 unfinished skeleton 不作源）。键 parity/`{{var}}`/格式符 gated em `tests/i18n_parity.rs` + `tools/i18n/check_i18n.py` |
 | 归档视图二级格式 | ✅ 已接线 | Phase 36/37 的 UDF/WIM 曾漏接 `list_archive_members`——本 phase 补齐 `ArchiveKind::Udf/Wim` 映射 + 回归测试 |
 | XStyles 主题生态 | 永久平台差异（已交付近似方案） | 上游 Qt QSS 体系；本项目 CSS 变量主题：light/dark/system + Phase 49 六个 XStyles pin `948dd85` 代表性色板（solarized-dark/film-noir/midnight-elegance/lavender-dawn/emerald-dusk/cyber-noir）+ `custom_theme` 白名单变量覆盖。色板映射非 QSS 选择器等价（ADR 0042 #2） |
-| InstallSimple（+aspack/petite 模拟器分支） | ✅ Phase 50 | XEmulator pin `655e6da` 检出至 dep/（tools-only，Rust 不引 Qt）；x86 核心 491/491 指令差分一致；合成 InstallSimple fixture + aspack212/petite2 corpus 与 oracle 字节级 parity |
+| InstallSimple（+aspack/petite 模拟器分支） | ✅ Phase 50 | XEmulator pin `655e6da` 检出至 dep/（tools-only，Rust 不引 Qt）；x86 核心 491/491 指令差分一致；合成 InstallSimple fixture + aspack212/petite2 corpus 与 oracle 字节级 parity + `corpus/real-unpack` 6 真实样本逐类 observable parity（上游同样 init_unpack:false） |
 | Tauri 自动更新 | ✅ 代码侧（Phase 48）；生产 infra 仍 Conditional | `tauri-plugin-updater` + IPC 命令 + 设置页入口 + `updater_flow.rs` 5 集成测试（验签/篡改/离线/降级/版本不符）。`corpus/updater` 为 dev 签名夹具，非生产密钥；生产 endpoint/公钥/CI 签名管线待部署决策（ADR 0019） |

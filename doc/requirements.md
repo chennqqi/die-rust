@@ -1468,3 +1468,15 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   0 哈希差异）；全规则树无 `PE.isNET()` 调用方。
 - 执行：移除 `PE.isNET` 别名；新增 conformance 回归断言
   `typeof PE.isNET === "undefined"`（与上游一致，isNet 保留）。
+
+## 2026-10-12 对齐/发布评估 + 真实样本长尾验证
+- 用户问：是否完全对齐 + 是否可发布。答复：对齐计划闭环但有 3 项
+  Permanent 偏离 + 真实样本长尾未证；代码侧 RC 级，updater 生产
+  密钥/endpoint 为部署决策 blocker（若走自动更新渠道）。
+- 用户要求执行真实样本长尾验证。执行：获取 6 个第三方真实打包样本
+  （un4seen 官方 petite.exe/petgui.exe Petite 2.2 自打包、unipacker
+  语料 lbop20 ASPack/Petite 2.4、installsimple.com 2013/2024 产品
+  Setup.exe），上游 oracle 逐类比对全部 observable parity——上游
+  自身全部 init_unpack:false（这些变体上游同样不支持），parity 落在
+  失败路径。产出 corpus/real-unpack manifest + fetch 脚本（不入库）+
+  real_unpack_parity.rs 回归。

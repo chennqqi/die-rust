@@ -48,3 +48,6 @@ __pycache__/
 /tools/xemulator-oracle/build/
 /tools/xemulator-oracle/rpms/
 /tools/xemulator-oracle/qmake-root/
+# Real-world unpack parity samples: fetched by
+# tools/corpus/fetch_real_unpack_samples.py (sha256-verified), not committed
+/corpus/real-unpack/*.exe

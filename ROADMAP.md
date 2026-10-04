@@ -2566,6 +2566,16 @@ Windows-only 实为 parity（上游 `registerContext` 同样
   - 回归：9 个 InstallSimple 集成测试 + 5 个模拟器路径单测
     （合成 guest 代码驱动 decrypt_stub_head/pet_run_embedded_decoder，
     含预算耗尽/陷阱 fail-closed）。
+- **真实样本差分**（2026-10-12）：6 个第三方真实打包样本
+  （un4seen 官方 petite.exe/petgui.exe Petite 2.2 自打包、unipacker
+  语料 lbop20 ASPack/Petite 2.4、installsimple.com 2013/2024
+  产品 Setup.exe UPX 2.03）对上游 oracle 逐类比对——
+  **全部可观察行为一致**。重要发现：上游自身对全部真实样本
+  `init_unpack:false`（这些 stub 变体上游同样不支持），parity
+  落在失败路径；模拟器成功路径仍仅合成验证。
+  `corpus/real-unpack/manifest.json`（sha256+来源+oracle 期望）+
+  `tools/corpus/fetch_real_unpack_samples.py`（不入库）+
+  `tests/real_unpack_parity.rs`。
 - **Parity**：右键菜单 Windows-only（上游同样仅 Windows）。
 - **规则库漂移**：✅ 已核验——vendor 树与 pin `8925358d` 的 submodule
   检出逐字节一致（manifest 4,698 文件 0 哈希差异），全树无

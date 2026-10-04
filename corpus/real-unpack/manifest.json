@@ -1,0 +1,80 @@
+{
+  "generator": "tools/corpus/fetch_real_unpack_samples.py",
+  "purpose": "Real-world packed samples for unpacker parity vs upstream XStaticUnpacker oracle (xemulator-oracle unpack mode). Samples are third-party binaries fetched by script, verified by sha256, and NOT committed to the repository.",
+  "oracle": "tools/xemulator-oracle unpack <file> <prefix>",
+  "samples": [
+    {
+      "name": "petite23-petite.exe",
+      "sha256": "e7f74dfb376ccf5133efb606a4bc8e032078f1b288a6814dd10caf519eab1be7",
+      "size": 48505,
+      "source": "https://www.un4seen.com/files/petite23.zip (petite.exe; Petite 2.3 official distribution, self-packed, freeware)",
+      "detect": "Petite (2.2)",
+      "expect": {
+        "petite": {
+          "claims": true,
+          "init_unpack": false,
+          "version": "2.x"
+        }
+      }
+    },
+    {
+      "name": "petite23-petgui.exe",
+      "sha256": "90a0e7b3de34fdcc65fb39ab3357c5d7959a5d2c399c0f1e7d609319c48c9cee",
+      "size": 57620,
+      "source": "https://www.un4seen.com/files/petite23.zip (petgui.exe; Petite 2.3 official distribution, self-packed, freeware)",
+      "detect": "Petite (2.2)",
+      "expect": {
+        "petite": {
+          "claims": true,
+          "init_unpack": false,
+          "version": "2.x"
+        }
+      }
+    },
+    {
+      "name": "lbop20-petite.exe",
+      "sha256": "8d281444d3306d2e450066284ee0920a7606171f2021988d42f958a210ddd550",
+      "size": 39252,
+      "source": "https://github.com/unipacker/unipacker Sample/PEtite/lbop20_PEtite.exe (Petite 2.4, public test corpus)",
+      "detect": "Petite (2.4)",
+      "expect": {
+        "petite": {
+          "claims": true,
+          "init_unpack": false,
+          "version": "2.x"
+        }
+      }
+    },
+    {
+      "name": "lbop20-aspack.exe",
+      "sha256": "a7a2f792185842ea20f100f8a0059842bc299a2e5c0318751840fdd38224800a",
+      "size": 43520,
+      "source": "https://github.com/unipacker/unipacker Sample/ASPack/lbop20_aspack.exe (public test corpus; NFD detects ASPack 2.12-2.42 + ASProtect SKE 2.72+)",
+      "detect": "ASPack (2.12-2.42) + ASProtect (SKE 2.72+)",
+      "expect": {}
+    },
+    {
+      "name": "installsimple-2024-setup.exe",
+      "sha256": "52a39ec52932df43d40d7d46adc1486b91e9de3f4b62e49ed1aa228df2d66bf8",
+      "size": 321419,
+      "source": "http://installsimple.com/download/install-simple.zip (Setup.exe; InstallSimple 2024 product installer, UPX 2.03)",
+      "detect": "UPX (2.03)",
+      "expect": {
+        "installsimple": {
+          "claims": true,
+          "init_unpack": false,
+          "version": ""
+        }
+      }
+    },
+    {
+      "name": "installsimple-2013-setup.exe",
+      "sha256": "6c35dd63624a0a7c3d1542e92c22697fb267bdf7d6b67191577df7a9aaa758b5",
+      "size": 405421,
+      "source": "https://web.archive.org/web/20130924210723id_/http://www.installsimple.com/download/install-simple.zip (Setup.exe; InstallSimple 2013 product installer, UPX 2.03)",
+      "detect": "UPX (2.03)",
+      "expect": {}
+    }
+  ],
+  "notes": "Upstream oracle emits one object per class in order [installsimple, aspack, petite]; non-claiming classes emit {}. `expect` records the observable per-class claim/init/version result captured from the pinned upstream build. All six real samples fail init_unpack identically on both sides: upstream does not support these exact stub variants either — parity is on the failure path, not just success."
+}
