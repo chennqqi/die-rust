@@ -69,8 +69,8 @@ for die-rust. Every item must be verified before publishing a release.
 - [x] Dynamic library: `lib/libdie_ffi.so` / `.dylib` / `lib/die_ffi.dll`
 - [x] C header: `include/die.h`
 - [x] Rule database: `base/db`, `base/db_extra`, `base/db_custom`
-- [x] Go binding: `bindings/go/diec/diec.go`
-- [x] Python binding: `bindings/python/diec.py`
+- [x] Go binding: `bindings/go/die/die.go`
+- [x] Python binding: `bindings/python/die.py`
 - [x] All artifacts verified on at least one platform
 
 ### GUI Artifacts (v0.4.0+)
