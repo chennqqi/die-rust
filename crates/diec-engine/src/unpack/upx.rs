@@ -694,8 +694,20 @@ impl<'a> PackedPe<'a> {
         self.data.get(off..off.saturating_add(size as usize))
     }
 
+    /// `XPE::getOptionalHeader_SizeOfImage` (opt+56, both magics).
+    pub(crate) fn size_of_image(&self) -> u32 {
+        read_u32(self.data, self.pe_offset + 4 + 20 + 56).unwrap_or(0)
+    }
+
+    /// `XPE::getSignOffsetSize` — the security data directory's
+    /// (file offset, size); zero when unsigned.
+    pub(crate) fn sign_offset_size(&self) -> (u64, u64) {
+        let (va, size) = self.dirs[4];
+        (u64::from(va), u64::from(size))
+    }
+
     /// File offset where the overlay starts (end of the last raw section).
-    fn overlay_offset(&self) -> usize {
+    pub(crate) fn overlay_offset(&self) -> usize {
         let mut end = 0usize;
         for s in &self.sections {
             if s.raw_ptr != 0 {

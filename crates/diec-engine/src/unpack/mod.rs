@@ -18,6 +18,7 @@ mod autoit;
 mod boxedapp;
 mod enigmavb;
 mod fsg;
+mod installsimple;
 mod mew;
 mod nrv;
 mod nspack;
@@ -32,6 +33,7 @@ pub use autoit::{AutoItInfo, AutoItVersion, ContainerRecord, detect_autoit, extr
 pub use boxedapp::{BoxedAppInfo, detect_boxedapp, extract_boxedapp};
 pub use enigmavb::{EnigmaVbInfo, detect_enigmavb, extract_enigmavb};
 pub use fsg::{FsgInfo, detect_fsg, unpack_fsg};
+pub use installsimple::{InstallSimpleInfo, detect_installsimple, extract_installsimple};
 pub use mew::{MewInfo, detect_mew, unpack_mew};
 pub use nrv::{BitWidth, NrvAlgorithm, NrvError, nrv_decompress};
 pub use nspack::{NsPackInfo, detect_nspack, unpack_nspack};

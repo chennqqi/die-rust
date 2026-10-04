@@ -14,6 +14,7 @@
 pub mod archive;
 mod archive_unpack;
 mod database;
+pub mod emulate;
 pub mod host;
 mod nested_scan;
 mod scanner;

@@ -749,6 +749,8 @@ pub enum ArchiveKind {
     EnigmaVb,
     /// BoxedApp packer container (PE-carried).
     BoxedApp,
+    /// InstallSimple 3.5/3.5.2 installer container (emulator-decoded).
+    InstallSimple,
     /// ARJ archive (Phase 32).
     Arj,
     /// LHA/LZH archive (Phase 32).
@@ -778,6 +780,7 @@ impl ArchiveKind {
             Self::AutoIt => "AUTOIT",
             Self::EnigmaVb => "ENIGMAVB",
             Self::BoxedApp => "BOXEDAPP",
+            Self::InstallSimple => "INSTALLSIMPLE",
             Self::Arj => "ARJ",
             Self::Lha => "LHA",
             Self::Cpio => "CPIO",
@@ -893,7 +896,8 @@ fn list_container_members(data: &[u8]) -> Option<(ArchiveKind, Vec<ArchiveMember
 
 /// Run the container extractors and return the detected kind plus the
 /// full record list. Probe order mirrors the upstream `xformats.cpp`
-/// static-unpacker chain (AutoIt -> BoxedApp -> EnigmaVB).
+/// static-unpacker chain (AutoIt -> BoxedApp -> EnigmaVB ->
+/// InstallSimple).
 fn container_records(data: &[u8]) -> Option<(ArchiveKind, Vec<crate::unpack::ContainerRecord>)> {
     if crate::unpack::detect_autoit(data).is_some()
         && let Ok(records) = crate::unpack::extract_autoit(data, -1)
@@ -909,6 +913,11 @@ fn container_records(data: &[u8]) -> Option<(ArchiveKind, Vec<crate::unpack::Con
         && let Ok(records) = crate::unpack::extract_enigmavb(data)
     {
         return Some((ArchiveKind::EnigmaVb, records));
+    }
+    if crate::unpack::detect_installsimple(data).is_some()
+        && let Ok(records) = crate::unpack::extract_installsimple(data, -1)
+    {
+        return Some((ArchiveKind::InstallSimple, records));
     }
     None
 }

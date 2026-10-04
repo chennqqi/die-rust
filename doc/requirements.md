@@ -1448,3 +1448,8 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
   源码编译方式引用，仅需 x86 核心 ≈6.9k 行）。
 - ADR 0042 #4/#9：Blocked → Scheduled → Phase 50
   （oracle pin + 有界模拟器移植 + 三个调用点）。
+
+## 2026-10-12 Phase 50 执行（"开始执行"）
+- 确认 XEmulator 为 horsicq 库组件（非独立 EXE）后执行 Phase 50：
+  pin XEmulator `655e6da` 至 dep/ + tools-only Qt oracle + 有界 x86
+  核心移植 + InstallSimple/ASPack 2.11/Petite 模拟器分支 + 差分。

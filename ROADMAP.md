@@ -2534,16 +2534,38 @@ Windows-only 实为 parity（上游 `registerContext` 同样
   存储格式（ADR 0037 Superseded，功能已交付无 SQLite）；
   XStyles 平台差异本身。
 - **Phase 50：XEmulator x86 子集 + InstallSimple/ASPack 2.11/
-  Petite 模拟器分支**（2026-10-12 立项）：核实 XEmulator 为
-  horsicq 库组件（非独立 EXE，与 dep/ 家族同级，仅被
-  xstaticunpacker.pri 以兄弟目录引用）。范围：XStaticUnpacker
-  仅用 x86 核心 ≈6.9k 行（xemux86 4.7k + memmgr 1.4k +
-  registers，OS/syscall 层不用）。子步骤：(a) pin XEmulator
-  于 XStaticUnpacker pin 同期 SHA，tools-only Qt oracle；
-  (b) 有界模拟器移植（镜像上游 pnStepsRemaining/
-  IS_CANCEL_CHECK_STEPS/STEP_HALT bounds + 映射内存限定
-  fail-closed）+ xinstallsimple 857 行 + 2 行 aspack 2.11
-  布局 + xpetite 模拟器分支；(c) oracle 差分 + 回归测试。
+  Petite 模拟器分支**（2026-10-12 立项，本 Phase 完成）：核实
+  XEmulator 为 horsicq 库组件（非独立 EXE，与 dep/ 家族同级，
+  仅被 xstaticunpacker.pri 以兄弟目录引用），pin 于 `655e6da`
+  检出至 `upstream/DIE-engine/dep/XEmulator`，tools-only Qt
+  oracle `tools/xemulator-oracle`（micro 指令级 + unpack 端到端
+  两模式）。交付：
+  - `diec-engine::emulate` 有界 x86 核心（decode/exec/FPU/MMX/
+    memmgr/registers ≈ 上游 6.9k 行子集），STEP 语义与 `run`
+    步数语义对齐（Linux 软件回退路径、vector=-1、FRNDINT
+    ties-to-even、正确 BSR）。**491/491 指令差分语料字节级
+    一致**（`corpus/xemulator/cases.txt` + `emu_diff.py` +
+    `micro_oracle.rs` 快照重放）。
+  - `unpack::installsimple`：`xinstallsimple.cpp` 857 行全量
+    移植（UPX stub 还原 + init/driver 签名守卫 + IS_* 内存布局
+    + 共享 100M 步预算 + 分配器 trap + manifest 严格文法 +
+    记录/载荷/总量上限）。接入 `archive_unpack::container_records`
+    链（AutoIt→BoxedApp→EnigmaVB→InstallSimple，上游 xformats
+    顺序）与 `ArchiveKind::InstallSimple`。
+  - ASPack：`g_aspackLayouts` 补齐 2.11/2.11r 与 2.11c/2.11d 两行
+    `USE_XEMULATOR` 布局 + `decrypt_stub_head`（EP 模拟至
+    landing，解密头回填后走经典路径）。
+  - Petite：`petFindEmbeddedDecoder`/`petRunEmbeddedDecoder`
+    模拟器分支（5×push+call+ret 定位、12 参数合成栈、hlt 返回
+    陷阱、共享步预算、输出/消耗边界校验），classic 路径保留。
+  - 合成 InstallSimple fixture（`tools/gen_installsimple_fixture.py`：
+    UPX-DEFLATE 包装 + 签名对齐直通解码器）——**上游 oracle 端到端
+    字节级 parity**（`corpus/installsimple-minimal.exe` +
+    `.oracle.json`，fnv64 ef20e706fcab011b），Rust `unpack_report`
+    报告同构。aspack212/petite2 corpus 样本同样字节一致。
+  - 回归：9 个 InstallSimple 集成测试 + 5 个模拟器路径单测
+    （合成 guest 代码驱动 decrypt_stub_head/pet_run_embedded_decoder，
+    含预算耗尽/陷阱 fail-closed）。
 - **Parity**：右键菜单 Windows-only（上游同样仅 Windows）。
 - **维护任务**：vendored `db/`/`db_extra/` 与上游 submodule pin
   的漂移（vendored 中 10 条规则仍调已删的 `PE.isNET`，已加

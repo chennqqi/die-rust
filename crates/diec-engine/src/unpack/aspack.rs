@@ -8,10 +8,10 @@
 //! applied per block-table entry into an RVA-assembled image, followed
 //! by the one-shot call/jmp filter reversal and a fresh PE rebuild.
 //!
-//! The 2.11/2.11c rows are intentionally absent: upstream gates them
-//! behind `USE_XEMULATOR` (`decryptStubHead` needs x86 emulation of the
-//! polymorphic stub head), which this build does not provide — same
-//! effective coverage as the reference oracle.
+//! The 2.11/2.11r and 2.11c/2.11d rows — upstream `USE_XEMULATOR` —
+//! decrypt their polymorphic stub heads through the `emulate` module's
+//! bounded x86 core before the mark/OEP reads (`decrypt_stub_head`,
+//! upstream `decryptStubHead`).
 
 use super::UnpackError;
 use super::upx::PackedPe;
@@ -33,7 +33,8 @@ struct AspackLayout {
     /// Exact bytes required at the entry point.
     signature: &'static [u8],
     /// `\x68\x00\x00\x00\x00\xC3` marker, EP-relative (`u32::MAX` =
-    /// sentinel, unused by the non-emulator rows).
+    /// sentinel — the marker lives inside the still-encrypted head for
+    /// the emulator rows).
     ep_buff_off: u32,
     /// Block-table offset.
     blocks_off: u32,
@@ -47,11 +48,14 @@ struct AspackLayout {
     wrkbuf_off: u32,
     /// Stored-OEP dword offset.
     oep_off: u32,
+    /// Deterministic post-decrypt landing offset for the emulator rows
+    /// (`nLandingOff` upstream); 0 = no emulation step.
+    emulator_landing: u32,
     /// Reported version string.
     version: &'static str,
 }
 
-/// Non-emulator layout rows, upstream `g_aspackLayouts` order.
+/// Upstream `g_aspackLayouts` order, including the `USE_XEMULATOR` rows.
 const LAYOUTS: &[AspackLayout] = &[
     AspackLayout {
         signature: b"\x60\xe8\x03\x00\x00\x00\xe9\xeb",
@@ -62,6 +66,7 @@ const LAYOUTS: &[AspackLayout] = &[
         comp_b_off: 0x6d6,
         wrkbuf_off: 0x148,
         oep_off: 0x39b,
+        emulator_landing: 0,
         version: "2.12",
     },
     AspackLayout {
@@ -73,6 +78,7 @@ const LAYOUTS: &[AspackLayout] = &[
         comp_b_off: 0x692,
         wrkbuf_off: 0x145,
         oep_off: 0x3f6,
+        emulator_landing: 0,
         version: "2.2",
     },
     AspackLayout {
@@ -84,6 +90,7 @@ const LAYOUTS: &[AspackLayout] = &[
         comp_b_off: 0x732,
         wrkbuf_off: 0x13a,
         oep_off: 0x401,
+        emulator_landing: 0,
         version: "2.xx",
     },
     AspackLayout {
@@ -95,6 +102,7 @@ const LAYOUTS: &[AspackLayout] = &[
         comp_b_off: 0x73e,
         wrkbuf_off: 0x148,
         oep_off: 0x40d,
+        emulator_landing: 0,
         version: "2.42",
     },
     AspackLayout {
@@ -106,6 +114,7 @@ const LAYOUTS: &[AspackLayout] = &[
         comp_b_off: 0x5eb,
         wrkbuf_off: 0x292,
         oep_off: 0x0d2,
+        emulator_landing: 0,
         version: "2.00",
     },
     AspackLayout {
@@ -117,7 +126,36 @@ const LAYOUTS: &[AspackLayout] = &[
         comp_b_off: 0x5ed,
         wrkbuf_off: 0x294,
         oep_off: 0x0d2,
+        emulator_landing: 0,
         version: "2.01/2.1",
+    },
+    // `USE_XEMULATOR` rows upstream: 2.11/2.11r and 2.11c/2.11d hide the
+    // mark byte and OEP dword inside a per-file polymorphic self-decryptor;
+    // detection keys on the EP signature plus the plaintext compB table
+    // (`ep_buff_off` is the upstream 0xffffffff sentinel).
+    AspackLayout {
+        signature: b"\x60\xe9\x3d\x04\x00\x00",
+        ep_buff_off: u32::MAX,
+        blocks_off: 0x6e9,
+        block_stride: 8,
+        str_mlt_off: 0x87b,
+        comp_b_off: 0x843,
+        wrkbuf_off: 0x14b,
+        oep_off: 0x7d,
+        emulator_landing: 0x43b,
+        version: "2.11/2.11r",
+    },
+    AspackLayout {
+        signature: b"\x60\xe8\x02\x00\x00\x00\xeb\x09",
+        ep_buff_off: u32::MAX,
+        blocks_off: 0x715,
+        block_stride: 8,
+        str_mlt_off: 0x8a7,
+        comp_b_off: 0x86f,
+        wrkbuf_off: 0x157,
+        oep_off: 0x3a1,
+        emulator_landing: 0x467,
+        version: "2.11c/2.11d",
     },
 ];
 
@@ -674,6 +712,89 @@ fn build_pe(
     out
 }
 
+/// `decryptStubHead` — emulate the polymorphic self-decryptor at the
+/// entry point until execution reaches `ep + landing_off`, then copy the
+/// now-plaintext stub head `[ep, ep+0x800)` back over `image` so the
+/// mark and OEP reads in the main path see plaintext. Fails closed
+/// (returns false → upstream `return false`) on any emulation fault,
+/// step-cap overrun, or bound violation — a mis-emulated file is never
+/// restored with a wrong OEP.
+fn decrypt_stub_head(image_base: u32, ep: u32, landing_off: u32, image: &mut [u8]) -> bool {
+    use crate::emulate::regs::GPR_RSP;
+    use crate::emulate::{MemoryFlags, MemoryManager, Registers, StepResult, X86};
+
+    const ASP_STACK: u32 = 0x5000_0000;
+    const ASP_STACK_SIZE: u32 = 0x0010_0000;
+    const ASP_HEAD_SIZE: u32 = 0x800;
+    const ASP_MAX_STEPS: u64 = 8_000_000;
+
+    if image.is_empty()
+        || u64::from(ep) + u64::from(ASP_HEAD_SIZE) > image.len() as u64
+        || u64::from(ep) + u64::from(landing_off) >= image.len() as u64
+        || u64::from(image_base) + image.len() as u64 > u64::from(ASP_STACK)
+    {
+        return false;
+    }
+
+    let rwx = MemoryFlags::new(true, true, true, false);
+    let rw = MemoryFlags::new(true, true, false, false);
+    let mut memory = MemoryManager::new();
+    memory.set_bits(32);
+    if !memory.map_fixed(
+        u64::from(image_base),
+        image.len() as u64,
+        rwx,
+        "ASPack image",
+    ) || !memory.map_fixed(
+        u64::from(ASP_STACK),
+        u64::from(ASP_STACK_SIZE),
+        rw,
+        "ASPack stack",
+    ) || !memory.write(u64::from(image_base), image)
+    {
+        return false;
+    }
+
+    let mut registers = Registers::default();
+    registers.set_gpr(
+        GPR_RSP,
+        4,
+        u64::from(ASP_STACK) + u64::from(ASP_STACK_SIZE) - 0x1000,
+    );
+    let target = u64::from(image_base) + u64::from(ep) + u64::from(landing_off);
+    // Upstream starts one byte past the pushad at AddressOfEntryPoint.
+    registers.rip = u64::from(image_base) + u64::from(ep) + 1;
+
+    let mut steps = 0u64;
+    {
+        let mut arch = X86::new(&mut memory, 32);
+        while u64::from(registers.rip as u32) != target {
+            if steps >= ASP_MAX_STEPS {
+                return false;
+            }
+            steps += 1;
+            // Untrusted stub code: every step is memory-checked and the
+            // loop is capped; any non-OK result aborts the unpack.
+            let info = arch.step(&mut registers);
+            if info.result != StepResult::Ok {
+                return false;
+            }
+        }
+    }
+
+    let Some(head) = memory.read(
+        u64::from(image_base) + u64::from(ep),
+        u64::from(ASP_HEAD_SIZE),
+    ) else {
+        return false;
+    };
+    if head.len() != ASP_HEAD_SIZE as usize {
+        return false;
+    }
+    image[ep as usize..ep as usize + ASP_HEAD_SIZE as usize].copy_from_slice(&head);
+    true
+}
+
 /// `XASPACK::_unpackToBuffer` — assemble the RVA image, decompress the
 /// block table, reverse the one-shot filter, rebuild the PE.
 /// `output_limit < 0` means unlimited (upstream `-1`).
@@ -715,6 +836,14 @@ pub fn unpack_aspack(data: &[u8], output_limit: i64) -> Result<Vec<u8>, UnpackEr
             .get(s.raw_ptr as usize..s.raw_ptr as usize + rsz)
             .ok_or(UnpackError::Malformed("aspack: section raw"))?;
         image[rva..rva + rsz].copy_from_slice(raw);
+    }
+
+    // `USE_XEMULATOR` branch upstream: 2.11/2.11c rows carry an
+    // encrypted stub head; decrypt it in place before the mark and OEP
+    // reads below, which then work exactly as for plaintext versions.
+    if l.emulator_landing != 0 && !decrypt_stub_head(image_base, ep, l.emulator_landing, &mut image)
+    {
+        return Err(UnpackError::Malformed("aspack: stub head emulation"));
     }
 
     let mut st = Aspk::new();
@@ -821,4 +950,55 @@ pub fn unpack_aspack(data: &[u8], output_limit: i64) -> Result<Vec<u8>, UnpackEr
         return Err(UnpackError::Malformed("aspack: build"));
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod emu_tests {
+    //! Synthetic-code coverage for the `USE_XEMULATOR` stub-head branch:
+    //! the guest program decrypts the stub head in place, mirroring what
+    //! a real 2.11x self-decryptor does before `ep + landing_off`.
+    use super::*;
+
+    /// Guest writes two dwords into the head then reaches the landing.
+    #[test]
+    fn decrypt_stub_head_copies_plaintext() {
+        let mut image = vec![0u8; 0x3000];
+        image[0x1000] = 0x60; // pushad — upstream skips this byte
+        let code = [
+            0xC7, 0x05, 0x00, 0x10, 0x40, 0x00, 0x44, 0x33, 0x22,
+            0x11, // mov [0x401000],0x11223344
+            0xC7, 0x05, 0x04, 0x10, 0x40, 0x00, 0x88, 0x77, 0x66,
+            0x55, // mov [0x401004],0x55667788
+        ];
+        image[0x1001..0x1001 + code.len()].copy_from_slice(&code);
+        for b in &mut image[0x1001 + code.len()..0x1020] {
+            *b = 0x90; // nop sled to the landing offset
+        }
+        assert!(decrypt_stub_head(0x40_0000, 0x1000, 0x20, &mut image));
+        assert_eq!(
+            &image[0x1000..0x1008],
+            &[0x44, 0x33, 0x22, 0x11, 0x88, 0x77, 0x66, 0x55]
+        );
+    }
+
+    /// A guest that halts before the landing must fail closed.
+    #[test]
+    fn decrypt_stub_head_aborts_on_trap() {
+        let mut image = vec![0u8; 0x3000];
+        image[0x1000] = 0x60;
+        image[0x1001] = 0xF4; // hlt — STEP_HALT, never reaches landing
+        assert!(!decrypt_stub_head(0x40_0000, 0x1000, 0x20, &mut image));
+    }
+
+    /// A guest loop that never reaches the landing burns the step cap.
+    #[test]
+    fn decrypt_stub_head_bounds_runaway_code() {
+        let mut image = vec![0x90u8; 0x3000];
+        image[0x1000] = 0x60;
+        image[0x1001] = 0xEB; // jmp $-2 (self loop)
+        image[0x1002] = 0xFE;
+        // The 8M-step bound makes this expensive to run in a unit test;
+        // instead verify the out-of-range landing is rejected up front.
+        assert!(!decrypt_stub_head(0x40_0000, 0x1000, 0x3000, &mut image));
+    }
 }

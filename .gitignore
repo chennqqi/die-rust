@@ -45,3 +45,6 @@ __pycache__/
 /tools/msdos-oracle/build/
 /tools/demangle-oracle/build/
 /tools/updater/dev.key
+/tools/xemulator-oracle/build/
+/tools/xemulator-oracle/rpms/
+/tools/xemulator-oracle/qmake-root/

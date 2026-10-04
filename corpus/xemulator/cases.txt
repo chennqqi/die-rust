@@ -1,0 +1,522 @@
+# xemulator micro-differential cases — hex bytes per line, run under the
+# shared 32-bit flat harness (code@0x10000 rwx, stack@0x30000 rw,
+# data@0x40000 = copy of code). Lines starting with '#' are comments.
+#
+# --- ALU register/register, register/memory, immediates ---
+01 d8 c3                          # add eax,ebx
+01 18 c3                          # add [eax],ebx   (fault: eax=0)
+bb 00 00 04 00 01 18 c3        # ebx=0x40000; add [eax],ebx (data page)
+29 d8 c3                          # sub eax,ebx
+39 d8 c3                          # cmp eax,ebx
+21 d8 c3                          # and eax,ebx
+09 d8 c3                          # or eax,ebx
+31 d8 c3                          # xor eax,ebx
+85 d8 c3                          # test eax,ebx
+05 78 56 34 12 c3                # add eax,0x12345678
+2d ff ff ff ff c3                # sub eax,-1
+35 ff 00 ff 00 c3                # xor eax,0x00ff00ff
+83 c0 07 c3                       # add eax,7
+83 e8 07 c3                       # sub eax,7
+83 f8 07 c3                       # cmp eax,7
+83 e0 f0 c3                       # and eax,-16
+83 c8 0f c3                       # or eax,15
+83 f0 55 c3                       # xor eax,0x55
+b8 ff ff ff 7f 83 c0 01 c3       # eax=INT32_MAX; add 1 -> OF
+b8 00 00 00 80 83 e8 01 c3       # eax=INT32_MIN; sub 1 -> OF/CF
+b0 7f 04 01 c3                    # al=0x7f; add al,1 -> 8-bit OF/AF
+66 b8 ff ff 66 83 c0 01 c3       # 16-bit: ax=0xffff; add ax,1
+# --- inc/dec/not/neg ---
+40 c3                             # inc eax
+48 c3                             # dec eax
+f7 d8 c3                          # neg eax
+f7 d0 c3                          # not eax
+b8 ff ff ff ff 40 c3             # eax=-1; inc -> ZF
+b8 10 00 00 00 48 c3             # eax=0x10; dec -> AF
+# --- mov family ---
+89 d8 c3                          # mov eax,ebx
+8b d8 c3                          # mov ebx,eax
+b8 78 56 34 12 c3                # mov eax,imm32
+bb ef be ad de c3                # mov ebx,imm32
+66 b8 34 12 c3                    # mov ax,imm16
+b0 aa c3                          # mov al,imm8
+b4 bb c3                          # mov ah,imm8
+88 d8 c3                          # mov al,bl
+8a d8 c3                          # mov bl,al
+b8 00 00 04 00 8b 18 c3          # eax=data; mov ebx,[eax]
+b8 00 00 04 00 89 18 c3          # mov [eax],ebx (data write)
+b8 00 00 04 00 c7 00 aa bb cc dd c3   # mov dword [eax],imm32
+bb 00 00 04 00 8b 03 c3          # mov eax,[ebx]
+bb 04 00 04 00 8b 43 fc c3       # mov eax,[ebx-4]
+bb 00 00 04 00 8b 84 98 00 01 00 00 c3  # mov eax,[eax+ebx*4+0x100]
+8d 84 98 00 01 00 00 c3          # lea eax,[eax+ebx*4+0x100]
+8d 5d f0 c3                       # lea ebx,[ebp-16]
+0f b6 d8 c3                       # movzx ebx,al
+0f b7 d8 c3                       # movzx ebx,ax
+0f be d8 c3                       # movsx ebx,al
+0f bf d8 c3                       # movsx ebx,ax
+b0 ff 0f be d8 c3                # al=-1; movsx ebx,al -> 0xffffffff
+b0 ff 0f b6 d8 c3                # al=-1; movzx ebx,al -> 0xff
+# --- xchg / xadd / bswap ---
+87 d8 c3                          # xchg eax,ebx
+90 c3                             # nop (xchg eax,eax)
+91 c3                             # xchg eax,ecx
+0f c1 d8 c3                       # xadd eax,ebx
+0f c8 c3                          # bswap eax
+# --- push/pop ---
+50 c3                             # push eax
+58 c3                             # pop eax (uninit but mapped)
+50 58 c3                          # push eax; pop eax
+68 78 56 34 12 5b c3             # push imm32; pop ebx
+6a 7f 59 c3                       # push 0x7f (imm8); pop ecx
+50 51 52 58 59 5a c3             # push eax,ecx,edx; pop eax,ecx,edx
+66 50 66 58 c3                    # push ax; pop ax
+9c c3                             # pushfd
+9c 58 c3                          # pushfd; pop eax -> flags snapshot
+9c 5b 53 9d c3                    # pushfd; pop ebx; push ebx; popfd
+60 61 c3                          # pusha; popa
+# --- call/jmp/ret ---
+e8 02 00 00 00 c3                # call +2 (into ret)
+e8 fb ff ff ff c3                # call -5 (call self, bounded by steps)
+eb fe                            # jmp $ (self loop, budget stop)
+eb 02 c3 c3                      # jmp +2 skip
+ff e0 c3                          # jmp eax -> 0 fault
+ff 20 c3                          # jmp [eax] fault
+c2 08 00                         # ret 8
+# --- conditional branches ---
+b8 01 00 00 00 83 f8 01 74 05 b8 ff 00 00 00 8b d8 c3   # cmp;je taken
+b8 01 00 00 00 83 f8 02 74 05 b8 ff 00 00 00 8b d8 c3   # cmp;je not taken
+b8 ff ff ff ff 83 f8 00 77 05 b8 11 00 00 00 c3        # ja after cmp -1,0
+b8 01 00 00 00 83 f8 ff 72 05 b8 22 00 00 00 c3        # jb
+83 f8 00 78 05 b8 33 00 00 00 c3                       # js (eax=0, SF=0)
+b8 80 00 00 00 83 f8 01 7c 05 b8 44 00 00 00 c3        # jl signed
+b8 80 00 00 00 83 f8 01 7d 05 b8 55 00 00 00 c3        # jge signed
+0f 84 05 00 00 00 b8 66 00 00 00 c3                    # jz near (zf from prev=0? flags init)
+# --- setcc / cmovcc ---
+b8 01 00 00 00 83 f8 01 0f 94 c0 c3   # sete al
+b8 01 00 00 00 83 f8 02 0f 94 c3 c3   # sete bl (clear)
+b8 01 00 00 00 83 f8 02 0f 45 c3 c3   # cmovne eax,ebx
+# --- loop/jecxz ---
+b9 03 00 00 00 e2 fe c3              # ecx=3; loop $-2 (runs to ecx=0)
+e3 fe                               # jecxz $ (ecx=0 -> loop)
+b9 01 00 00 00 e2 fe c3              # ecx=1; loop -> falls through
+# --- shifts/rotates ---
+b8 01 00 00 00 c1 e0 04 c3          # shl eax,4
+b8 00 01 00 00 c1 e8 04 c3          # shr eax,4
+b8 00 00 00 80 c1 f8 04 c3          # sar eax,4
+b8 01 00 00 80 c1 c0 04 c3          # rol eax,4
+b8 01 00 00 80 c1 c8 04 c3          # ror eax,4
+b8 01 00 00 00 d1 e0 c3             # shl eax,1
+b9 08 00 00 00 b8 01 00 00 00 d3 e0 c3  # shl eax,cl
+b8 00 00 00 80 c1 e0 1f c3          # shl eax,31 -> CF=MSB
+b8 01 00 00 00 c1 e0 21 c3          # shl eax,33 (count mask)
+b8 ff ff ff ff c1 c8 01 c3          # ror eax,1
+f9 b8 01 00 00 80 c1 d0 01 c3       # stc; rcl eax,1
+f9 b8 00 00 00 80 c1 d8 01 c3       # stc; rcr eax,1
+b8 34 12 00 00 bb 78 56 00 00 0f a4 c3 08 c3   # shld eax,ebx,8
+b8 34 12 00 00 bb 78 56 00 00 0f ac c3 08 c3   # shrd eax,ebx,8
+# --- mul/div ---
+b8 05 00 00 00 bb 03 00 00 00 f7 e3 c3   # mul ebx -> edx:eax
+b8 ff ff ff ff bb ff ff ff ff f7 e3 c3   # mul 0xffffffff^2
+b8 fe ff ff ff bb 02 00 00 00 f7 eb c3   # imul ebx
+b8 64 00 00 00 31 d2 bb 0a 00 00 00 f7 f3 c3   # div ebx (eax=100/10)
+b8 fb ff ff ff bb 03 00 00 00 99 f7 fb c3      # cdq; idiv ebx (-5/3)
+b8 07 00 00 00 99 bb 03 00 00 00 f7 fb c3      # cdq; idiv +7/3
+b0 64 b3 0a f6 f3 c3                         # div bl (ax=100/10)
+b8 64 00 00 00 31 d2 bb 00 00 00 00 f7 f3 c3   # div by zero -> fault/handler
+0f af d8 c3                                   # imul eax,ebx (2-op)
+b8 05 00 00 00 6b c0 03 c3                    # imul eax,eax,3
+b8 05 00 00 00 69 c0 03 00 00 00 c3           # imul eax,eax,3 (imm32)
+# --- string ops ---
+b9 04 00 00 00 be 00 00 04 00 bf 10 00 04 00 f3 a4 c3   # rep movsb
+b9 02 00 00 00 be 00 00 04 00 bf 10 00 04 00 f3 a5 c3   # rep movsd
+b0 aa b9 08 00 00 00 bf 20 00 04 00 f3 aa c3            # rep stosb
+b9 04 00 00 00 bf 10 00 04 00 f3 ab c3                  # rep stosd (eax=0)
+be 00 00 04 00 ac c3                                    # lodsb
+be 00 00 04 00 ad c3                                    # lodsd
+bf 00 00 04 00 ae c3                                    # scasb
+b9 04 00 00 00 be 00 00 04 00 bf 00 00 04 00 f3 a6 c3   # repe cmpsb
+b9 04 00 00 00 be 00 00 04 00 bf 00 00 04 00 f2 a6 c3   # repne cmpsb
+fd be 0f 00 04 00 ac c3 fc                              # std; lodsb; cld
+# --- bit test/scan ---
+0f a3 d8 c3                          # bt eax,ebx
+b8 10 00 00 00 0f a3 d8 c3          # eax=0x10; bt eax,ebx(0)
+b8 10 00 00 00 bb 04 00 00 00 0f a3 d8 c3  # bt eax,4 -> CF
+b8 10 00 00 00 bb 04 00 00 00 0f ab d8 c3  # bts
+b8 10 00 00 00 bb 04 00 00 00 0f b3 d8 c3  # btr
+b8 10 00 00 00 bb 04 00 00 00 0f bb d8 c3  # btc
+b8 10 00 00 00 0f bc d8 c3          # bsf ebx,eax -> 4
+b8 10 00 00 00 0f bd d8 c3          # bsr ebx,eax -> 4
+b8 00 00 00 00 0f bc d8 c3          # bsf zero -> ZF
+# --- cwd/cdq/cbw ---
+b0 ff 98 c3                          # cbw (al=-1)
+66 b8 ff ff 98 c3                    # ax=-1; cwde
+b8 ff ff ff ff 99 c3                 # cdq (edx=-1)
+b8 01 00 00 00 99 c3                 # cdq (edx=0)
+# --- flag ops ---
+f8 c3                                # clc
+f9 c3                                # stc
+f5 c3                                # cmc
+fc c3                                # cld
+fd c3                                # std
+f9 f5 c3                             # stc;cmc -> CF=0
+9f c3                                # lahf
+9e c3                                # sahf
+# --- cpuid/rdtsc ---
+0f a2 c3                             # cpuid (eax=0 leaf)
+b8 01 00 00 00 0f a2 c3              # cpuid leaf 1
+0f 31 c3                             # rdtsc
+# --- misc ---
+f4                                   # hlt -> HALT
+cc                                   # int3 -> HALT
+cd 80                                # int 0x80 -> SYSCALL
+cd 20                                # int 0x20 -> SYSCALL
+0f 05                                # syscall -> SYSCALL
+ce                                   # into (OF=0, fall)
+f1                                   # int1 (icebp) -> SYSCALL? or unimpl
+0f 0b                                # ud2 -> unimpl/fault
+0f ff                                # ud0 -> unimpl
+ff ff                                # invalid (group5 /7) -> unimpl
+d8 c9                                # fmul st1 (fpu)
+d9 e8                                # fld1
+d9 ee                                # fldz
+d9 e8 d9 c0 d8 c9 c3                # fld1; fld st0; fmul st1
+db e3                                # fninit
+d9 c0 c3                             # fld st0
+dd d8 c3                             # fstp st0
+d9 f2 c3                             # fptan? no - fptan is d9 f2: yes
+0f 77 c3                             # emms
+0f 6f c1 c3                          # movq mm0,mm1
+0f ef c1 c3                          # pxor mm0,mm1
+0f d4 c1 c3                          # paddq mm0,mm1
+0f 6f 00 c3                          # movq mm0,[eax] fault
+b8 00 00 04 00 0f 6f 00 c3          # movq mm0,[data]
+0f db c1 c3                          # pand mm0,mm1
+# --- self-modifying code ---
+b8 00 00 01 00 c6 00 90 c3          # write nop over code+? (smc)
+# --- stack wrap / addressing edges ---
+bc ff ff 03 00 c3                    # mov esp,0x3ffff (unmapped sp)
+bc f0 ff 02 00 c3                    # mov esp,0x2fff0 (below stack)
+bb 00 f0 ff ff 8b 03 c3             # mov eax,[ebx=0xfffff000] fault
+# --- prefixes ---
+67 8b 00 c3                          # addr16 mov eax,[bx+si]? 16-bit addressing
+f3 90 c3                             # pause == nop
+f0 01 d8 c3                          # lock add eax,ebx
+2e 8b 00 c3                          # cs: mov eax,[eax]
+64 8b 00 c3                          # fs: mov eax,[eax] (fs_base=0)
+65 8b 00 c3                          # gs:
+66 01 d8 c3                          # add ax,bx
+# --- group decodings ---
+fe c0 c3                             # inc al
+fe c8 c3                             # dec al
+fe 00 c3                             # inc byte [eax] fault
+f6 d8 c3                             # neg al
+f6 c0 55 c3                          # test al,0x55
+f7 c0 55 00 00 00 c3                # test eax,0x55
+c6 c0 aa c3                          # mov al,0xaa (group 11)
+d0 e0 c3                             # shl al,1
+c0 e8 03 c3                          # shr al,3
+d2 e0 c3                             # shl al,cl
+80 f8 55 c3                          # cmp al,0x55
+8f c0 c3                             # pop eax (group 1A)
+8f 00 c3                             # pop [eax] fault
+ff c0 c3                             # inc eax (group5/0)
+ff c8 c3                             # dec eax (group5/1)
+ff d0 c3                             # call eax -> 0
+ff 10 c3                             # call [eax] fault
+ff 30 c3                             # push [eax] fault
+ff f0 c3                             # push eax
+# --- xlat ---
+b8 00 00 04 00 bb 00 00 04 00 b0 03 d7 c3   # xlat ([ebx+al] fs:ds base)
+# --- long smoke: bubble-sort-ish loop ---
+b9 04 00 00 00 49 79 fd c3           # dec ecx; jns loop (ecx 4->0)
+b9 00 00 00 00 49 79 fd c3           # ecx=0; dec -> -1; jns false
+# --- phase-2 edge battery ---
+88 e0 c3                          # mov al,ah
+8a c4 c3                          # mov al,ah (alt decode)
+00 e0 c3                          # add al,ah
+28 e0 c3                          # sub al,ah
+b4 ff 80 fc 01 c3                 # ah=-1; cmp ah,1
+8a 24 24 c3                       # mov ah,[esp]
+b8 00 00 04 00 c4 00 c3          # les eax,[data] (far load)
+b8 00 00 04 00 c5 00 c3          # lds eax,[data]
+b8 00 00 04 00 0f b2 00 c3       # lss eax,[data]
+b8 00 00 04 00 0f b4 00 c3       # lfs eax,[data]
+b8 00 00 04 00 0f b5 00 c3       # lgs eax,[data]
+8c d8 c3                          # mov eax,ds (r/m16 form)
+8e d8 c3                          # mov ds,ax
+06 c3                             # push es
+07 c3                             # pop es
+16 17 c3                          # push ss; pop ss
+0f a8 0f a9 c3                    # push gs; pop gs
+0f a0 0f a1 c3                    # push fs; pop fs
+cb                                # retf (32-bit: pops eip+cs)
+ca 04 00                          # retf 4
+cf                                # iret
+ea 00 00 00 00 08 00              # jmp far 0x8:0
+9a 00 00 00 00 08 00              # call far 0x8:0
+ff 28 c3                          # jmp far [eax] fault
+ff 18 c3                          # call far [eax] fault
+e4 60 c3                          # in al,0x60 (keyboard latch -> 0)
+e4 3d c3                          # in al,0x3d
+e4 da c3                          # in al,0xda
+e4 40 c3                          # in al,0x40 (PIT model)
+e4 40 e4 40 c3                    # in al,0x40 twice (lo/hi flip)
+e5 40 c3                          # in eax,0x40
+e4 42 c3                          # in al,0x42
+ec c3                             # in al,dx (dx=0)
+ed c3                             # in eax,dx
+e6 61 c3                          # out 0x61,al
+ee c3                             # out dx,al
+e7 61 c3                          # out 0x61,eax
+e6 da c3                          # out 0xda,al
+e4 ff c3                          # in al,0xff (open bus -> 0xff)
+e5 ff c3                          # in eax,0xff
+b8 ff ff ff 7f 83 c0 01 ce c3     # OF=1; into -> SYSCALL vec4
+d4 0a c3                          # aam
+d5 0a c3                          # aad
+d4 07 c3                          # aam 7
+b0 15 27 c3                        # al=0x15; daa -> 0x21
+b0 15 2f c3                        # das
+b0 3a 27 c3                        # al=0x3a; daa (low>9)
+b0 ff 27 c3                        # al=0xff; daa (both adjust)
+37 c3                             # aaa
+3f c3                             # aas
+b0 0f 37 c3                        # al=0x0f; aaa
+6c c3                             # insb
+6d c3                             # insd
+6e c3                             # outsb
+6f c3                             # outsd
+d6 c3                             # salc (undocumented)
+0f 18 00 c3                        # hint_nop [eax]
+0f 1f 00 c3                        # nop dword [eax]
+f3 0f 1e fb c3                     # endbr32 (nop or unimpl)
+63 d8 c3                          # arpl ax,bx (or movsxd)
+0f 00 d0 c3                        # lldt? group6 /2 -> nop
+0f 00 18 c3                        # ltr -> nop
+0f 01 e0 c3                        # smsw eax (group7/4 reg)
+0f 01 00 c3                        # sldt [eax] fault (group7/0 mem)
+0f 02 d8 c3                        # lar eax,ebx? (lar returns imm)
+0f 03 d8 c3                        # lsl eax,ebx
+0f 20 c0 c3                        # mov eax,cr0
+0f 22 c0 c3                        # mov cr0,eax
+0f 21 c0 c3                        # mov eax,dr0
+0f 23 c0 c3                        # mov dr0,eax
+0f 23 f0 c3                        # mov dr6,eax
+0f 23 f8 c3                        # mov dr7,eax
+0f 21 f0 c3                        # mov eax,dr6
+fa fb c3                          # cli; sti
+c8 10 00 02 c9 c3                 # enter 16,2; leave
+d7 c3                             # xlat (ebx=0,al=0)
+8d 04 85 00 00 04 00 c3           # lea eax,[eax*4+0x40000]
+8b 04 85 00 00 04 00 c3           # mov eax,[eax*4+0x40000]
+8b 44 24 04 c3                    # mov eax,[esp+4] (SIB)
+8b 84 8d 00 00 04 00 c3           # mov eax,[ebp+ecx*4+0x40000]
+b8 00 00 04 00 03 04 85 00 00 04 00 c3  # add eax,[eax*4+disp]
+65 8b 00 c3                       # gs:[eax]
+64 8b 00 c3                       # fs:[eax]
+64 89 00 c3                       # fs:[eax]=eax
+3e 8b 00 c3                       # ds:[eax]
+26 8b 00 c3                       # es:[eax]
+36 8b 00 c3                       # ss:[eax]
+64 b8 00 00 04 00 8b 00 c3        # fs prefix then mov eax,data...
+66 89 d8 c3                        # mov ax,bx
+66 8b d8 c3                        # mov bx,ax
+66 05 78 56 c3                     # add ax,imm16
+66 83 c0 01 c3                     # add ax,1
+66 40 c3                           # inc ax
+66 48 c3                           # dec ax
+66 ff c0 c3                        # inc ax (grp5)
+66 31 c0 c3                        # xor ax,ax
+66 c1 e0 04 c3                     # shl ax,4
+66 c1 f8 04 c3                     # sar ax,4
+66 d3 e0 c3                        # shl ax,cl
+66 f7 e3 c3                        # mul bx (ax*bx->dx:ax)
+66 f7 f3 c3                        # div bx
+66 98 c3                           # cbw
+66 99 c3                           # cwd
+66 9c 66 58 c3                     # pushfw; pop ax
+66 60 66 61 c3                     # pushaw; popaw
+66 68 34 12 c3                     # push imm16
+b9 02 00 00 00 66 f3 a5 c3        # rep movsw
+f2 a4 c3                           # repne movsb (rep on non-str = rep)
+f3 ae c3                           # repe scasb
+b8 00 00 04 00 8b 18 0f b0 d8 c3  # mov ebx,[data]; cmpxchg al,bl
+b8 00 00 04 00 0f b1 18 c3        # cmpxchg [eax],ebx
+0f c0 d8 c3                        # xadd al,bl
+f0 ff 00 c3                        # lock inc [eax] fault
+67 50 c3                           # addr16 push eax (sp unaffected)
+67 03 00 c3                        # addr16 add eax,[bx+si] fault
+67 8b 46 04 c3                     # addr16 mov eax,[bp+4] ss:
+e3 02 c3 c3                        # jecxz +2 (ecx=0 taken)
+67 e3 02 c3 c3                     # jcxz +2 (addr16 count=cx)
+b9 ff ff ff ff e2 fe c3            # ecx=-1; loop -> 0xfffffffe continues
+e0 fe                              # loopne $
+e1 fe                              # loope $
+b9 03 00 00 00 e0 fe c3            # ecx=3 loopne (zf=1?) semantics
+f8 f9 f5 f5 c3                     # clc;stc;cmc;cmc -> CF=0
+b8 00 00 04 00 03 00 c3            # add eax,[data]
+b8 00 00 04 00 33 00 c3            # xor eax,[data]
+b8 00 00 04 00 23 00 c3            # and eax,[data]
+b8 00 00 04 00 0b 00 c3            # or eax,[data]
+b8 00 00 04 00 2b 00 c3            # sub eax,[data]
+b8 00 00 04 00 3b 00 c3            # cmp eax,[data]
+b8 00 00 04 00 85 00 c3            # test eax,[data]
+b8 00 00 04 00 87 00 c3            # xchg eax,[data]
+b8 00 00 04 00 89 18 8b 00 c3      # write/read back data
+b8 00 00 04 00 c6 00 aa 8a 00 c3   # mov byte[data],0xaa; load
+b8 00 00 04 00 fe 00 c3            # inc byte [data]
+b8 00 00 04 00 ff 00 c3            # inc dword [data]
+b8 00 00 04 00 83 00 7f c3         # add dword [data],0x7f
+b8 00 00 04 00 80 00 7f c3         # add byte [data],0x7f
+b8 00 00 04 00 f7 00 78 56 c3      # test dword[data],0x5678
+b8 00 00 04 00 ff 30 c3            # push [data]
+b8 00 00 04 00 8f 00 c3            # pop [data]
+b8 00 00 04 00 ff 10 c3            # call [data]
+b8 00 00 04 00 ff 20 c3            # jmp [data]
+b8 00 00 04 00 d1 20 c3            # shl dword[data],1
+b8 00 00 04 00 c1 20 03 c3         # shl dword[data],3
+b8 00 00 04 00 f7 10 c3            # not dword[data]
+b8 00 00 04 00 f7 18 c3            # neg dword[data]
+b8 00 00 04 00 0f a3 18 c3         # bt [data],ebx
+b8 00 00 04 00 0f ab 18 c3         # bts [data],ebx
+b8 00 00 04 00 0f ba 20 05 c3      # bt dword[data],5
+b8 00 00 04 00 0f ba 28 05 c3      # bts dword[data],5
+b8 00 00 04 00 0f ba 30 05 c3      # btr dword[data],5
+b8 00 00 04 00 0f ba 38 05 c3      # btc dword[data],5
+b8 00 00 04 00 0f ba f8 05 c3      # btc eax,5 (grp8 reg)
+0f ba e0 05 c3                     # bt eax,5 imm
+0f ba f0 05 c3                     # btr eax,5
+b8 00 00 04 00 bb 21 00 00 00 0f a3 18 c3  # bt [data],33 (byte addressing)
+b8 00 00 04 00 bb 21 00 00 00 0f ab 18 c3  # bts [data],33
+# truncated fetch / fetch at edge
+eb fb                              # jmp -5 (self, infinite, budget)
+e9 00 00 00 00                     # jmp +5 (past end -> unmapped fault)
+eb 02                              # jmp +2 into unwritten zeros (decode)
+f4 f4                              # hlt;hlt
+cc cc cc                           # int3 x3
+ff 36 00 00                        # push [0x10006..]? no - push ds:[0000]
+# fpu memory forms
+b8 00 00 04 00 d9 00 c3            # fld dword [data]
+b8 00 00 04 00 dd 00 c3            # fld qword [data]
+b8 00 00 04 00 db 28 c3            # fld tbyte [data]
+b8 00 00 04 00 d9 10 c3            # fst dword [data] (no pop)
+b8 00 00 04 00 d9 18 c3            # fstp dword [data]
+b8 00 00 04 00 dd 18 c3            # fstp qword [data]
+b8 00 00 04 00 db 38 c3            # fstp tbyte [data]
+b8 00 00 04 00 db 00 c3            # fild dword [data]
+b8 00 00 04 00 db 10 c3            # fist dword [data]
+b8 00 00 04 00 db 18 c3            # fistp dword [data]
+b8 00 00 04 00 d8 00 c3            # fadd dword [data]
+b8 00 00 04 00 d8 20 c3            # fsub dword [data]
+b8 00 00 04 00 d8 08 c3            # fmul dword [data]
+b8 00 00 04 00 d8 30 c3            # fdiv dword [data]
+b8 00 00 04 00 d8 10 c3            # fcom dword [data]
+b8 00 00 04 00 d8 18 c3            # fcomp dword [data]
+d9 e8 d9 e1 c3                     # fld1; fabs
+d9 e8 d9 e0 c3                     # fld1; fchs
+d9 e8 de e9 c3                     # fld1; fsubp st1
+d9 e8 de c9 c3                     # fld1; fmulp? de c9 = fmulp st1
+d9 e8 de c1 c3                     # fld1; faddp st1
+d9 e8 de d9 c3                     # fld1; fcompp
+d9 e8 d8 d1 c3                     # fld1; fcom st1
+d9 e8 d9 c9 c3                     # fld1; fxch st1
+d9 e8 d9 ca c3                     # fld1; fxch st2 (wrap?)
+d9 e8 d9 f7 c3                     # fld1; fincstp
+d9 e8 d9 f6 c3                     # fld1; fdecstp
+d9 fc c3                           # frndint? d9 fc = frndint
+d9 e8 d9 fc c3                     # fld1; frndint
+d9 e8 d9 f4 c3                     # fld1; fxtract
+d9 e8 d9 e5 c3                     # fld1; fexam
+d9 e8 d9 fa c3                     # fld1; fsqrt
+d9 e8 d9 eb c3                     # fld1; fldpi
+d9 e8 d9 e9 c3                     # fld1; fldl2t
+d9 e8 d9 ec c3                     # fld1; fldlg2
+d9 e8 d9 ed c3                     # fld1; fldln2
+d9 e8 d9 ea c3                     # fld1; fldl2e
+d9 e8 d9 fe c3                     # fld1; fsin
+d9 e8 d9 ff c3                     # fld1; fcos
+d9 e8 d9 fb c3                     # fld1; fsincos
+d9 e8 d9 f0 c3                     # fld1; f2xm1
+d9 e8 d9 f1 c3                     # fld1; fyl2x
+d9 e8 d9 f3 c3                     # fld1; fpatan
+d9 e8 d9 f8 c3                     # fld1; fprem
+d9 e8 d9 f5 c3                     # fld1; fprem1
+d9 e8 d9 f9 c3                     # fld1; fyl2xp1
+d9 e8 d9 fd c3                     # fld1; fscale
+d9 e8 d9 d0 c3                     # fld1; fnop
+db e0 c3                           # feni? db e0 = feni (nop in 387+)
+db e2 c3                           # fclex
+db e4 c3                           # fsetpm
+9b db e3 c3                        # fwait;fninit combo
+dd e1 c3                           # fucom st1
+dd e9 c3                           # fucomp st1
+de f9 c3                           # fdivp? de f9 = fdivp? actually fdivrp
+dc c9 c3                           # fmul st1,st0
+dc e9 c3                           # fsubr? dc e9 = fsubr st1
+dc f9 c3                           # fdivr st1
+d9 2d 00 00 04 00 c3               # fldcw [data]
+d9 3d 00 00 04 00 c3               # fnstcw [data]
+d9 7d 00 00 04 00 c3               # fnstcw wait form
+dd 3d 00 00 04 00 c3               # fnstsw [data]
+df e0 c3                           # fnstsw ax
+9b df e0 c3                        # fstsw ax (wait)
+# mmx extended
+0f 6f c9 c3                        # movq mm1,mm0
+0f 7f c8 c3                        # movq mm0? 0f 7f /r movq mm/m64,mm
+b8 00 00 04 00 0f 7f 00 c3         # movq [data],mm0
+b8 00 00 04 00 0f 6f 00 0f 7f 08 c3  # movq mm0,[data]; movq [data+?],mm0
+0f fc c1 c3                        # paddb mm0,mm1
+0f fd c1 c3                        # paddw mm0,mm1
+0f fe c1 c3                        # paddd mm0,mm1
+0f d8 c1 c3                        # psubusb mm0,mm1
+0f dc c1 c3                        # paddusb mm0,mm1
+0f e8 c1 c3                        # psubsb mm0,mm1
+0f ec c1 c3                        # paddsb mm0,mm1
+0f e9 c1 c3                        # psubsw mm0,mm1
+0f ed c1 c3                        # paddsw mm0,mm1
+0f 74 c1 c3                        # pcmpeqb mm0,mm1
+0f 75 c1 c3                        # pcmpeqw mm0,mm1
+0f 76 c1 c3                        # pcmpeqd mm0,mm1
+0f 64 c1 c3                        # pcmpgtb mm0,mm1
+0f 65 c1 c3                        # pcmpgtw mm0,mm1
+0f 66 c1 c3                        # pcmpgtd mm0,mm1
+0f 67 c1 c3                        # packuswb mm0,mm1
+0f 6b c1 c3                        # packssdw mm0,mm1
+0f 63 c1 c3                        # packsswb mm0,mm1
+0f 60 c1 c3                        # punpcklbw mm0,mm1
+0f 61 c1 c3                        # punpcklwd mm0,mm1
+0f 62 c1 c3                        # punpckldq mm0,mm1
+0f 68 c1 c3                        # punpckhbw mm0,mm1
+0f 69 c1 c3                        # punpckhwd mm0,mm1
+0f 6a c1 c3                        # punpckhdq mm0,mm1
+0f f1 c1 c3                        # psllw mm0,mm1
+0f f2 c1 c3                        # pslld mm0,mm1
+0f f3 c1 c3                        # psllq mm0,mm1
+0f d1 c1 c3                        # psrlw mm0,mm1
+0f d2 c1 c3                        # psrld mm0,mm1
+0f d3 c1 c3                        # psrlq mm0,mm1
+0f e1 c1 c3                        # psraw mm0,mm1
+0f e2 c1 c3                        # psrad mm0,mm1
+0f fb c1 c3                        # psubq mm0,mm1
+0f f4 c1 c3                        # pmuludq? 0f f4 = pmuludq
+0f e4 c1 c3                        # pmulhuw mm0,mm1
+0f e5 c1 c3                        # pmulhw mm0,mm1
+0f d5 c1 c3                        # pmullw mm0,mm1
+0f f5 c1 c3                        # pmaddwd mm0,mm1
+0f d6 c1 c3                        # movq? 0f d6 = movq mm/m64? (SSE2)
+0f 71 d0 04 c3                     # psllw mm0,4
+0f 72 d0 04 c3                     # pslld mm0,4
+0f 73 d0 04 c3                     # psllq mm0,4
+0f 71 f0 04 c3                     # psllw mm0,4 (alt decode /6?)
+0f 71 e0 04 c3                     # psraw mm0,4
+0f 72 e0 04 c3                     # psrad mm0,4
+0f 71 90 04 00 c3                  # psrlw mm0,4
+0f 70 c1 1b c3                     # pshufw mm0,mm1,0x1b
+0f 6e c0 c3                        # movd mm0,eax
+0f 7e c0 c3                        # movd eax,mm0
+0f 6e 00 c3                        # movd mm0,[eax] fault
+0f f8 c1 c3                        # psubb mm0,mm1
+0f f9 c1 c3                        # psubw mm0,mm1
+0f fa c1 c3                        # psubd mm0,mm1
+0f df c1 c3                        # pandn mm0,mm1
+0f eb c1 c3                        # por mm0,mm1

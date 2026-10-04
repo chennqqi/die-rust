@@ -172,3 +172,6 @@
 [submodule "upstream/DIE-engine/dep/peid_widget"]
 	path = upstream/DIE-engine/dep/peid_widget
 	url = https://github.com/horsicq/peid_widget
+[submodule "upstream/DIE-engine/dep/XEmulator"]
+	path = upstream/DIE-engine/dep/XEmulator
+	url = https://github.com/horsicq/XEmulator.git

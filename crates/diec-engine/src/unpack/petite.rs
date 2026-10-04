@@ -1,12 +1,14 @@
 //! Petite (2.x / 2.x level 1) static unpacker — port of upstream
-//! `XStaticUnpacker/xpetite.cpp` (the `petite_inflate2x_1to9` path).
-//!
-//! The embedded-decoder emulation path (`USE_XEMULATOR`) is not part of
-//! the upstream oracle build either, so only the classic op-table inflate
-//! is ported; embedded-decoder samples fail closed.
+//! `XStaticUnpacker/xpetite.cpp` (the `petite_inflate2x_1to9` path),
+//! including the `USE_XEMULATOR` embedded-decoder fallback: newer
+//! loaders hand section payloads to an in-image x86 decoder that the
+//! `emulate` module executes under a shared step budget instead of the
+//! classic op-table inflate.
 
 use super::PackedPe;
 use super::upx::UnpackError;
+use crate::emulate::regs::{GPR_RAX, GPR_RSP};
+use crate::emulate::{MemoryFlags, MemoryManager, Registers, StepResult, X86};
 
 fn rd32(b: &[u8], off: usize) -> u32 {
     b.get(off..off + 4)
@@ -53,6 +55,304 @@ fn doubledl(buf: &[u8], s: &mut i64, mydl: &mut u8) -> i64 {
         return (b >> 7) as i64;
     }
     (old >> 7) as i64
+}
+
+/// Emulator scratch layout (`xpetite.cpp` `USE_XEMULATOR` constants).
+const PET_EMU_STACK: u32 = 0x5000_0000;
+const PET_EMU_STACK_SIZE: u32 = 0x0010_0000;
+const PET_EMU_SCRATCH: u32 = 0x5100_0000;
+const PET_EMU_SCRATCH_SIZE: u32 = 0x0001_0000;
+const PET_EMU_TRAP: u32 = 0x5200_0000;
+const PET_EMU_MAX_STEPS: u64 = 100_000_000;
+/// Cancellation-check granularity of the upstream `run` loop.
+const PET_EMU_CANCEL_STEPS: u64 = 100_000;
+
+/// Located embedded decoder (`PET_DECODER_INFO`).
+#[derive(Default)]
+struct PetDecoderInfo {
+    /// Whether an unambiguous decoder was found.
+    valid: bool,
+    /// RVA of the decoder entry (inside the loader section).
+    function_rva: u32,
+    /// The five loader-local helper addresses pushed to the decoder.
+    table_offsets: [u32; 5],
+}
+
+/// `petFindEmbeddedDecoder` — recover the decoder entry point and its
+/// five helper-table offsets from the loader's exact push/add run;
+/// ambiguous or pattern-free loads report `valid = false`.
+fn pet_find_embedded_decoder(
+    buf: &[u8],
+    min_rva: u32,
+    loader_rva: u32,
+    loader_vsz: u32,
+    image_base: u32,
+) -> PetDecoderInfo {
+    let mut result = PetDecoderInfo::default();
+    let bufsz = buf.len() as u32;
+    if buf.is_empty() || loader_rva > 0xFFFF_FFFFu32.wrapping_sub(image_base) {
+        return result;
+    }
+
+    let loader_offset = loader_rva as i64 - min_rva as i64;
+    let loader_end = (bufsz as i64).min(loader_offset + loader_vsz as i64);
+    if loader_offset < 0 || loader_end <= loader_offset || loader_end - loader_offset < 0x100 {
+        return result;
+    }
+
+    // Newer Petite loaders pass five loader-local helper addresses to
+    // their embedded decoder. Recover the addresses from the exact
+    // push/add run, but reject loose byte-pattern matches in arbitrary
+    // packed data.
+    let mut argument_run: i64 = -1;
+    let mut i = loader_offset + 6;
+    while i + 25 <= loader_end {
+        let base = i as usize;
+        if buf[base - 6] == 0x68
+            && rd32(buf, base - 5) == image_base
+            && (0x50..=0x57).contains(&buf[base - 1])
+        {
+            let mut seen = [false; 256];
+            let mut run = true;
+            for j in 0..5i64 {
+                let at = (i + j * 5) as usize;
+                let off = buf[at + 4] as usize;
+                if buf[at] != 0x50
+                    || buf[at + 1] != 0x80
+                    || buf[at + 2] != 0x04
+                    || buf[at + 3] != 0x24
+                    || buf[at + 4] == 0
+                    || seen[off]
+                    || (buf[at + 4] as u32) >= loader_vsz
+                {
+                    run = false;
+                    break;
+                }
+                seen[off] = true;
+            }
+            if run {
+                if argument_run != -1 {
+                    return PetDecoderInfo::default(); // ambiguous
+                }
+                argument_run = i;
+            }
+        }
+        i += 1;
+    }
+    if argument_run == -1 {
+        return result;
+    }
+    for j in 0..5i64 {
+        result.table_offsets[j as usize] = buf[(argument_run + j * 5 + 4) as usize] as u32;
+    }
+
+    // The normal section loop pushes {op,size,destination,source}
+    // immediately before a direct relative call. Accept one unambiguous
+    // decoder only.
+    let call_end = loader_end.min(argument_run + 0x180);
+    const CALL_PREFIX: [u8; 7] = [0x52, 0x53, 0x57, 0x03, 0x02, 0x50, 0xE8];
+    let mut call_offset: i64 = -1;
+    let mut function_rva = 0u32;
+    let mut i = argument_run + 25;
+    while i + 11 <= call_end {
+        let at = i as usize;
+        if buf[at..at + 7] == CALL_PREFIX {
+            let relative = rd32(buf, at + 7) as i32;
+            let target_rva64 = min_rva as i64 + i + 11 + relative as i64;
+            if target_rva64 >= loader_rva as i64
+                && target_rva64 + 9 <= loader_rva as i64 + loader_vsz as i64
+            {
+                let target_offset = target_rva64 - min_rva as i64;
+                if cont(buf.len(), target_offset, 9) {
+                    let t = target_offset as usize;
+                    if buf[t] == 0x55
+                        && buf[t + 1] == 0x8B
+                        && buf[t + 2] == 0xEC
+                        && buf[t + 3] == 0x81
+                        && buf[t + 4] == 0xEC
+                    {
+                        let local_stack = rd32(buf, t + 5);
+                        if (0x100..=0x000F_0000).contains(&local_stack) {
+                            if call_offset != -1 {
+                                return PetDecoderInfo::default(); // ambiguous
+                            }
+                            call_offset = i;
+                            function_rva = target_rva64 as u32;
+                        }
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    if call_offset == -1 {
+        return result;
+    }
+
+    result.valid = true;
+    result.function_rva = function_rva;
+    result
+}
+
+/// `petRunEmbeddedDecoder` — call the in-image decoder under emulation:
+/// the shared work buffer is mapped at `image_base + min_rva`, the
+/// decoder runs on a synthesized stack with a `hlt` return trap, and its
+/// output `[destination, destination+output_size)` is copied back into
+/// `buf`. The shared step budget (`pnStepsRemaining` upstream) bounds
+/// the whole unpack, not one section.
+#[allow(clippy::too_many_arguments)]
+fn pet_run_embedded_decoder(
+    buf: &mut [u8],
+    min_rva: u32,
+    image_base: u32,
+    loader_rva: u32,
+    decoder: &PetDecoderInfo,
+    op_offset: i64,
+    source_rva: u32,
+    destination_rva: u32,
+    output_size: u32,
+    steps_remaining: &mut u64,
+) -> bool {
+    let bufsz = buf.len() as u32;
+    if !decoder.valid || *steps_remaining == 0 || output_size == 0 {
+        return false;
+    }
+    if image_base > 0xFFFF_FFFFu32.wrapping_sub(min_rva)
+        || image_base > 0xFFFF_FFFFu32.wrapping_sub(loader_rva)
+        || image_base > 0xFFFF_FFFFu32.wrapping_sub(decoder.function_rva)
+    {
+        return false;
+    }
+    if !cont(bufsz as usize, source_rva as i64 - min_rva as i64, 1)
+        || !cont(
+            bufsz as usize,
+            destination_rva as i64 - min_rva as i64,
+            output_size as i64,
+        )
+        || !cont(bufsz as usize, op_offset, 16)
+    {
+        return false;
+    }
+
+    let image_address = image_base.wrapping_add(min_rva);
+    let source_address = image_base.wrapping_add(source_rva);
+    let destination_address = image_base.wrapping_add(destination_rva);
+    let loader_address = image_base.wrapping_add(loader_rva);
+    let function_address = image_base.wrapping_add(decoder.function_rva);
+    if image_address > 0xFFFF_FFFFu32.wrapping_sub(bufsz)
+        || destination_address > 0xFFFF_FFFFu32.wrapping_sub(output_size)
+        || loader_address > 0xFFFF_FF00
+        || (image_base as u64 + min_rva as u64 + op_offset as u64) > 0xFFFF_FFFF
+    {
+        return false;
+    }
+    let op_address = (image_base as u64 + min_rva as u64 + op_offset as u64) as u32;
+
+    let rwx = MemoryFlags::new(true, true, true, false);
+    let rw = MemoryFlags::new(true, true, false, false);
+    let mut memory = MemoryManager::new();
+    memory.set_bits(32);
+    if !memory.map_fixed(
+        u64::from(image_address),
+        u64::from(bufsz),
+        rwx,
+        "Petite image",
+    ) || !memory.map_fixed(
+        u64::from(PET_EMU_STACK),
+        u64::from(PET_EMU_STACK_SIZE),
+        rw,
+        "Petite stack",
+    ) || !memory.map_fixed(
+        u64::from(PET_EMU_SCRATCH),
+        u64::from(PET_EMU_SCRATCH_SIZE),
+        rw,
+        "Petite scratch",
+    ) || !memory.map_fixed(u64::from(PET_EMU_TRAP), 0x1000, rwx, "Petite return trap")
+        || !memory.write(u64::from(image_address), buf)
+        || !memory.write_u8(u64::from(PET_EMU_TRAP), 0xF4)
+    {
+        return false;
+    }
+
+    let saved_stack = PET_EMU_STACK + PET_EMU_STACK_SIZE - 0x10000;
+    let stack = PET_EMU_STACK + PET_EMU_STACK_SIZE - 0x1000;
+    let arguments: [u32; 12] = [
+        source_address,
+        destination_address,
+        output_size,
+        op_address,
+        loader_address.wrapping_add(decoder.table_offsets[4]),
+        loader_address.wrapping_add(decoder.table_offsets[3]),
+        loader_address.wrapping_add(decoder.table_offsets[2]),
+        loader_address.wrapping_add(decoder.table_offsets[1]),
+        loader_address.wrapping_add(decoder.table_offsets[0]),
+        saved_stack,
+        image_base,
+        PET_EMU_SCRATCH,
+    ];
+    if !memory.write_u32(u64::from(stack), PET_EMU_TRAP) {
+        return false;
+    }
+    for (i, arg) in arguments.iter().enumerate() {
+        if !memory.write_u32(u64::from(stack) + 4 + i as u64 * 4, *arg) {
+            return false;
+        }
+    }
+
+    let mut registers = Registers::default();
+    registers.set_gpr(GPR_RSP, 4, u64::from(stack));
+    registers.rip = u64::from(function_address);
+
+    let mut returned = false;
+    {
+        let mut arch = X86::new(&mut memory, 32);
+        let mut stop = crate::emulate::StepInfo::default();
+        while *steps_remaining > 0 {
+            // Cancellation-check chunks like upstream; the shared budget
+            // bounds total emulation across all sections.
+            let chunk = (*steps_remaining).min(PET_EMU_CANCEL_STEPS) as i64;
+            let ran = arch.run(&mut registers, chunk, &mut stop);
+            if ran <= 0 || ran > chunk {
+                return false;
+            }
+            *steps_remaining -= ran as u64;
+            if stop.result == StepResult::Ok {
+                if ran != chunk {
+                    return false;
+                }
+                continue;
+            }
+            if stop.result != StepResult::Halt || stop.address != u64::from(PET_EMU_TRAP) {
+                return false;
+            }
+            returned = true;
+            break;
+        }
+    }
+    if !returned {
+        return false;
+    }
+
+    let consumed_end = registers.get_gpr(GPR_RAX, 4) as u32;
+    let Some(updated_destination) = memory.read_u32(u64::from(stack) + 8) else {
+        return false;
+    };
+    if updated_destination != destination_address.wrapping_add(output_size)
+        || consumed_end <= source_address
+        || consumed_end > image_address.wrapping_add(bufsz)
+    {
+        return false;
+    }
+
+    let Some(decoded) = memory.read(u64::from(destination_address), u64::from(output_size)) else {
+        return false;
+    };
+    if decoded.len() != output_size as usize {
+        return false;
+    }
+    let dst = (destination_rva - min_rva) as usize;
+    buf[dst..dst + output_size as usize].copy_from_slice(&decoded);
+    true
 }
 
 /// Public detection result (`XPETITE::INTERNAL_INFO`).
@@ -240,6 +540,13 @@ fn inflate(
         pk = rel(min_rva, loader_rva) + if version == 2 { 0x1b8 } else { 0x178 };
     }
 
+    // `USE_XEMULATOR` upstream: locate the embedded decoder once; when
+    // present it replaces the classic op-table inflate per section and
+    // supplies the degraded-OEP fallback below.
+    let embedded_decoder =
+        pet_find_embedded_decoder(buf, min_rva, loader_rva, loader_vsz, image_base);
+    let mut emu_steps_remaining = PET_EMU_MAX_STEPS;
+
     let mut usects: Vec<USect> = Vec::new();
     let mut bottom = 0u32;
     let mut enc_ep = 0u32;
@@ -327,6 +634,15 @@ fn inflate(
                 }
             }
 
+            // `USE_XEMULATOR` upstream: embedded-decoder Petite builds do
+            // not append the older encrypted entry-point trailer. Their
+            // section loop hands control into the first restored image
+            // section, which is the safest rebuild OEP.
+            if enc_ep == 0 && embedded_decoder.valid {
+                enc_ep = usects[0].rva;
+                degraded = true;
+            }
+
             // Compact produced data into sequential raw offsets.
             for t in 0..usects.len() {
                 usects[t].raw = if t > 0 {
@@ -381,6 +697,7 @@ fn inflate(
         if !cont(bufsz, pk + 4, 8) {
             return Err(UnpackError::Malformed("petite: sect op"));
         }
+        let op_offset = pk;
         let mut size = rd32(buf, (pk + 4) as usize);
         let thisrva = rd32(buf, (pk + 8) as usize);
         pk += 0x10;
@@ -424,6 +741,29 @@ fn inflate(
         }
         usects.push(us.clone());
 
+        // `USE_XEMULATOR` upstream: when the embedded decoder was found
+        // it runs under emulation for every section and fully replaces
+        // the classic doubledl inflate.
+        let mut decoded_by_emulator = false;
+        if embedded_decoder.valid {
+            if !pet_run_embedded_decoder(
+                buf,
+                min_rva,
+                image_base,
+                loader_rva,
+                &embedded_decoder,
+                op_offset,
+                srva,
+                thisrva,
+                size,
+                &mut emu_steps_remaining,
+            ) {
+                return Err(UnpackError::Malformed("petite: embedded decoder"));
+            }
+            ddst += size as i64;
+            decoded_by_emulator = true;
+        }
+
         // Decode `size` bytes from buf[ssrc] to buf[ddst].
         let (check1, check2, goback) = if size < 0x10000 {
             (0x0FFFFC060u32, 0x0FFFFFC60u32, 5i32)
@@ -433,55 +773,35 @@ fn inflate(
             (0x0FFFF8300, 0x0FFFFFB00, 8)
         };
 
-        if !cont(bufsz, ssrc, 1) || !cont(bufsz, ddst, 1) {
-            return Err(UnpackError::Malformed("petite: decode bounds"));
-        }
-        size -= 1;
-        buf[ddst as usize] = buf[ssrc as usize];
-        ddst += 1;
-        ssrc += 1;
-        let mut mydl = 0u8;
-        let mut backbytes = 0i32;
-        let mut oldback = 0i32;
-        let mut size_left = size as i64;
-
-        while size_left > 0 {
-            let oob = doubledl(buf, &mut ssrc, &mut mydl);
-            if oob == -1 {
-                return Err(UnpackError::Malformed("petite: stream"));
+        if !decoded_by_emulator {
+            if !cont(bufsz, ssrc, 1) || !cont(bufsz, ddst, 1) {
+                return Err(UnpackError::Malformed("petite: decode bounds"));
             }
-            if oob == 0 {
-                if !cont(bufsz, ssrc, 1) || !cont(bufsz, ddst, 1) {
-                    return Err(UnpackError::Malformed("petite: literal bounds"));
+            size -= 1;
+            buf[ddst as usize] = buf[ssrc as usize];
+            ddst += 1;
+            ssrc += 1;
+            let mut mydl = 0u8;
+            let mut backbytes = 0i32;
+            let mut oldback = 0i32;
+            let mut size_left = size as i64;
+
+            while size_left > 0 {
+                let oob = doubledl(buf, &mut ssrc, &mut mydl);
+                if oob == -1 {
+                    return Err(UnpackError::Malformed("petite: stream"));
                 }
-                buf[ddst as usize] = buf[ssrc as usize] ^ (size_left as u8);
-                ddst += 1;
-                ssrc += 1;
-                size_left -= 1;
-            } else {
-                let mut addsize = 0i32;
-                backbytes += 1;
-                loop {
-                    let o = doubledl(buf, &mut ssrc, &mut mydl);
-                    if o == -1 {
-                        return Err(UnpackError::Malformed("petite: stream"));
+                if oob == 0 {
+                    if !cont(bufsz, ssrc, 1) || !cont(bufsz, ddst, 1) {
+                        return Err(UnpackError::Malformed("petite: literal bounds"));
                     }
-                    if backbytes >= i32::MAX / 2 {
-                        return Err(UnpackError::Malformed("petite: backbytes"));
-                    }
-                    backbytes = backbytes * 2 + o as i32;
-                    let o2 = doubledl(buf, &mut ssrc, &mut mydl);
-                    if o2 == -1 {
-                        return Err(UnpackError::Malformed("petite: stream"));
-                    }
-                    if o2 == 0 {
-                        break;
-                    }
-                }
-                backbytes -= 3;
-                let mut backsize: i64;
-                if backbytes >= 0 {
-                    backsize = goback as i64;
+                    buf[ddst as usize] = buf[ssrc as usize] ^ (size_left as u8);
+                    ddst += 1;
+                    ssrc += 1;
+                    size_left -= 1;
+                } else {
+                    let mut addsize = 0i32;
+                    backbytes += 1;
                     loop {
                         let o = doubledl(buf, &mut ssrc, &mut mydl);
                         if o == -1 {
@@ -491,65 +811,88 @@ fn inflate(
                             return Err(UnpackError::Malformed("petite: backbytes"));
                         }
                         backbytes = backbytes * 2 + o as i32;
-                        backsize -= 1;
-                        if backsize == 0 {
+                        let o2 = doubledl(buf, &mut ssrc, &mut mydl);
+                        if o2 == -1 {
+                            return Err(UnpackError::Malformed("petite: stream"));
+                        }
+                        if o2 == 0 {
                             break;
                         }
                     }
-                    backbytes ^= -1;
-                    addsize +=
-                        1 + (backbytes < check1 as i32) as i32 + (backbytes < check2 as i32) as i32;
-                    oldback = backbytes;
-                } else {
-                    backsize = (backbytes + 1) as i64;
-                    backbytes = oldback;
-                }
+                    backbytes -= 3;
+                    let mut backsize: i64;
+                    if backbytes >= 0 {
+                        backsize = goback as i64;
+                        loop {
+                            let o = doubledl(buf, &mut ssrc, &mut mydl);
+                            if o == -1 {
+                                return Err(UnpackError::Malformed("petite: stream"));
+                            }
+                            if backbytes >= i32::MAX / 2 {
+                                return Err(UnpackError::Malformed("petite: backbytes"));
+                            }
+                            backbytes = backbytes * 2 + o as i32;
+                            backsize -= 1;
+                            if backsize == 0 {
+                                break;
+                            }
+                        }
+                        backbytes ^= -1;
+                        addsize += 1
+                            + (backbytes < check1 as i32) as i32
+                            + (backbytes < check2 as i32) as i32;
+                        oldback = backbytes;
+                    } else {
+                        backsize = (backbytes + 1) as i64;
+                        backbytes = oldback;
+                    }
 
-                let o = doubledl(buf, &mut ssrc, &mut mydl);
-                if o == -1 {
-                    return Err(UnpackError::Malformed("petite: stream"));
-                }
-                backsize = backsize * 2 + o;
-                let o2 = doubledl(buf, &mut ssrc, &mut mydl);
-                if o2 == -1 {
-                    return Err(UnpackError::Malformed("petite: stream"));
-                }
-                backsize = backsize * 2 + o2;
-                if backsize == 0 {
-                    backsize += 1;
-                    loop {
-                        let x = doubledl(buf, &mut ssrc, &mut mydl);
-                        if x == -1 {
-                            return Err(UnpackError::Malformed("petite: stream"));
-                        }
-                        backsize = backsize * 2 + x;
-                        let x2 = doubledl(buf, &mut ssrc, &mut mydl);
-                        if x2 == -1 {
-                            return Err(UnpackError::Malformed("petite: stream"));
-                        }
-                        if x2 == 0 {
-                            break;
-                        }
+                    let o = doubledl(buf, &mut ssrc, &mut mydl);
+                    if o == -1 {
+                        return Err(UnpackError::Malformed("petite: stream"));
                     }
-                    backsize += 2;
+                    backsize = backsize * 2 + o;
+                    let o2 = doubledl(buf, &mut ssrc, &mut mydl);
+                    if o2 == -1 {
+                        return Err(UnpackError::Malformed("petite: stream"));
+                    }
+                    backsize = backsize * 2 + o2;
+                    if backsize == 0 {
+                        backsize += 1;
+                        loop {
+                            let x = doubledl(buf, &mut ssrc, &mut mydl);
+                            if x == -1 {
+                                return Err(UnpackError::Malformed("petite: stream"));
+                            }
+                            backsize = backsize * 2 + x;
+                            let x2 = doubledl(buf, &mut ssrc, &mut mydl);
+                            if x2 == -1 {
+                                return Err(UnpackError::Malformed("petite: stream"));
+                            }
+                            if x2 == 0 {
+                                break;
+                            }
+                        }
+                        backsize += 2;
+                    }
+                    backsize += addsize as i64;
+                    if backsize > size_left
+                        || !cont(bufsz, ddst, backsize)
+                        || !cont(bufsz, ddst + backbytes as i64, backsize)
+                    {
+                        return Err(UnpackError::Malformed("petite: match bounds"));
+                    }
+                    size_left -= backsize;
+                    let mut n = backsize;
+                    while n > 0 {
+                        buf[ddst as usize] = buf[(ddst + backbytes as i64) as usize];
+                        ddst += 1;
+                        n -= 1;
+                    }
+                    backbytes = 0;
                 }
-                backsize += addsize as i64;
-                if backsize > size_left
-                    || !cont(bufsz, ddst, backsize)
-                    || !cont(bufsz, ddst + backbytes as i64, backsize)
-                {
-                    return Err(UnpackError::Malformed("petite: match bounds"));
-                }
-                size_left -= backsize;
-                let mut n = backsize;
-                while n > 0 {
-                    buf[ddst as usize] = buf[(ddst + backbytes as i64) as usize];
-                    ddst += 1;
-                    n -= 1;
-                }
-                backbytes = 0;
             }
-        }
+        } // !decoded_by_emulator
 
         // strip trailing petite loader code
         let j = usects.len();
@@ -742,4 +1085,94 @@ pub fn unpack_petite(data: &[u8], output_limit: i64) -> Result<Vec<u8>, UnpackEr
     let (out, enc_ep, _degraded) =
         inflate(&mut buf, n_min, secs, sect_count, image_base, vep, version)?;
     build_pe(&buf, &out, image_base, enc_ep, res.0, res.1, output_limit)
+}
+
+#[cfg(test)]
+mod emu_tests {
+    //! Synthetic-code coverage for `pet_run_embedded_decoder`: a minimal
+    //! guest decoder copies source to destination and updates the
+    //! argument stack slots, exactly like the real embedded decoder's
+    //! observable contract.
+    use super::*;
+
+    /// Build a work buffer carrying a synthetic decoder at
+    /// `function_rva`, a 16-byte source blob, and a zeroed destination.
+    fn pet_buf() -> Vec<u8> {
+        let mut buf = vec![0u8; 0x8000];
+        // decoder at RVA 0x5000 (buf offset 0x4000 for min_rva 0x1000):
+        //   mov eax,[esp+8]  ; dst
+        //   mov ecx,[esp+12] ; size
+        //   mov edx,[esp+4]  ; src
+        //   mov edi,eax / mov esi,edx / rep movsb
+        //   mov [esp+8],edi  ; report advanced destination
+        //   mov eax,esi      ; consumed input end
+        //   ret              ; -> PET_EMU_TRAP hlt
+        let code = [
+            0x8B, 0x44, 0x24, 0x08, 0x8B, 0x4C, 0x24, 0x0C, 0x8B, 0x54, 0x24, 0x04, 0x8B, 0xF8,
+            0x8B, 0xF2, 0xF3, 0xA4, 0x89, 0x7C, 0x24, 0x08, 0x8B, 0xC6, 0xC3,
+        ];
+        buf[0x4000..0x4000 + code.len()].copy_from_slice(&code);
+        // 16 source bytes at RVA 0x3000 (buf offset 0x2000).
+        for (i, b) in buf[0x2000..0x2010].iter_mut().enumerate() {
+            *b = i as u8 + 0x41;
+        }
+        buf
+    }
+
+    /// Happy path: decoded output lands in `buf` at the destination RVA.
+    #[test]
+    fn embedded_decoder_copies_output_back() {
+        let mut buf = pet_buf();
+        let decoder = PetDecoderInfo {
+            valid: true,
+            function_rva: 0x5000,
+            table_offsets: [0; 5],
+        };
+        let mut steps = PET_EMU_MAX_STEPS;
+        assert!(pet_run_embedded_decoder(
+            &mut buf,
+            0x1000,
+            0x4000_0000,
+            0x2000,
+            &decoder,
+            0x100,
+            0x3000,
+            0x4000,
+            16,
+            &mut steps
+        ));
+        let expected: Vec<u8> = (0..16).map(|i| i as u8 + 0x41).collect();
+        assert_eq!(&buf[0x3000..0x3010], expected.as_slice());
+        assert!(steps < PET_EMU_MAX_STEPS);
+    }
+
+    /// A decoder that never returns must consume the shared budget and
+    /// fail closed, not spin forever.
+    #[test]
+    fn embedded_decoder_budget_fail_closed() {
+        let mut buf = pet_buf();
+        buf[0x4000] = 0xEB; // jmp $-2 at the decoder entry
+        buf[0x4001] = 0xFE;
+        let decoder = PetDecoderInfo {
+            valid: true,
+            function_rva: 0x5000,
+            table_offsets: [0; 5],
+        };
+        // A small budget makes the test fast; the function must stop at
+        // exactly zero rather than overrun.
+        let mut steps = 50_000u64;
+        assert!(!pet_run_embedded_decoder(
+            &mut buf,
+            0x1000,
+            0x4000_0000,
+            0x2000,
+            &decoder,
+            0x100,
+            0x3000,
+            0x4000,
+            16,
+            &mut steps
+        ));
+        assert_eq!(steps, 0);
+    }
 }
