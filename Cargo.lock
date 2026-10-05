@@ -1611,12 +1611,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "die-qjs-bytecode"
+version = "1.0.1"
+dependencies = [
+ "rquickjs",
+]
+
+[[package]]
 name = "die-rules"
 version = "1.0.1"
 dependencies = [
  "capstone",
  "die-core",
  "die-formats",
+ "die-qjs-bytecode",
  "flate2",
  "goblin",
  "md-5",

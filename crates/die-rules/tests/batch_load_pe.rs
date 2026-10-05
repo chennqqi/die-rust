@@ -268,6 +268,7 @@ fn batch_load_pe_rules() {
                     ordinal,
                     file_type: "PE".into(),
                     source,
+                    bytecode: None,
                 });
                 ordinal += 1;
             }
@@ -291,6 +292,7 @@ fn batch_load_pe_rules() {
             init_script: init_script.clone(),
             type_init_scripts: Vec::new(), // No PE _init yet
             include_scripts: includes.clone(),
+            bytecode: None,
         };
 
         let mut runtime = match RquickjsRuntime::new(RuntimeConfig::default()) {
@@ -917,6 +919,7 @@ fn batch_load_pe_rules_with_real_host_and_init() {
                     ordinal,
                     file_type: "PE".into(),
                     source,
+                    bytecode: None,
                 });
                 ordinal += 1;
             }
@@ -945,6 +948,7 @@ fn batch_load_pe_rules_with_real_host_and_init() {
             init_script: init_script.clone(),
             type_init_scripts: type_init_scripts.clone(),
             include_scripts: includes.clone(),
+            bytecode: None,
         };
 
         let mut runtime = match RquickjsRuntime::new(RuntimeConfig::default()) {

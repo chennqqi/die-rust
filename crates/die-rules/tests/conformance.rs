@@ -389,10 +389,12 @@ fn make_snapshot(source: &str) -> DatabaseSnapshot {
             ordinal: 0,
             file_type: "Binary".into(),
             source: source.to_string(),
+            bytecode: None,
         }],
         init_script: None,
         type_init_scripts: Vec::new(),
         include_scripts: BTreeMap::new(),
+        bytecode: None,
     }
 }
 
@@ -408,10 +410,12 @@ fn make_snapshot_with_includes(source: &str, includes: &[(&str, &str)]) -> Datab
             ordinal: 0,
             file_type: "Binary".into(),
             source: source.to_string(),
+            bytecode: None,
         }],
         init_script: None,
         type_init_scripts: Vec::new(),
         include_scripts: map,
+        bytecode: None,
     }
 }
 
@@ -838,6 +842,7 @@ fn rule_with_multiple_rules_in_snapshot() {
                     }
                 "#
                 .to_string(),
+                bytecode: None,
             },
             LoadedRule {
                 path: "rule2.sg".into(),
@@ -850,11 +855,13 @@ fn rule_with_multiple_rules_in_snapshot() {
                     }
                 "#
                 .to_string(),
+                bytecode: None,
             },
         ],
         init_script: None,
         type_init_scripts: Vec::new(),
         include_scripts: BTreeMap::new(),
+        bytecode: None,
     };
 
     let mut runtime = RquickjsRuntime::new(RuntimeConfig::default()).unwrap();
@@ -894,10 +901,12 @@ fn rule_pe_isnet_alias_absent_isnet_present() {
                 }
             "#
             .to_string(),
+            bytecode: None,
         }],
         init_script: None,
         type_init_scripts: Vec::new(),
         include_scripts: BTreeMap::new(),
+        bytecode: None,
     };
     let results = run_rule(&snapshot, vec![0x4D, 0x5A]);
     assert_eq!(results.len(), 1, "PE.isNET alias must be absent (parity)");

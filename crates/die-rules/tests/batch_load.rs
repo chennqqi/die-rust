@@ -279,6 +279,7 @@ fn batch_load_all_binary_rules() {
                     ordinal,
                     file_type: "Binary".into(),
                     source,
+                    bytecode: None,
                 });
                 ordinal += 1;
             }
@@ -311,6 +312,7 @@ fn batch_load_all_binary_rules() {
             init_script: init_script.clone(),
             type_init_scripts: type_init,
             include_scripts: includes.clone(),
+            bytecode: None,
         };
 
         let mut runtime = match RquickjsRuntime::new(RuntimeConfig::default()) {

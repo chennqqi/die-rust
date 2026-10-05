@@ -217,6 +217,7 @@ impl DatabaseBuilder {
                 ordinal: i as u64,
                 file_type: rf.file_type.to_string(),
                 source,
+                bytecode: None,
             });
         }
 
@@ -255,13 +256,22 @@ impl DatabaseBuilder {
         // alongside the database directory (ADR 0017).
         let version = load_version_from_manifest(&db_path, rules.len());
 
+        let mut snapshot = DatabaseSnapshot {
+            rules,
+            init_script,
+            type_init_scripts,
+            include_scripts,
+            bytecode: None,
+        };
+        // Precompile all scripts to QuickJS bytecode once, here at
+        // database build, so per-file scans run `JS_ReadObject` +
+        // `JS_EvalFunction` instead of re-parsing every rule source.
+        // Non-fatal: un-compilable rules keep `bytecode: None` and are
+        // evaluated from source with the same diagnostics as before.
+        die_rules::backend_rquickjs::precompile_snapshot(&mut snapshot);
+
         Ok(Database {
-            snapshot: DatabaseSnapshot {
-                rules,
-                init_script,
-                type_init_scripts,
-                include_scripts,
-            },
+            snapshot,
             db_path,
             version,
         })

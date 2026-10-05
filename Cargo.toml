@@ -4,6 +4,7 @@ members = [
     "crates/die-core",
     "crates/die-formats",
     "crates/die-rules",
+    "crates/die-qjs-bytecode",
     "crates/die-engine",
     "crates/die-nfd",
     "crates/die-output",
@@ -29,6 +30,7 @@ repository = "https://github.com/chennqqi/die-rust"
 die-core = { path = "crates/die-core" }
 die-formats = { path = "crates/die-formats" }
 die-rules = { path = "crates/die-rules" }
+die-qjs-bytecode = { path = "crates/die-qjs-bytecode" }
 die-engine = { path = "crates/die-engine" }
 die-nfd = { path = "crates/die-nfd" }
 die-output = { path = "crates/die-output" }

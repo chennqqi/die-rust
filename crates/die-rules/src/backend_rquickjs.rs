@@ -15,6 +15,7 @@ use crate::runtime::{
     DatabaseSnapshot, DetectionResult, LoadedRule, RuleRuntime, RuleRuntimeFactory, RuntimeConfig,
 };
 use die_core::cancel::CancellationToken;
+use die_qjs_bytecode::{BytecodeError, compile_global_script, eval_bytecode};
 use rquickjs::{Context, Ctx, Runtime};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -84,6 +85,9 @@ pub struct RquickjsRuntime {
     include_scripts: BTreeMap<String, String>,
     /// Type-specific init scripts, deferred to init() phase.
     type_init_scripts: Vec<(String, String)>,
+    /// Precompiled bytecode for the type init scripts, keyed by type
+    /// name (mirrors `DatabaseSnapshot::bytecode.type_init`).
+    type_init_bytecode: BTreeMap<String, Arc<[u8]>>,
 }
 
 impl RquickjsRuntime {
@@ -120,6 +124,7 @@ impl RquickjsRuntime {
             initialized: false,
             include_scripts: BTreeMap::new(),
             type_init_scripts: Vec::new(),
+            type_init_bytecode: BTreeMap::new(),
         })
     }
 
@@ -484,9 +489,163 @@ impl RquickjsRuntime {
                 })
         })
     }
+
+    /// Evaluate `source` like [`eval_script`], preferring a precompiled
+    /// bytecode image when the snapshot provided one.
+    ///
+    /// `bytecode` must have been produced by [`compile_global_script`]
+    /// over the same `const`-preprocessed source. A deserialization
+    /// failure (impossible for images produced by [`precompile_snapshot`]
+    /// in-process) falls back to the source path, so behavior can never
+    /// regress relative to plain `eval_script`.
+    fn eval_script_or_bytecode(
+        &self,
+        source: &str,
+        bytecode: Option<&[u8]>,
+    ) -> Result<(), RuleError> {
+        if let Some(bc) = bytecode {
+            let early: Option<Result<(), rquickjs::Error>> =
+                self.context
+                    .with(|ctx: Ctx<'_>| match eval_bytecode(&ctx, bc) {
+                        Ok(()) => Some(Ok(())),
+                        Err(BytecodeError::EvalException | BytecodeError::ReadException) => {
+                            Some(Err(rquickjs::Error::Exception))
+                        }
+                        // Deserialization could not even produce a value
+                        // (cannot happen for in-process images); fall back
+                        // to source eval.
+                        Err(_) => None,
+                    });
+            if let Some(result) = early {
+                return match result {
+                    Ok(()) => Ok(()),
+                    Err(rquickjs::Error::Exception) => {
+                        let message = self
+                            .context
+                            .with(|ctx: Ctx<'_>| extract_exception_message(&ctx));
+                        Err(RuleError::ScriptException {
+                            path: "<eval>".into(),
+                            message,
+                        })
+                    }
+                    Err(other) => Err(RuleError::ScriptException {
+                        path: "<eval>".into(),
+                        message: other.to_string(),
+                    }),
+                };
+            }
+        }
+        self.eval_script(source)
+    }
 }
 
-/// Extract a human-readable message from a JavaScript exception.
+/// Build the exact program text evaluated for a rule: the `const`
+/// preprocessing of [`RquickjsRuntime::eval_script`] plus the per-rule
+/// IIFE wrapper used by `evaluate_rule_source_impl`.
+///
+/// This is the single source of truth shared by
+/// [`precompile_snapshot`] (which compiles it) and the runtime eval
+/// path (which executes the image), so the compiled program is
+/// byte-identical to what `ctx.eval` would receive.
+fn wrap_rule_source(rule_source: &str) -> String {
+    let processed_source = rule_source.replace("const ", "var ");
+    format!(
+        r#"(function() {{
+                {processed_source}
+                if (typeof detect === 'function') {{
+                    return detect();
+                }}
+                return undefined;
+            }})();"#,
+    )
+}
+
+/// Precompile a snapshot's scripts into QuickJS bytecode images.
+///
+/// Compiles every rule's [`wrap_rule_source`] program plus the `_init`,
+/// type-init, and eager `read` framework scripts in a throwaway runtime.
+/// The images are stored on the snapshot (`LoadedRule::bytecode` and
+/// `DatabaseSnapshot::bytecode`) and are executed by
+/// `JS_ReadObject` + `JS_EvalFunction` in each fresh scan runtime,
+/// skipping the parse/compile work that previously dominated per-file
+/// scan time.
+///
+/// This function is infallible and non-destructive: a script that fails
+/// to compile keeps `None` and the runtime evaluates its source as
+/// before (preserving the eval-time diagnostic). If the scratch runtime
+/// itself cannot be created, the snapshot is left unchanged.
+///
+/// [`eval_script`]: RquickjsRuntime::eval_script
+pub fn precompile_snapshot(snapshot: &mut DatabaseSnapshot) {
+    let Ok(runtime) = Runtime::new() else {
+        return;
+    };
+    let Ok(context) = Context::full(&runtime) else {
+        return;
+    };
+    context.with(|ctx: Ctx<'_>| {
+        // Per-rule wrapped programs.
+        for rule in &mut snapshot.rules {
+            if rule.bytecode.is_some() {
+                continue;
+            }
+            let wrapped = wrap_rule_source(&rule.source);
+            if let Ok(bytes) = compile_global_script(&ctx, wrapped.as_bytes()) {
+                rule.bytecode = Some(Arc::from(bytes.into_boxed_slice()));
+            }
+            // A compile failure leaves a pending exception; discard it so
+            // subsequent compiles start clean.
+            if ctx.has_exception() {
+                let _ = ctx.catch();
+            }
+        }
+
+        let bc = snapshot.bytecode.get_or_insert_with(Default::default);
+
+        // Global `_init` script.
+        if bc.init.is_none()
+            && let Some(src) = &snapshot.init_script
+        {
+            let processed = src.replace("const ", "var ");
+            if let Ok(bytes) = compile_global_script(&ctx, processed.as_bytes()) {
+                bc.init = Some(Arc::from(bytes.into_boxed_slice()));
+            }
+            if ctx.has_exception() {
+                let _ = ctx.catch();
+            }
+        }
+
+        // Type init scripts (e.g. PE/_init), keyed by type name.
+        for (name, src) in &snapshot.type_init_scripts {
+            if bc.type_init.contains_key(name) {
+                continue;
+            }
+            let processed = src.replace("const ", "var ");
+            if let Ok(bytes) = compile_global_script(&ctx, processed.as_bytes()) {
+                bc.type_init
+                    .insert(name.clone(), Arc::from(bytes.into_boxed_slice()));
+            }
+            if ctx.has_exception() {
+                let _ = ctx.catch();
+            }
+        }
+
+        // The `read` include that `load_database` pre-evaluates. Other
+        // include scripts resolve by source at `includeScript` call time
+        // (indirect global eval), so they are not cached.
+        if bc.read.is_none()
+            && let Some(src) = snapshot.include_scripts.get("read")
+        {
+            let processed = src.replace("const ", "var ");
+            if let Ok(bytes) = compile_global_script(&ctx, processed.as_bytes()) {
+                bc.read = Some(Arc::from(bytes.into_boxed_slice()));
+            }
+            if ctx.has_exception() {
+                let _ = ctx.catch();
+            }
+        }
+    });
+}
 /// Called after `ctx.eval` returns `Error::Exception`.
 fn extract_exception_message(ctx: &Ctx<'_>) -> String {
     // The exception value is available via ctx.catch(), but rquickjs doesn't
@@ -528,18 +687,25 @@ impl RuleRuntime for RquickjsRuntime {
 
         // Defer type init scripts to init() phase, after host API is registered.
         self.type_init_scripts = snapshot.type_init_scripts.clone();
+        self.type_init_bytecode = snapshot
+            .bytecode
+            .as_ref()
+            .map(|b| b.type_init.clone())
+            .unwrap_or_default();
 
         self.register_globals()?;
 
         if let Some(init_source) = &snapshot.init_script {
-            self.eval_script(init_source)?;
+            let bc = snapshot.bytecode.as_ref().and_then(|b| b.init.as_deref());
+            self.eval_script_or_bytecode(init_source, bc)?;
         }
 
         // Pre-load the "read" include script if present. This script
         // defines global constants like _BE and _LE that many rules
         // use without explicitly calling includeScript("read").
         if let Some(read_source) = snapshot.include_scripts.get("read") {
-            self.eval_script(read_source)?;
+            let bc = snapshot.bytecode.as_ref().and_then(|b| b.read.as_deref());
+            self.eval_script_or_bytecode(read_source, bc)?;
         }
 
         // Note: type init scripts are NOT run here because they may reference
@@ -567,10 +733,11 @@ impl RuleRuntime for RquickjsRuntime {
         // Run type-specific init scripts now that the host API is registered.
         // These scripts set up aliases like `var File = Binary; var X = Binary;`
         // and include helper scripts like `includeScript("read")`.
-        for (_type_name, init_source) in &self.type_init_scripts {
-            if let Err(e) = self.eval_script(init_source) {
+        for (type_name, init_source) in &self.type_init_scripts {
+            let bc = self.type_init_bytecode.get(type_name).map(Arc::as_ref);
+            if let Err(e) = self.eval_script_or_bytecode(init_source, bc) {
                 return Err(RuleError::Backend {
-                    detail: format!("init error for {_type_name}: {e}"),
+                    detail: format!("init error for {type_name}: {e}"),
                 });
             }
         }
@@ -617,7 +784,7 @@ impl RquickjsRuntime {
         rule_source: &str,
         cancel: &CancellationToken,
     ) -> Result<Vec<DetectionResult>, RuleError> {
-        self.evaluate_rule_source_impl(rule_path, rule_source, cancel, true, true)
+        self.evaluate_rule_source_impl(rule_path, rule_source, None, cancel, true, true)
     }
 
     /// Evaluate a rule source without clearing `__die_results` first.
@@ -629,7 +796,7 @@ impl RquickjsRuntime {
         rule_source: &str,
         cancel: &CancellationToken,
     ) -> Result<Vec<DetectionResult>, RuleError> {
-        self.evaluate_rule_source_impl(rule_path, rule_source, cancel, false, true)
+        self.evaluate_rule_source_impl(rule_path, rule_source, None, cancel, false, true)
     }
 
     /// Evaluate a rule source inside a shared result group without clearing
@@ -645,7 +812,33 @@ impl RquickjsRuntime {
         rule_source: &str,
         cancel: &CancellationToken,
     ) -> Result<(), RuleError> {
-        self.evaluate_rule_source_impl(rule_path, rule_source, cancel, false, false)?;
+        self.evaluate_rule_source_impl(rule_path, rule_source, None, cancel, false, false)?;
+        Ok(())
+    }
+
+    /// Evaluate a [`LoadedRule`] inside a shared result group, executing
+    /// its precompiled bytecode when `rule.bytecode` is populated by
+    /// [`precompile_snapshot`].
+    ///
+    /// Semantics are identical to [`evaluate_rule_in_group`]: same IIFE
+    /// scope, same `detect()` dispatch, same accumulated-result
+    /// visibility and same exception attribution — the bytecode image
+    /// is the very program text that method would eval.
+    ///
+    /// [`evaluate_rule_in_group`]: Self::evaluate_rule_in_group
+    pub fn evaluate_loaded_rule_in_group(
+        &mut self,
+        rule: &LoadedRule,
+        cancel: &CancellationToken,
+    ) -> Result<(), RuleError> {
+        self.evaluate_rule_source_impl(
+            &rule.path,
+            &rule.source,
+            rule.bytecode.as_deref(),
+            cancel,
+            false,
+            false,
+        )?;
         Ok(())
     }
 
@@ -653,6 +846,7 @@ impl RquickjsRuntime {
         &mut self,
         rule_path: &str,
         rule_source: &str,
+        bytecode: Option<&[u8]>,
         cancel: &CancellationToken,
         clear: bool,
         read: bool,
@@ -684,38 +878,40 @@ impl RquickjsRuntime {
                 })
         })?;
 
-        // Preprocess: convert `const` to `var` to match Qt Script behavior.
-        // See eval_script() for details.
-        let processed_source = rule_source.replace("const ", "var ");
-
-        // Wrap the rule source in an IIFE that captures `detect` and
-        // calls it immediately. This isolates `const`/`function`/`var`
-        // declarations from the global scope.
-        //
-        // The wrapper:
-        // 1. Evaluates the rule source inside a function scope
-        // 2. Checks if `detect` was defined
-        // 3. Calls `detect()` if it exists
-        // 4. Returns the result
+        // Preprocess + wrap: `const` becomes `var` (Qt Script behavior),
+        // and the rule source runs inside an IIFE so `detect` is invoked
+        // in the rule's scope without leaking declarations into globals.
+        // See wrap_rule_source() for the exact program text.
         //
         // Note: `includeScript` uses indirect eval `(0, eval)(source)` which
         // evaluates in the global scope, so variables set by include scripts
         // (like `bFPC`, `nOffset`) are accessible inside the IIFE via the
         // scope chain (IIFE → global).
-        let wrapped = format!(
-            r#"(function() {{
-                {processed_source}
-                if (typeof detect === 'function') {{
-                    return detect();
-                }}
-                return undefined;
-            }})();"#,
-        );
-
+        //
+        // When the database build precompiled the wrapped program,
+        // `bytecode` carries the same script bytes as a serialized
+        // function; executing it via JS_ReadObject + JS_EvalFunction is
+        // observably identical to the sloppy global `eval` below
+        // (same `this` = global object, same pending-exception shape).
         let eval_result: Result<(), rquickjs::Error> = self.context.with(|ctx: Ctx<'_>| {
-            let mut options = rquickjs::context::EvalOptions::default();
-            options.strict = false;
-            ctx.eval_with_options::<(), _>(wrapped.as_str(), options)
+            let eval_source = |ctx: &Ctx<'_>| {
+                let wrapped = wrap_rule_source(rule_source);
+                let mut options = rquickjs::context::EvalOptions::default();
+                options.strict = false;
+                ctx.eval_with_options::<(), _>(wrapped.as_str(), options)
+            };
+            match bytecode {
+                Some(bc) => match eval_bytecode(&ctx, bc) {
+                    Ok(()) => Ok(()),
+                    Err(BytecodeError::EvalException | BytecodeError::ReadException) => {
+                        Err(rquickjs::Error::Exception)
+                    }
+                    // The image failed to materialize without running any
+                    // code — fall back to the source path unchanged.
+                    Err(_) => eval_source(&ctx),
+                },
+                None => eval_source(&ctx),
+            }
         });
 
         match eval_result {
@@ -1041,10 +1237,12 @@ mod tests {
                     }
                 "#
                 .to_string(),
+                bytecode: None,
             }],
             init_script: None,
             type_init_scripts: Vec::new(),
             include_scripts: std::collections::BTreeMap::new(),
+            bytecode: None,
         };
 
         runtime.load_database(&snapshot).unwrap();
@@ -1083,10 +1281,12 @@ mod tests {
                     }
                 "#
                 .to_string(),
+                bytecode: None,
             }],
             init_script: None,
             type_init_scripts: Vec::new(),
             include_scripts: includes,
+            bytecode: None,
         };
 
         runtime.load_database(&snapshot).unwrap();
@@ -1118,10 +1318,12 @@ mod tests {
                     function detect() { }
                 "#
                 .to_string(),
+                bytecode: None,
             }],
             init_script: None,
             type_init_scripts: Vec::new(),
             include_scripts: std::collections::BTreeMap::new(),
+            bytecode: None,
         };
 
         // load_database succeeds (rule sources are not pre-evaluated).
@@ -1153,10 +1355,12 @@ mod tests {
                     function detect() { }
                 "#
                 .to_string(),
+                bytecode: None,
             }],
             init_script: None,
             type_init_scripts: Vec::new(),
             include_scripts: includes,
+            bytecode: None,
         };
 
         // load_database succeeds (rule sources are not pre-evaluated).
@@ -1195,10 +1399,12 @@ mod tests {
                     }
                 "#
                 .to_string(),
+                bytecode: None,
             }],
             init_script: None,
             type_init_scripts: Vec::new(),
             include_scripts: includes,
+            bytecode: None,
         };
 
         runtime.load_database(&snapshot).unwrap();
@@ -1214,6 +1420,211 @@ mod tests {
         // is allowed after the script exits the active stack).
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].version, "2");
+    }
+
+    /// Per-phase profiling harness for rule evaluation.
+    ///
+    /// Measures, for every rule in `<db>/PE` (or `DIE_PROF_DIR`):
+    /// - runtime/context creation and framework load (_init + read +
+    ///   type init)
+    /// - full `eval` of the IIFE-wrapped rule (current per-scan cost)
+    /// - `JS_Eval(COMPILE_ONLY)` (parse + compile, no execution)
+    /// - `JS_WriteObject` bytecode serialization
+    /// - `JS_ReadObject` + `JS_EvalFunction` (bytecode deserialize +
+    ///   execute — the proposed cached path)
+    ///
+    /// No host is registered, so rule bodies throw early on host-object
+    /// access; the compile/write/read numbers are exact, while the
+    /// execute-side numbers measure the dispatch path only. Real
+    /// execution cost is measured by the die-engine `profile_rule_exec`
+    /// test on a real host.
+    ///
+    /// Run explicitly:
+    ///   DIE_PROF_DB=/path/to/db cargo test -p die-rules --release \
+    ///       profile_eval_compile_exec_split -- --ignored --nocapture
+    #[test]
+    #[ignore = "profiling harness; run explicitly with --ignored"]
+    fn profile_eval_compile_exec_split() {
+        use die_qjs_bytecode::{compile_global_script, eval_bytecode};
+        use std::path::{Path, PathBuf};
+        use std::time::Instant;
+
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let default_db = Path::new(manifest)
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("workspace root")
+            .join("upstream/Detect-It-Easy/db");
+        let db_dir = std::env::var("DIE_PROF_DB")
+            .unwrap_or_else(|_| default_db.to_str().expect("utf-8 db path").to_string());
+        let rule_dir = std::env::var("DIE_PROF_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| Path::new(&db_dir).join("PE"));
+
+        // Collect rule sources (order irrelevant for timing).
+        let mut rule_paths: Vec<std::path::PathBuf> = std::fs::read_dir(&rule_dir)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", rule_dir.display()))
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("sg"))
+            .collect();
+        rule_paths.sort();
+        let mut rules: Vec<(String, String)> = Vec::new();
+        for p in &rule_paths {
+            if let Ok(src) = std::fs::read_to_string(p) {
+                let name = p
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("?")
+                    .to_string();
+                rules.push((name, src));
+            }
+        }
+        assert!(
+            !rules.is_empty(),
+            "no rules found in {}",
+            rule_dir.display()
+        );
+
+        // ---- fixed overhead ----
+        let t = Instant::now();
+        let mut runtime = RquickjsRuntime::new(RuntimeConfig::default()).unwrap();
+        let t_runtime_new = t.elapsed();
+
+        let mut includes: BTreeMap<String, String> = BTreeMap::new();
+        // Root-level extensionless include scripts.
+        if let Ok(entries) = std::fs::read_dir(&db_dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file()
+                    && p.extension().is_none()
+                    && let Some(name) = p.file_name().and_then(|n| n.to_str())
+                    && name != "_init"
+                    && let Ok(src) = std::fs::read_to_string(&p)
+                {
+                    includes.insert(name.to_string(), src);
+                }
+            }
+        }
+        let init_script = std::fs::read_to_string(Path::new(&db_dir).join("_init")).ok();
+        let type_init = std::fs::read_to_string(rule_dir.join("_init"))
+            .ok()
+            .map(|s| ("PE".to_string(), s));
+
+        let snapshot = DatabaseSnapshot {
+            rules: Vec::new(),
+            init_script,
+            type_init_scripts: type_init.into_iter().collect(),
+            include_scripts: includes,
+            bytecode: None,
+        };
+
+        let t = Instant::now();
+        runtime.load_database(&snapshot).unwrap();
+        let t_load_db = t.elapsed();
+
+        let host = Arc::new(DummyHost);
+        let t = Instant::now();
+        runtime.register_host_api(host.clone()).unwrap();
+        let t_host_api = t.elapsed();
+
+        let t = Instant::now();
+        runtime.init(&*host).unwrap();
+        let t_init = t.elapsed();
+
+        // ---- per-rule phases ----
+        let mut sum_compile = std::time::Duration::ZERO;
+        let mut sum_evalfn = std::time::Duration::ZERO;
+        let mut sum_eval = std::time::Duration::ZERO;
+        let mut bytecode_bytes = 0usize;
+        let mut source_bytes = 0usize;
+        let mut compile_errors = 0usize;
+        let mut eval_errors = 0usize;
+
+        for (name, source) in &rules {
+            let processed = source.replace("const ", "var ");
+            let wrapped = format!(
+                r"(function() {{
+                {processed}
+                if (typeof detect === 'function') {{
+                    return detect();
+                }}
+                return undefined;
+            }})();"
+            );
+            source_bytes += wrapped.len();
+
+            runtime.context.with(|ctx| {
+                // Phase 1: parse + compile + serialize (one-time cost in
+                // the caching design; measured here to size the cache).
+                let t = Instant::now();
+                let bytes = match compile_global_script(&ctx, wrapped.as_bytes()) {
+                    Ok(b) => b,
+                    Err(_) => {
+                        compile_errors += 1;
+                        let _ = ctx.catch();
+                        return;
+                    }
+                };
+                sum_compile += t.elapsed();
+                bytecode_bytes += bytes.len();
+
+                // Phase 2: deserialize + execute (per-scan cost under
+                // bytecode caching; the rule throws early on the first
+                // unimplemented host-object call).
+                let t = Instant::now();
+                let _ = eval_bytecode(&ctx, &bytes);
+                sum_evalfn += t.elapsed();
+                if ctx.has_exception() {
+                    let _ = ctx.catch();
+                }
+
+                // Phase 5: current path — full eval of the same source.
+                let t = Instant::now();
+                let mut options = rquickjs::context::EvalOptions::default();
+                options.strict = false;
+                let r: Result<(), rquickjs::Error> =
+                    ctx.eval_with_options(wrapped.as_str(), options);
+                sum_eval += t.elapsed();
+                if r.is_err() {
+                    eval_errors += 1;
+                    let _ = ctx.catch();
+                }
+                let _ = name;
+            });
+        }
+
+        let n = rules.len() as f64;
+        eprintln!("=== profile_eval_compile_exec_split ===");
+        eprintln!("db: {db_dir}  rules: {}", rules.len());
+        eprintln!(
+            "runtime_new:   {:>9.3} ms",
+            t_runtime_new.as_secs_f64() * 1e3
+        );
+        eprintln!("load_database: {:>9.3} ms", t_load_db.as_secs_f64() * 1e3);
+        eprintln!("host_api:      {:>9.3} ms", t_host_api.as_secs_f64() * 1e3);
+        eprintln!("init:          {:>9.3} ms", t_init.as_secs_f64() * 1e3);
+        eprintln!("--- per-rule totals over {} rules ---", rules.len());
+        eprintln!(
+            "compile+write: {:>9.1} ms total, {:.3} ms/rule (one-time)",
+            sum_compile.as_secs_f64() * 1e3,
+            sum_compile.as_secs_f64() * 1e3 / n
+        );
+        eprintln!(
+            "read+evalfn:   {:>9.1} ms total, {:.3} ms/rule (per-scan under cache)",
+            sum_evalfn.as_secs_f64() * 1e3,
+            sum_evalfn.as_secs_f64() * 1e3 / n
+        );
+        eprintln!(
+            "full eval:     {:>9.1} ms total, {:.3} ms/rule (current per-scan)",
+            sum_eval.as_secs_f64() * 1e3,
+            sum_eval.as_secs_f64() * 1e3 / n
+        );
+        eprintln!(
+            "bytecode size: {} bytes ({} source bytes)",
+            bytecode_bytes, source_bytes
+        );
+        eprintln!("compile_errors: {compile_errors}  eval_errors: {eval_errors}");
     }
 
     #[test]
@@ -1244,10 +1655,12 @@ mod tests {
                     }
                 "#
                 .to_string(),
+                bytecode: None,
             }],
             init_script: None,
             type_init_scripts: Vec::new(),
             include_scripts: includes,
+            bytecode: None,
         };
 
         runtime.load_database(&snapshot).unwrap();
@@ -1274,47 +1687,76 @@ mod tests {
         }
 
         fn view(&self) -> &die_core::input::ByteView<'_> {
+            // `view()` is never called by the runtime or host bridge
+            // (the same `unimplemented!` exists in die-engine's
+            // `BufferHost`); it stays a stub here for parity.
             unimplemented!()
         }
 
         fn read_u8(&self, _offset: u64) -> Result<u8, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_u16_le(&self, _offset: u64) -> Result<u16, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_u16_be(&self, _offset: u64) -> Result<u16, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_u24_le(&self, _offset: u64) -> Result<u32, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_u24_be(&self, _offset: u64) -> Result<u32, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_u32_le(&self, _offset: u64) -> Result<u32, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_u32_be(&self, _offset: u64) -> Result<u32, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_u64_le(&self, _offset: u64) -> Result<u64, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_u64_be(&self, _offset: u64) -> Result<u64, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_i8(&self, _offset: u64) -> Result<i8, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_i16_le(&self, _offset: u64) -> Result<i16, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_i32_le(&self, _offset: u64) -> Result<i32, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_i64_le(&self, _offset: u64) -> Result<i64, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn file_size(&self) -> u64 {
             0
@@ -1324,14 +1766,18 @@ mod tests {
             _offset: u64,
             _signature: &str,
         ) -> Result<bool, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn find_signature(
             &self,
             _start: u64,
             _signature: &str,
         ) -> Result<Option<u64>, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn find_signature_in_range(
             &self,
@@ -1339,14 +1785,18 @@ mod tests {
             _end: u64,
             _signature: &str,
         ) -> Result<Option<u64>, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn read_string(
             &self,
             _offset: u64,
             _max_len: u64,
         ) -> Result<String, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn file_name(&self) -> &str {
             "test.bin"
@@ -1370,13 +1820,19 @@ mod tests {
             false
         }
         fn entropy(&self, _offset: u64, _size: u64) -> Result<f64, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn md5(&self, _offset: u64, _size: u64) -> Result<String, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn crc32(&self, _offset: u64, _size: u64) -> Result<u32, crate::host_api::HostApiError> {
-            unimplemented!()
+            Err(crate::host_api::HostApiError::NotImplemented {
+                method: "dummy".into(),
+            })
         }
         fn pe_batch(&self) -> Option<crate::pe_native::PeBatchInfo> {
             None

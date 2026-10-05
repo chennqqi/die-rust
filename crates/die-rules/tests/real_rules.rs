@@ -482,10 +482,12 @@ fn run_real_rule_from_path(
             ordinal: 0,
             file_type: file_type.into(),
             source,
+            bytecode: None,
         }],
         init_script: Some(init_source.to_string()),
         type_init_scripts: type_init_scripts.to_vec(),
         include_scripts: includes.clone(),
+        bytecode: None,
     };
 
     let mut runtime = RquickjsRuntime::new(RuntimeConfig::default()).ok()?;

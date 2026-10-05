@@ -38,6 +38,72 @@ fn sig_result<T>(
     }
 }
 
+/// Process-wide bytecode cache for the static shim scripts that
+/// `register` evaluates (the ~230KB of PE/ELF/MACH/etc. method
+/// implementations written in JS). Keys are the `as_ptr()` addresses of
+/// the `&'static str` literals, stable for the process lifetime; values
+/// are serialized function bytecode valid for the vendored QuickJS build
+/// in this process. Compiled once on first use, then every scan runtime
+/// deserializes instead of re-parsing.
+static SHIM_BYTECODE: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<usize, std::sync::Arc<[u8]>>>,
+> = std::sync::OnceLock::new();
+
+/// Evaluate a static shim script with `ctx.eval` semantics (strict,
+/// global scope), using a process-wide bytecode cache.
+///
+/// The compiled image is produced under `JS_EVAL_TYPE_GLOBAL |
+/// JS_EVAL_FLAG_STRICT | COMPILE_ONLY`, which is exactly what rquickjs's
+/// `ctx.eval` (`EvalOptions::default()`: global, strict) generates; the
+/// image is executed with `this` = global object by `JS_EvalFunction`.
+/// On any non-execution error (cannot happen for in-process images) the
+/// call falls back to the original `ctx.eval` path, so observable
+/// behavior can never regress.
+fn eval_shim(ctx: &Ctx<'_>, src: &'static str) -> rquickjs::Result<()> {
+    use die_qjs_bytecode::{BytecodeError, compile_global_script_strict, eval_bytecode};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+
+    let key = src.as_ptr() as usize;
+    let bc: Option<Arc<[u8]>> = {
+        let cache = SHIM_BYTECODE.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
+        match cache.get(&key) {
+            Some(bc) => Some(bc.clone()),
+            None => {
+                // Compile in the live context; a compile failure leaves
+                // the source path in place (identical error behavior).
+                match compile_global_script_strict(ctx, src.as_bytes()) {
+                    Ok(bytes) => {
+                        let bc: Arc<[u8]> = bytes.into();
+                        cache.insert(key, bc.clone());
+                        Some(bc)
+                    }
+                    Err(_) => {
+                        // Clear the pending compile exception so the
+                        // source-eval fallback sees a clean context.
+                        if ctx.has_exception() {
+                            let _ = ctx.catch();
+                        }
+                        None
+                    }
+                }
+            }
+        }
+    };
+    match bc {
+        Some(bc) => match eval_bytecode(ctx, &bc) {
+            Ok(()) => Ok(()),
+            Err(BytecodeError::EvalException | BytecodeError::ReadException) => {
+                Err(rquickjs::Error::Exception)
+            }
+            Err(_) => ctx.eval::<(), _>(src),
+        },
+        None => ctx.eval::<(), _>(src),
+    }
+}
+
 /// Parse a DIE signature string into a sequence of signature elements.
 ///
 /// DIE signature format:
@@ -2897,7 +2963,7 @@ impl HostApiBridge {
             // IMPORTANT: Use Binary.* directly, NOT File.*, because the
             // _init script sets File = PE, which would cause infinite
             // recursion when PE methods call File methods.
-            ctx.eval::<(), _>(
+            eval_shim(&ctx,
                 r#"
                 (function() {
                     // Save Binary reference in a local variable to ensure
@@ -4432,7 +4498,7 @@ impl HostApiBridge {
             // they inherit all native Binary methods. This is done by
             // setting __proto__ directly, since Object.create(Binary)
             // may not work with rquickjs native objects.
-            ctx.eval::<(), _>(
+            eval_shim(&ctx,
                 r#"
                 (function() {
                     var formats = [PE, ELF, MACH, MACHOFAT];
@@ -4450,7 +4516,7 @@ impl HostApiBridge {
             // These implement the most commonly used ELF host API methods by
             // reading the ELF header and section/program header tables directly
             // from the file data via the Binary read primitives.
-            ctx.eval::<(), _>(
+            eval_shim(&ctx,
                 r#"
                 (function() {
                     // Save Binary reference in a local variable to ensure
@@ -4947,7 +5013,7 @@ impl HostApiBridge {
             // so the upstream runtime provides Util.shlu64/shru64/divu64.
             // We implement them using Math.pow and multiplication/division
             // for simplicity (sufficient for BitReader's use cases).
-            ctx.eval::<(), _>(
+            eval_shim(&ctx,
                 r#"
                 (function() {
                     var Util = {
@@ -5011,7 +5077,7 @@ impl HostApiBridge {
             // IMPORTANT: Use Binary.* directly, NOT File.*, because the
             // _init script sets File = MACH, which would cause infinite
             // recursion when MACH methods call File methods.
-            ctx.eval::<(), _>(
+            eval_shim(&ctx,
                 r#"
                 (function() {
                     // Save Binary reference in a local variable to ensure
@@ -5475,7 +5541,7 @@ impl HostApiBridge {
             // For formats whose _init rules unconditionally set bDetected=true
             // and call getFileFormatName(), we must return a non-empty name
             // to avoid "No input detection name" errors from result().
-            ctx.eval::<(), _>(
+            eval_shim(&ctx,
                 r#"
                 (function() {
                     // Formats that don't need a specific name (no unconditional bDetected).
@@ -6168,7 +6234,7 @@ impl HostApiBridge {
             // DEX and PYC are aliases to the same Binary object, so we
             // need to create separate copies to avoid cross-contamination
             // of format-specific methods like getFileFormatName.
-            ctx.eval::<(), _>(
+            eval_shim(&ctx,
                 r#"
                 (function() {
                     // Create independent copies for DEX and PYC.
@@ -6258,7 +6324,7 @@ impl HostApiBridge {
             // read_uint16/read_int16/read_uint24/read_uint32/read_int32/
             // read_uint64/read_int64 that accept an optional bigEndian
             // boolean argument.
-            ctx.eval::<(), _>(
+            eval_shim(&ctx,
                 r#"
                 (function() {
                     var _orig_gs = Binary.getString;

@@ -259,6 +259,7 @@ fn test_format_loading(format: &str, min_success_ratio: f64) {
                     ordinal,
                     file_type: format.into(),
                     source,
+                    bytecode: None,
                 });
                 ordinal += 1;
             }
@@ -282,6 +283,7 @@ fn test_format_loading(format: &str, min_success_ratio: f64) {
             init_script: init_script.clone(),
             type_init_scripts: Vec::new(),
             include_scripts: includes.clone(),
+            bytecode: None,
         };
 
         let mut runtime = match RquickjsRuntime::new(RuntimeConfig::default()) {
@@ -379,6 +381,7 @@ fn batch_load_all_formats_summary() {
                         ordinal,
                         file_type: format.to_string(),
                         source,
+                        bytecode: None,
                     });
                     ordinal += 1;
                 }
@@ -392,6 +395,7 @@ fn batch_load_all_formats_summary() {
                 init_script: init_script.clone(),
                 type_init_scripts: Vec::new(),
                 include_scripts: includes.clone(),
+                bytecode: None,
             };
 
             let Ok(mut runtime) = RquickjsRuntime::new(RuntimeConfig::default()) else {

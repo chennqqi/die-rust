@@ -66,6 +66,15 @@ pub struct LoadedRule {
     pub file_type: String,
     /// The raw script source text.
     pub source: String,
+    /// Precompiled QuickJS bytecode of the wrapped rule program
+    /// (`const`-preprocessed source in the per-rule IIFE), produced once
+    /// at database build by `precompile_snapshot`. `None` means the rule
+    /// is evaluated from source as before (e.g. when compilation failed
+    /// during the build so the eval-time diagnostic is preserved).
+    /// The image is only valid for the vendored QuickJS build that
+    /// produced it and is never persisted or deserialized from external
+    /// input.
+    pub bytecode: Option<std::sync::Arc<[u8]>>,
 }
 
 /// Immutable database snapshot loaded into the runtime.
@@ -87,6 +96,30 @@ pub struct DatabaseSnapshot {
     /// `includeScript("name")`. They are loaded into the runtime
     /// and made available for runtime include evaluation.
     pub include_scripts: std::collections::BTreeMap<String, String>,
+    /// Precompiled QuickJS bytecode for the framework scripts eagerly
+    /// evaluated by `load_database`/`init` (`_init`, type init, and the
+    /// `read` include). `None` means every script runs from source.
+    /// Populated by `precompile_snapshot` at database build.
+    pub bytecode: Option<SnapshotBytecode>,
+}
+
+/// Precompiled QuickJS bytecode for a snapshot's framework scripts.
+///
+/// Each image was produced by compiling the corresponding script source
+/// with `JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_COMPILE_ONLY` and is
+/// executed via `JS_ReadObject` + `JS_EvalFunction`, which is
+/// observably identical to the previous sloppy `eval` (same `this`,
+/// same pending-exception behavior).
+#[derive(Debug, Clone, Default)]
+pub struct SnapshotBytecode {
+    /// Compiled `_init` program (corresponds to `init_script`).
+    pub init: Option<std::sync::Arc<[u8]>>,
+    /// Compiled type-init programs keyed by type name (e.g. "PE").
+    pub type_init: std::collections::BTreeMap<String, std::sync::Arc<[u8]>>,
+    /// Compiled `include_scripts["read"]` image; `includeScript` still
+    /// resolves by source — this only covers the eager `read` preload
+    /// in `load_database`.
+    pub read: Option<std::sync::Arc<[u8]>>,
 }
 
 impl DatabaseSnapshot {
@@ -97,6 +130,7 @@ impl DatabaseSnapshot {
             init_script: None,
             type_init_scripts: Vec::new(),
             include_scripts: std::collections::BTreeMap::new(),
+            bytecode: None,
         }
     }
 
@@ -247,23 +281,27 @@ mod tests {
                     ordinal: 0,
                     file_type: "Binary".into(),
                     source: "".into(),
+                    bytecode: None,
                 },
                 LoadedRule {
                     path: "db/PE/b.sg".into(),
                     ordinal: 1,
                     file_type: "PE".into(),
                     source: "".into(),
+                    bytecode: None,
                 },
                 LoadedRule {
                     path: "db/Binary/c.sg".into(),
                     ordinal: 2,
                     file_type: "Binary".into(),
                     source: "".into(),
+                    bytecode: None,
                 },
             ],
             init_script: None,
             type_init_scripts: Vec::new(),
             include_scripts: std::collections::BTreeMap::new(),
+            bytecode: None,
         };
         let binary_rules: Vec<_> = snap.rules_for_type("Binary").collect();
         assert_eq!(binary_rules.len(), 2);

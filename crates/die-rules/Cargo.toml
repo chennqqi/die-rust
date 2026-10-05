@@ -12,6 +12,7 @@ repository.workspace = true
 capstone = { version = "0.14.0", default-features = false, features = ["arch_x86", "std", "full"] }
 die-core = { workspace = true }
 die-formats = { workspace = true }
+die-qjs-bytecode = { workspace = true }
 flate2 = "1.1"
 goblin = { workspace = true }
 md-5 = "0.10"

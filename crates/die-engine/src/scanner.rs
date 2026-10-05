@@ -666,6 +666,7 @@ pub fn scan_bytes(
             init_script: snapshot.init_script.clone(),
             type_init_scripts: type_init,
             include_scripts: snapshot.include_scripts.clone(),
+            bytecode: snapshot.bytecode.clone(),
         };
 
         if let Err(e) = runtime.load_database(&framework_snapshot) {
@@ -698,7 +699,7 @@ pub fn scan_bytes(
             }
 
             let start = std::time::Instant::now();
-            match runtime.evaluate_rule_in_group(&rule.path, &rule.source, cancel) {
+            match runtime.evaluate_loaded_rule_in_group(rule, cancel) {
                 Ok(()) => {}
                 Err(e) => {
                     let msg = format!("{}: {}", rule.path, e);
@@ -1071,10 +1072,7 @@ impl Scanner {
                 }
 
                 let start = std::time::Instant::now();
-                match cached
-                    .runtime
-                    .evaluate_rule_in_group(&rule.path, &rule.source, cancel)
-                {
+                match cached.runtime.evaluate_loaded_rule_in_group(rule, cancel) {
                     Ok(()) => {}
                     Err(e) => {
                         let msg = format!("{}: {}", rule.path, e);
@@ -1335,6 +1333,7 @@ impl Scanner {
             init_script: snapshot.init_script.clone(),
             type_init_scripts: type_init,
             include_scripts: snapshot.include_scripts.clone(),
+            bytecode: snapshot.bytecode.clone(),
         };
 
         runtime

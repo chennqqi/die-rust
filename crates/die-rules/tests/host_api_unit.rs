@@ -433,10 +433,12 @@ function detect() {{
             ordinal: 0,
             file_type: "PE".into(),
             source: rule_source,
+            bytecode: None,
         }],
         init_script: Some(init_source),
         type_init_scripts,
         include_scripts: includes,
+        bytecode: None,
     };
 
     let mut runtime = RquickjsRuntime::new(RuntimeConfig::default()).ok()?;
@@ -486,10 +488,12 @@ function detect() {{
             ordinal: 0,
             file_type: "Binary".into(),
             source: rule_source,
+            bytecode: None,
         }],
         init_script: Some(init_source),
         type_init_scripts,
         include_scripts: includes,
+        bytecode: None,
     };
 
     let mut runtime = RquickjsRuntime::new(RuntimeConfig::default()).ok()?;
