@@ -19,7 +19,7 @@ jobs:
   default:
     name: default (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +30,11 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Cache cargo registry and target dir
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: default-${{ matrix.os }}
 
       - name: Install Linux system dependencies (Tauri/GTK)
         if: runner.os == 'Linux'
@@ -89,7 +94,7 @@ jobs:
   msrv:
     name: msrv 1.88 (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -100,6 +105,11 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Cache cargo registry and target dir
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv-${{ matrix.os }}
 
       - name: Install Linux system dependencies (Tauri/GTK)
         if: runner.os == 'Linux'
