@@ -37,7 +37,7 @@ jobs:
           if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
             echo "::error::secret TAURI_SIGNING_PRIVATE_KEY is not set."
             echo "Generate a production keypair: cargo tauri signer generate -w ~/.tauri/die.key"
-            echo "Then base64 -w0 ~/.tauri/die.key into this secret."
+            echo "Then put the raw contents of ~/.tauri/die.key into this secret."
             exit 1
           fi
           DEV_PUBKEY="dW50cnVzdGVkIGNvbW1lbnQ6IGRpZWMtcnVzdCBkZXYgdXBkYXRlciBrZXkKUldSa2FXVmpaR1YyTWZNazhSZWZvMXRpaWZqTUVyNmRvdk85WVBKb1RhTEt5WW1IWUhhVUhZd1YK"
@@ -423,6 +423,7 @@ jobs:
           staging="${{ matrix.installer_name }}"
           mkdir -p "$staging"
           found=false
+          shopt -s nullglob
           # DEB packages.
           for f in target/release/bundle/deb/*.deb; do
             [ -f "$f" ] && cp "$f" "$staging/" && found=true
@@ -449,6 +450,7 @@ jobs:
           staging="${{ matrix.installer_name }}"
           mkdir -p "$staging"
           found=false
+          shopt -s nullglob
           # DMG.
           for f in target/release/bundle/dmg/*.dmg; do
             [ -f "$f" ] && cp "$f" "$staging/" && found=true
@@ -487,6 +489,7 @@ jobs:
         run: |
           staging="die-gui-updater-linux"
           mkdir -p "$staging"
+          shopt -s nullglob
           for f in target/release/bundle/appimage/*.AppImage.tar.gz*; do
             [ -f "$f" ] && cp "$f" "$staging/"
           done
@@ -497,6 +500,7 @@ jobs:
         run: |
           staging="die-gui-updater-macos"
           mkdir -p "$staging"
+          shopt -s nullglob
           for f in target/release/bundle/macos/*.app.tar.gz*; do
             [ -f "$f" ] && cp "$f" "$staging/"
           done
