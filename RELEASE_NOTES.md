@@ -1,5 +1,19 @@
 # Release Notes
 
+## die-rust v1.0.1
+
+Patch release — CI reliability fixes; no functional changes.
+
+- Raise `ci.yml` default job timeout 30→60min and msrv 30→45min; add
+  `Swatinem/rust-cache` to both jobs (Windows cold builds exceeded the
+  old budget).
+- Raise `release.yml` CLI/FFI build job timeout to 60min for the same
+  reason.
+- Fix `annotations` test flake on Windows (atomic sequence for temp
+  paths — 15.6ms clock granularity caused parallel-test collisions).
+- Fix Go binding `ScanPath` test assertion to match the upstream
+  oracle (`file_type: ZIP` rather than a `Zip` name substring).
+
 ## die-rust v1.0.0
 
 First stable release — project renamed to `die-rust`, all planned

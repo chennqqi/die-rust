@@ -1539,3 +1539,5 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
 - 2026-10-04: v1.0.0 发版准备——版本号 bump（workspace/tauri.conf/frontend+lock）、RELEASE_NOTES v1.0.0、README 横幅与已知限制（双语）、ROADMAP 过期状态统一、COMPATIBILITY 刷新
 - 2026-10-04: 修 Go 绑定测试断言——payload.zip 上游 golden 期望 ZIP/Unknown，原断言检查 'Zip' 子串错误；改为断言 file_type=ZIP 对齐 oracle
 - 2026-10-05: CI windows-2022 default job 30min 超时——无缓存冷编译+测试规模增长；default→60min、msrv→45min，两 job 加 rust-cache
+- 2026-10-05: 安装 GitHub CLI（gh），用于查看 CI/发布状态
+- 2026-10-05: v1.0.0 tag 已被占用，改发 v1.0.1——版本号 bump 1.0.1 + RELEASE_NOTES v1.0.1 段（CI 修复说明）
