@@ -583,12 +583,9 @@ pub fn collect(d: &[u8]) -> Option<PeInfo> {
     if let Some(r) = info
         .resources
         .iter()
-        .find(|r| r.id1 == 24 && r.data_off != 0)
+        .find(|r| r.id1 == 24 && r.data_off != 0 && r.data_off < d.len())
     {
-        let n = r
-            .data_size
-            .min(4000)
-            .min(d.len().saturating_sub(r.data_off));
+        let n = r.data_size.min(4000).min(d.len() - r.data_off);
         info.manifest = String::from_utf8_lossy(&d[r.data_off..r.data_off + n]).into_owned();
     }
     info.res_version = crate::pe_version::resources_version_from(d, &info.resources);

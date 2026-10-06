@@ -1558,6 +1558,26 @@ fn pe32_7zip_sfx_and_nsis() {
     );
 }
 
+/// Regression for the manifest slice panic (die-rust issue #2): a
+/// resource leaf RVA landing in a section's virtual tail
+/// (`vsize > raw_size`) makes `rva_to_off` return a `data_off` past
+/// EOF. Manifest extraction must skip it instead of panicking.
+#[test]
+fn pe32_manifest_offset_beyond_eof_no_panic() {
+    let mut d = pe32_7zip_nsis_fixture();
+    // Enlarge .rsrc virtual size (header at 0x160) so RVA 0x3000 is
+    // inside the section span and maps to file offset 0x1400 — beyond
+    // the 0xD00 file length.
+    d[0x160 + 8..0x160 + 12].copy_from_slice(&0x2000u32.to_le_bytes());
+    // RT_MANIFEST data-entry RVA at 0x4A8: point it past EOF.
+    d[0x4A8..0x4AC].copy_from_slice(&0x3000u32.to_le_bytes());
+    let info = die_nfd::pe::collect(&d).expect("pe collect");
+    assert!(info.manifest.is_empty());
+    // A full scan must not panic either (issue #2 hit this per-rule via
+    // the manifest host API).
+    let _ = die_nfd::scan(&d, die_nfd::sniff_ft(&d), die_nfd::ScanOptions::default());
+}
+
 #[test]
 fn pe32_dotnet_ansi_heap_promotes_dotfuscator() {
     let d = pe32_dotnet_fixture_heap(b"DotfuscatorAttribute\0");

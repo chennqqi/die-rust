@@ -355,11 +355,11 @@ checksum = "c2ea6706d74fca54e15f1d40b5cf7fe7f764aaec61352a9fcec58fe27e042fc8"
 
 [[package]]
 name = "die-core"
-version = "1.0.1"
+version = "1.0.2"
 
 [[package]]
 name = "die-engine"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "adler2",
  "blake2",
@@ -388,7 +388,7 @@ dependencies = [
 
 [[package]]
 name = "die-ffi"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "die-core",
  "die-engine",
@@ -397,7 +397,7 @@ dependencies = [
 
 [[package]]
 name = "die-formats"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "die-core",
 ]
@@ -417,7 +417,7 @@ dependencies = [
 
 [[package]]
 name = "die-nfd"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "crc32fast",
  "die-core",
@@ -428,7 +428,7 @@ dependencies = [
 
 [[package]]
 name = "die-output"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "die-core",
  "die-engine",
@@ -436,14 +436,14 @@ dependencies = [
 
 [[package]]
 name = "die-qjs-bytecode"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "rquickjs",
 ]
 
 [[package]]
 name = "die-rules"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "capstone",
  "die-core",

@@ -187,6 +187,8 @@ interface AppSettings {
     custom_enabled: boolean;
   };
   engine: { die_enabled: boolean; nfd_enabled: boolean; peid_enabled: boolean; yara_enabled: boolean };
+  online_tools: { virustotal_apikey: string };
+  shortcuts: Record<string, string>;
 }
 
 interface DirectoryScanProgress {
@@ -216,6 +218,17 @@ const defaultSettings: AppSettings = {
   scan: { scan_after_open: true, hide_unknown: false, sort: false, log_profiling: false, flags: defaultFlags },
   database: { main_path: "", extra_path: "", custom_path: "", extra_enabled: false, custom_enabled: false },
   engine: { die_enabled: true, nfd_enabled: false, peid_enabled: false, yara_enabled: false },
+  online_tools: { virustotal_apikey: "" },
+  shortcuts: {
+    open_file: "Ctrl+O",
+    save_results: "Ctrl+S",
+    scan: "F5",
+    stop_scan: "Escape",
+    toggle_hex: "Ctrl+H",
+    toggle_strings: "Ctrl+T",
+    open_settings: "Ctrl+,",
+    quit: "Ctrl+Q",
+  },
 };
 
 type TabId = "scan" | "info" | "struct" | "hex" | "disasm" | "demangle" | "sigs" | "yara" | "peid" | "nfd" | "online" | "memmap" | "archive" | "converter" | "visualization" | "extractor" | "misc" | "search" | "strings";
