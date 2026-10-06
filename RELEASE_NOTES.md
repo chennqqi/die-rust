@@ -1,5 +1,26 @@
 # Release Notes
 
+## die-rust v1.0.3
+
+Patch release — two bug fixes reported as GitHub issues #1 and #2.
+
+- GUI: fix "saving settings failed" (`missing field 'online_tools'`).
+  Settings files written by older versions lacked fields added later
+  (`online_tools`, `shortcuts`, `scan.flags.no_dedup`), so
+  `get_settings` deserialization failed and the frontend fell back to
+  an incomplete object that `save_settings` then rejected. All settings
+  structs now use container-level `#[serde(default)]` with per-struct
+  `Default` impls, so missing fields are filled with semantic defaults;
+  `App.tsx` `AppSettings`/`defaultSettings` completed.
+- die-nfd: fix out-of-range slice panic at `pe.rs` manifest extraction
+  on PE files whose resource leaf RVA maps past EOF (section
+  `vsize > raw_size` virtual tail). The panic fired once per rule that
+  touched the manifest host API via FFI; the `data_off` guard now
+  matches upstream "unreadable → empty manifest" behavior. Other
+  `ResourceEntry.data_off` consumers audited — all bounds-checked.
+- Regression tests: `pe32_manifest_offset_beyond_eof_no_panic` (die-nfd
+  smoke) and legacy-settings deserialization units (die-gui).
+
 ## die-rust v1.0.2
 
 Patch release — major PE scan performance improvement via QuickJS
