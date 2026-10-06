@@ -1542,3 +1542,4 @@ XEmulator 源码）、tauri 更新器、XStyles 永久不立项。
 - 2026-10-05: 安装 GitHub CLI（gh），用于查看 CI/发布状态
 - 2026-10-05: v1.0.0 tag 已被占用，改发 v1.0.1——版本号 bump 1.0.1 + RELEASE_NOTES v1.0.1 段（CI 修复说明）
 - 2026-10-05: PE 扫描性能优化（docs/die-rust-scan-perf-agent-task.md，oneav FFI 反馈慢于上游）——按文档先 profiling 归因再实现：新建 die-qjs-bytecode 封装 JS_Eval/WriteObject/ReadObject/EvalFunction，规则与框架脚本编译为 bytecode 存入 Database 快照，host bridge 静态 shim 进程级缓存；runtime 复用因跨文件状态泄漏被否决。trim3 库 mean 37.8→21.0ms，corpus+500 PE 样本检测逐字节一致
+- 2026-10-05: 打 tag 发布 v1.0.2——版本号 bump（workspace/tauri.conf/frontend+lock/Cargo.lock）、RELEASE_NOTES v1.0.2 段（bytecode 缓存性能优化）

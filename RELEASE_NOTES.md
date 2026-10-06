@@ -1,5 +1,28 @@
 # Release Notes
 
+## die-rust v1.0.2
+
+Patch release — major PE scan performance improvement via QuickJS
+bytecode caching; detection output is byte-identical.
+
+- Cache compiled QuickJS bytecode for every rule script at database
+  build (`JS_Eval` COMPILE_ONLY + `JS_WriteObject`); each scan runs
+  `JS_ReadObject` + `JS_EvalFunction` in a fresh runtime instead of
+  re-parsing all rule sources per file.
+- Process-wide bytecode cache for the ~230KB of static host-bridge
+  shim scripts, cutting host API registration from ~5.3ms to ~1.2ms.
+- New `die-qjs-bytecode` crate holds all raw QuickJS FFI so `die-rules`
+  keeps `#![forbid(unsafe_code)]`; sloppy-mode/IIFE semantics, rule
+  ordering, `includeScript` globals, diagnostics and profiling output
+  are unchanged.
+- Measured on 500 real malicious PE files (`scan_once`, release):
+  mean 37.8→21.0ms, p50 29.0→13.2ms on the trimmed 333-rule packer
+  database; mean 101.4→76.3ms on the full database. Corpus and sample
+  detections are byte-identical before/after.
+- Tooling: `die-engine` `scan_bench` example and
+  `profile_scan_phases`/`profile_eval_compile_exec_split` profiling
+  tests; report at `docs/research/scan-perf-bytecode-cache.md`.
+
 ## die-rust v1.0.1
 
 Patch release — CI reliability fixes; no functional changes.
