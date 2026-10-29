@@ -20,6 +20,7 @@ Example:
 """
 
 import base64
+import binascii
 import json
 import pathlib
 import re
@@ -32,6 +33,39 @@ PLATFORMS = {
     "windows": "windows-x86_64",
     "macos": "darwin-aarch64",
 }
+
+# GitHub sanitizes release asset names server-side on upload: every run
+# of characters outside [A-Za-z0-9._-] collapses to a single '.'
+# ("Detect It Easy_x-setup.exe" -> "Detect.It.Easy_x-setup.exe"). The
+# manifest URL must use the sanitized name or the download 404s.
+UNSAFE_ASSET_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def github_asset_name(name: str) -> str:
+    return UNSAFE_ASSET_CHARS.sub(".", name)
+
+
+def manifest_signature(sig_file: pathlib.Path) -> str | None:
+    """Return the manifest `signature` value for a `.sig` file.
+
+    The updater plugin base64-decodes the field once and parses the
+    result as a minisign signature box ("untrusted comment: ..."), so
+    the field must be base64(<sig file>) when the file is raw minisign
+    text (dev fixtures from gen_updater_dev.py) but the verbatim file
+    content when the CLI already stored it base64-encoded (production
+    `cargo tauri signer` output). Encoding an already-base64 .sig again
+    produces a manifest the plugin cannot parse.
+    """
+    raw = sig_file.read_bytes().strip()
+    if raw.startswith(b"untrusted comment:"):
+        return base64.b64encode(raw).decode()
+    try:
+        decoded = base64.b64decode(raw, validate=True)
+    except binascii.Error:
+        decoded = b""
+    if decoded.startswith(b"untrusted comment:"):
+        return raw.decode()
+    return None
 
 # payload filename patterns in priority order per platform
 PATTERNS = {
@@ -76,15 +110,17 @@ def main() -> int:
         if not sig_file.exists():
             print(f"WARN: missing signature {sig_file.name}", file=sys.stderr)
             continue
-        # The manifest signature is the base64 of the ENTIRE .sig file
-        # text (untrusted comment + signature + trusted comment + global
-        # signature) — the format tauri-plugin-updater parses.
-        signature = base64.b64encode(
-            sig_file.read_bytes()
-        ).decode()
+        signature = manifest_signature(sig_file)
+        if signature is None:
+            print(
+                f"WARN: unrecognized .sig format {sig_file.name} "
+                "(expected minisign text or its base64)",
+                file=sys.stderr,
+            )
+            continue
         platforms[platform] = {
             "signature": signature,
-            "url": f"{base_url}/{payload.name}",
+            "url": f"{base_url}/{github_asset_name(payload.name)}",
         }
         print(f"{platform}: {payload.name}")
 
