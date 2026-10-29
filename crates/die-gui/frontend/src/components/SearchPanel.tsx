@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Advanced search panel: signature search, value search, and packer detection.
@@ -28,6 +29,7 @@ type ValueType = 'u8' | 'u16_le' | 'u16_be' | 'u32_le' | 'u32_be' | 'u64_le' | '
 type SearchMode = 'signature' | 'value' | 'packers';
 
 export default function SearchPanel({ filePath }: { filePath: string | null }) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<SearchMode>('signature');
   const [signature, setSignature] = useState('');
   const [value, setValue] = useState('');
@@ -79,7 +81,7 @@ export default function SearchPanel({ filePath }: { filePath: string | null }) {
 
   return (
     <div className="space-y-3 p-2">
-      <h3 className="text-sm font-semibold">Search</h3>
+      <h3 className="text-sm font-semibold">{t('search.title')}</h3>
 
       {/* Mode selector */}
       <div className="flex items-center gap-1">
@@ -96,7 +98,7 @@ export default function SearchPanel({ filePath }: { filePath: string | null }) {
               mode === m ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
             }`}
           >
-            {m === 'signature' ? 'Signature' : m === 'value' ? 'Value' : 'Packers'}
+            {m === 'signature' ? t('search.modeSignature') : m === 'value' ? t('search.modeValue') : t('search.modePackers')}
           </button>
         ))}
       </div>
@@ -105,7 +107,7 @@ export default function SearchPanel({ filePath }: { filePath: string | null }) {
       {mode === 'signature' && (
         <div className="space-y-2">
           <div>
-            <label className="text-xs block mb-1">Hex pattern (use ?? for wildcards):</label>
+            <label className="text-xs block mb-1">{t('search.hexPattern')}</label>
             <input
               type="text"
               value={signature}
@@ -120,7 +122,7 @@ export default function SearchPanel({ filePath }: { filePath: string | null }) {
       {mode === 'value' && (
         <div className="space-y-2">
           <div>
-            <label className="text-xs block mb-1">Value (decimal or 0xhex):</label>
+            <label className="text-xs block mb-1">{t('search.valueLabel')}</label>
             <input
               type="text"
               value={value}
@@ -130,7 +132,7 @@ export default function SearchPanel({ filePath }: { filePath: string | null }) {
             />
           </div>
           <div>
-            <label className="text-xs block mb-1">Type:</label>
+            <label className="text-xs block mb-1">{t('common.type')}:</label>
             <select
               value={valueType}
               onChange={(e) => setValueType(e.target.value as ValueType)}
@@ -151,7 +153,7 @@ export default function SearchPanel({ filePath }: { filePath: string | null }) {
       {mode !== 'packers' && (
         <div className="flex gap-2">
           <label className="text-xs">
-            Start offset:
+            {t('search.startOffset')}
             <input
               type="text"
               value={startOffset}
@@ -160,7 +162,7 @@ export default function SearchPanel({ filePath }: { filePath: string | null }) {
             />
           </label>
           <label className="text-xs">
-            Max hits:
+            {t('search.maxHits')}
             <input
               type="text"
               value={maxHits}
@@ -172,24 +174,24 @@ export default function SearchPanel({ filePath }: { filePath: string | null }) {
       )}
 
       <button onClick={handleSearch} disabled={loading || (mode === 'signature' && !signature) || (mode === 'value' && !value)} className="btn btn-primary text-xs">
-        {loading ? 'Searching...' : mode === 'packers' ? 'Detect Packers' : 'Search'}
+        {loading ? t('search.searching') : mode === 'packers' ? t('search.detectPackers') : t('search.search')}
       </button>
 
-      {error && <p className="text-xs text-red-500">Error: {error}</p>}
+      {error && <p className="text-xs text-red-500">{t('common.error', { error })}</p>}
 
       {/* Results */}
       {result && (
         <div>
           <p className="text-xs text-muted-foreground mb-1">
-            {result.hits.length} hits found (file size: {result.file_size})
+            {t('search.hitsFound', { count: result.hits.length, size: result.file_size })}
           </p>
           {result.hits.length > 0 && (
             <div className="border border-border rounded overflow-auto max-h-96">
               <table className="w-full text-xs">
                 <thead className="bg-muted/50 sticky top-0">
                   <tr>
-                    <th className="text-right px-2 py-1">Offset</th>
-                    <th className="text-left px-2 py-1">Matched</th>
+                    <th className="text-right px-2 py-1">{t('common.offset')}</th>
+                    <th className="text-left px-2 py-1">{t('search.matched')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -209,15 +211,15 @@ export default function SearchPanel({ filePath }: { filePath: string | null }) {
       {packers && (
         <div>
           {packers.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No packers detected.</p>
+            <p className="text-xs text-muted-foreground">{t('search.noPackers')}</p>
           ) : (
             <div className="border border-border rounded">
               <table className="w-full text-xs">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="text-left px-2 py-1">Packer</th>
-                    <th className="text-left px-2 py-1">Version</th>
-                    <th className="text-left px-2 py-1">Section</th>
+                    <th className="text-left px-2 py-1">{t('search.packer')}</th>
+                    <th className="text-left px-2 py-1">{t('common.version')}</th>
+                    <th className="text-left px-2 py-1">{t('common.section')}</th>
                   </tr>
                 </thead>
                 <tbody>

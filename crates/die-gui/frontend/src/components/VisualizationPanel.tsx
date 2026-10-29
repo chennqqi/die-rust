@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
+import { useTranslation } from 'react-i18next';
 
 /**
  * 2D file visualization — renders file bytes as a color-coded grid.
@@ -41,13 +42,13 @@ interface HighlightRegion {
   label: string;
 }
 
-const METHOD_LABELS: { key: VizMethod; label: string }[] = [
-  { key: 'entropy', label: 'Entropy' },
-  { key: 'gradient', label: 'Gradient' },
-  { key: 'zero_bytes', label: 'Zero Bytes' },
-  { key: 'text', label: 'Text' },
-  { key: 'zeros_gradient', label: 'Zeros Gradient' },
-  { key: 'text_gradient', label: 'Text Gradient' },
+const METHOD_LABELS: { key: VizMethod; labelKey: string }[] = [
+  { key: 'entropy', labelKey: 'viz.methodEntropy' },
+  { key: 'gradient', labelKey: 'viz.methodGradient' },
+  { key: 'zero_bytes', labelKey: 'viz.methodZeroBytes' },
+  { key: 'text', labelKey: 'viz.methodText' },
+  { key: 'zeros_gradient', labelKey: 'viz.methodZerosGradient' },
+  { key: 'text_gradient', labelKey: 'viz.methodTextGradient' },
 ];
 
 /** Map a 0-255 value to an RGB color based on the rendering method. */
@@ -72,6 +73,7 @@ function valueToColor(val: number, method: VizMethod): string {
 }
 
 export default function VisualizationPanel({ filePath }: { filePath: string | null }) {
+  const { t } = useTranslation();
   const [data, setData] = useState<VisualizationData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -185,7 +187,7 @@ export default function VisualizationPanel({ filePath }: { filePath: string | nu
       startBlock: blockIndex,
       endBlock: blockIndex + 10,
       color: '#ffff00',
-      label: `Block ${blockIndex}`,
+      label: t('viz.block', { index: blockIndex }),
     };
     setHighlights([...highlights, hl]);
   };
@@ -203,13 +205,13 @@ export default function VisualizationPanel({ filePath }: { filePath: string | nu
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       await invoke('write_binary_file', { path: savePath, data: Array.from(bytes) });
     } catch (e) {
-      setError(`Save image failed: ${e}`);
+      setError(t('viz.saveFailed', { error: String(e) }));
     }
   };
 
   if (!filePath) return null;
-  if (loading) return <p className="text-xs text-muted-foreground p-2">Loading visualization...</p>;
-  if (error) return <p className="text-xs text-red-500 p-2">Error: {error}</p>;
+  if (loading) return <p className="text-xs text-muted-foreground p-2">{t('viz.loading')}</p>;
+  if (error) return <p className="text-xs text-red-500 p-2">{t('common.error', { error })}</p>;
   if (!data) return null;
 
   return (
@@ -224,7 +226,7 @@ export default function VisualizationPanel({ filePath }: { filePath: string | nu
                 method === m.key ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
               }`}
             >
-              {m.label}
+              {t(m.labelKey)}
             </button>
           ))}
         </div>
@@ -234,10 +236,10 @@ export default function VisualizationPanel({ filePath }: { filePath: string | nu
             checked={showRegions}
             onChange={(e) => setShowRegions(e.target.checked)}
           />
-          Show Regions
+          {t('viz.showRegions')}
         </label>
         <label className="flex items-center gap-1 text-xs">
-          Zoom:
+          {t('viz.zoom')}:
           <input
             type="range"
             min={1}
@@ -251,14 +253,14 @@ export default function VisualizationPanel({ filePath }: { filePath: string | nu
           onClick={handleSaveImage}
           className="px-2 py-1 text-xs border border-border rounded hover:bg-muted"
         >
-          Save Image
+          {t('viz.saveImage')}
         </button>
         {highlights.length > 0 && (
           <button
             onClick={() => setHighlights([])}
             className="px-2 py-1 text-xs border border-border rounded hover:bg-muted"
           >
-            Clear Highlights
+            {t('viz.clearHighlights')}
           </button>
         )}
       </div>
@@ -273,10 +275,10 @@ export default function VisualizationPanel({ filePath }: { filePath: string | nu
           <table className="w-full text-xs">
             <thead className="bg-muted/50">
               <tr>
-                <th className="text-left px-2 py-1">Color</th>
-                <th className="text-left px-2 py-1">Label</th>
-                <th className="text-right px-2 py-1">Start</th>
-                <th className="text-right px-2 py-1">End</th>
+                <th className="text-left px-2 py-1">{t('viz.color')}</th>
+                <th className="text-left px-2 py-1">{t('viz.label')}</th>
+                <th className="text-right px-2 py-1">{t('viz.start')}</th>
+                <th className="text-right px-2 py-1">{t('viz.end')}</th>
                 <th></th>
               </tr>
             </thead>
@@ -312,10 +314,10 @@ export default function VisualizationPanel({ filePath }: { filePath: string | nu
           <table className="w-full text-xs">
             <thead className="bg-muted/50">
               <tr>
-                <th className="text-left px-2 py-1">Color</th>
-                <th className="text-left px-2 py-1">Name</th>
-                <th className="text-right px-2 py-1">Offset</th>
-                <th className="text-right px-2 py-1">Size</th>
+                <th className="text-left px-2 py-1">{t('viz.color')}</th>
+                <th className="text-left px-2 py-1">{t('common.name')}</th>
+                <th className="text-right px-2 py-1">{t('common.offset')}</th>
+                <th className="text-right px-2 py-1">{t('common.size')}</th>
               </tr>
             </thead>
             <tbody>

@@ -210,7 +210,7 @@ export function OnlineTools({ filePath }: { filePath: string }) {
             className="flex-1 text-xs font-mono border border-border rounded px-2 py-1 bg-muted/30"
           />
           {loading && (
-            <span className="text-xs text-muted-foreground">Loading...</span>
+            <span className="text-xs text-muted-foreground">{t("common.loading")}</span>
           )}
         </div>
       </div>
@@ -223,18 +223,18 @@ export function OnlineTools({ filePath }: { filePath: string }) {
             <button
               onClick={openVtWebsite}
               className="px-2 py-1 text-xs border border-border rounded hover:bg-muted"
-              title="Open VirusTotal website"
+              title={t("online.openVt")}
             >
-              Website
+              {t("online.website")}
             </button>
             {apiKey && (
               <button
                 onClick={queryVt}
                 disabled={querying || !md5}
                 className="px-2 py-1 text-xs border border-border rounded hover:bg-muted disabled:opacity-50"
-                title="Reload scan info"
+                title={t("online.reloadInfo")}
               >
-                {querying ? "Querying..." : "Reload"}
+                {querying ? t("online.querying") : t("online.reload")}
               </button>
             )}
           </div>
@@ -242,26 +242,23 @@ export function OnlineTools({ filePath }: { filePath: string }) {
 
         {!apiKey && (
           <p className="text-xs text-muted-foreground">
-            No API key configured. Click "Website" to open VirusTotal in your
-            browser with the file's MD5 hash. Add an API key in Settings →
-            Online Tools to enable in-app scan results.
+            {t("online.noApiKey")}
           </p>
         )}
 
         {apiKey && querying && (
-          <p className="text-xs text-muted-foreground">Querying VirusTotal...</p>
+          <p className="text-xs text-muted-foreground">{t("online.queryingVt")}</p>
         )}
 
         {apiKey && vtInfo && !querying && (
           <div className="space-y-2">
             {vtInfo.error && (
-              <p className="text-xs text-red-500">Error: {vtInfo.error}</p>
+              <p className="text-xs text-red-500">{t("common.error", { error: vtInfo.error })}</p>
             )}
 
             {!vtInfo.error && !vtInfo.found && (
               <p className="text-xs text-muted-foreground">
-                File not found on VirusTotal. You can upload it via the
-                website.
+                {t("online.notFound")}
               </p>
             )}
 
@@ -269,14 +266,14 @@ export function OnlineTools({ filePath }: { filePath: string }) {
               <>
                 <div className="flex items-center gap-4 text-xs">
                   <span>
-                    <strong>Status:</strong> {vtInfo.status}
+                    <strong>{t("online.status")}:</strong> {vtInfo.status}
                   </span>
                   <span>
-                    <strong>First seen:</strong>{" "}
+                    <strong>{t("online.firstSeen")}:</strong>{" "}
                     {formatDate(vtInfo.first_submission_date)}
                   </span>
                   <span>
-                    <strong>Last scan:</strong>{" "}
+                    <strong>{t("online.lastScan")}:</strong>{" "}
                     {formatDate(vtInfo.last_analysis_date)}
                   </span>
                 </div>
@@ -287,17 +284,17 @@ export function OnlineTools({ filePath }: { filePath: string }) {
                     checked={showDetectedOnly}
                     onChange={(e) => setShowDetectedOnly(e.target.checked)}
                   />
-                  Show detects only
+                  {t("online.showDetects")}
                 </label>
 
                 <div className="max-h-64 overflow-auto border border-border rounded">
                   <table className="w-full text-xs">
                     <thead className="bg-muted/50 sticky top-0">
                       <tr>
-                        <th className="text-left px-2 py-1">Engine</th>
-                        <th className="text-left px-2 py-1">Version</th>
-                        <th className="text-left px-2 py-1">Date</th>
-                        <th className="text-left px-2 py-1">Result</th>
+                        <th className="text-left px-2 py-1">{t("online.engine")}</th>
+                        <th className="text-left px-2 py-1">{t("common.version")}</th>
+                        <th className="text-left px-2 py-1">{t("online.date")}</th>
+                        <th className="text-left px-2 py-1">{t("online.result")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -323,7 +320,7 @@ export function OnlineTools({ filePath }: { filePath: string }) {
 
       {/* Auxiliary services */}
       <div className="space-y-1">
-        <span className="text-xs font-medium">Other services</span>
+        <span className="text-xs font-medium">{t("online.otherServices")}</span>
         <div className="grid grid-cols-3 gap-1">
           {auxiliaryServices.map((svc) => (
             <a

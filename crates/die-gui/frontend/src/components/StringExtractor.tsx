@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
+import { useTranslation } from 'react-i18next';
 
 interface StringEntry {
   offset: number;
@@ -30,6 +31,7 @@ interface StringExtractorProps {
 }
 
 export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: StringExtractorProps) {
+  const { t } = useTranslation();
   const [strings, setStrings] = useState<StringEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,15 +114,15 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
   const handleDemangle = async (entry: StringEntry) => {
     try {
       const result = await invoke<string>('demangle_symbol', { symbol: entry.text });
-      alert(`Demangled: ${result}`);
+      alert(t('strings.demangled', { result }));
     } catch {
-      alert('Demangle failed or not available for this string.');
+      alert(t('strings.demangleFailed'));
     }
   };
 
   const handleEditString = async () => {
     if (!editDialog || !filePath) return;
-    setEditStatus('Saving...');
+    setEditStatus(t('common.saving'));
     try {
       const isUtf16 = editDialog.entry.encoding === 'utf16_le';
       await invoke('edit_string_at_offset', {
@@ -129,11 +131,11 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
         newValue: editDialog.newValue,
         isUtf16,
       });
-      setEditStatus('String edited successfully (.bak backup created).');
+      setEditStatus(t('strings.editSuccess'));
       setEditDialog(null);
       fetchStrings();
     } catch (e) {
-      setEditStatus(`Error: ${e}`);
+      setEditStatus(t('common.error', { error: String(e) }));
     }
   };
 
@@ -159,12 +161,12 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
       // Write file via Tauri FS or a command. Use invoke to write.
       await invoke('write_text_file', { path: savePath, content });
     } catch (e) {
-      setError(`Save failed: ${e}`);
+      setError(t('strings.saveFailed', { error: String(e) }));
     }
   };
 
   if (!filePath) {
-    return <div className="string-extractor empty">No file selected.</div>;
+    return <div className="string-extractor empty">{t('common.noFile')}</div>;
   }
 
   return (
@@ -173,7 +175,7 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
       <div className="string-controls">
         <div className="string-control-group">
           <label>
-            Min Length:
+            {t('strings.minLength')}:
             <input
               type="number"
               min={1}
@@ -207,57 +209,57 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
               checked={nullTerminatedOnly}
               onChange={(e) => setNullTerminatedOnly(e.target.checked)}
             />
-            Null-terminated
+            {t('strings.nullTerminated')}
           </label>
         </div>
         <div className="string-control-group">
           <label>
-            Filter Mode:
+            {t('strings.filterMode')}:
             <select
               value={filterMode}
               onChange={(e) => setFilterMode(e.target.value as 'substring' | 'regexp' | 'links')}
               style={{ marginLeft: '4px' }}
             >
-              <option value="substring">Substring</option>
-              <option value="regexp">Regexp (wildcard)</option>
-              <option value="links">Links only</option>
+              <option value="substring">{t('strings.substring')}</option>
+              <option value="regexp">{t('strings.regexp')}</option>
+              <option value="links">{t('strings.linksOnly')}</option>
             </select>
           </label>
         </div>
         <div className="string-control-group">
           <label>
-            Map Mode:
+            {t('strings.mapMode')}:
             <select
               value={mapMode}
               onChange={(e) => setMapMode(e.target.value as MapMode)}
               style={{ marginLeft: '4px' }}
             >
-              <option value="file">File</option>
-              <option value="virtual">Virtual</option>
-              <option value="physical">Physical</option>
+              <option value="file">{t('strings.file')}</option>
+              <option value="virtual">{t('strings.virtual')}</option>
+              <option value="physical">{t('strings.physical')}</option>
             </select>
           </label>
         </div>
         <div className="string-control-group">
           <label>
-            File Type:
+            {t('strings.fileType')}:
             <select
               value={fileType}
               onChange={(e) => setFileType(e.target.value as FileType)}
               style={{ marginLeft: '4px' }}
             >
-              <option value="auto">Auto</option>
+              <option value="auto">{t('common.auto')}</option>
               <option value="pe">PE</option>
               <option value="elf">ELF</option>
               <option value="macho">Mach-O</option>
               <option value="dex">DEX</option>
-              <option value="raw">Raw</option>
+              <option value="raw">{t('strings.raw')}</option>
             </select>
           </label>
         </div>
         <div className="string-control-group">
           <label>
-            Max Results:
+            {t('strings.maxResults')}:
             <input
               type="number"
               min={0}
@@ -271,7 +273,7 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
         <div className="string-control-group">
           <input
             type="text"
-            placeholder={filterMode === 'links' ? 'Links mode (filter disabled)' : filterMode === 'regexp' ? 'Pattern (* and ? wildcards)...' : 'Filter (case-insensitive)...'}
+            placeholder={filterMode === 'links' ? t('strings.phLinks') : filterMode === 'regexp' ? t('strings.phPattern') : t('strings.phFilter')}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             style={{ width: '200px' }}
@@ -279,21 +281,21 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
           />
         </div>
         <button onClick={fetchStrings} disabled={loading}>
-          {loading ? 'Extracting...' : 'Extract'}
+          {loading ? t('strings.extracting') : t('common.extract')}
         </button>
         <button onClick={handleSaveResults} disabled={loading || strings.length === 0}>
-          Save
+          {t('common.save')}
         </button>
       </div>
 
       {/* Stats */}
       <div className="string-stats">
         {loading ? (
-          <span>Loading...</span>
+          <span>{t('common.loading')}</span>
         ) : (
-          <span>{strings.length} strings found</span>
+          <span>{t('strings.found', { count: strings.length })}</span>
         )}
-        {error && <span className="string-error">Error: {error}</span>}
+        {error && <span className="string-error">{t('common.error', { error })}</span>}
         {editStatus && <span className="string-edit-status">{editStatus}</span>}
       </div>
 
@@ -303,9 +305,9 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
           <table className="string-table">
             <thead>
               <tr>
-                <th>Offset</th>
-                <th>Type</th>
-                <th>String</th>
+                <th>{t('common.offset')}</th>
+                <th>{t('common.type')}</th>
+                <th>{t('strings.colString')}</th>
               </tr>
             </thead>
             <tbody>
@@ -324,7 +326,7 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
           </table>
         )}
         {!loading && strings.length === 0 && !error && (
-          <div className="string-empty">No strings found.</div>
+          <div className="string-empty">{t('strings.noStrings')}</div>
         )}
       </div>
 
@@ -340,7 +342,7 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
               className="context-menu-item"
               onClick={() => { onHexJump(contextMenu.entry.offset); setContextMenu(null); }}
             >
-              Follow in Hex
+              {t('common.followInHex')}
             </div>
           )}
           {onDisasmJump && (
@@ -348,14 +350,14 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
               className="context-menu-item"
               onClick={() => { onDisasmJump(contextMenu.entry.offset); setContextMenu(null); }}
             >
-              Follow in Disasm
+              {t('common.followInDisasm')}
             </div>
           )}
           <div
             className="context-menu-item"
             onClick={() => { handleDemangle(contextMenu.entry); setContextMenu(null); }}
           >
-            Demangle
+            {t('strings.demangle')}
           </div>
           <div
             className="context-menu-item"
@@ -364,7 +366,7 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
               setContextMenu(null);
             }}
           >
-            Edit String
+            {t('strings.editString')}
           </div>
         </div>
       )}
@@ -373,9 +375,9 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
       {editDialog && (
         <div className="modal-overlay" onClick={() => setEditDialog(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Edit String</h3>
+            <h3>{t('strings.editString')}</h3>
             <p className="text-xs text-muted-foreground mb-2">
-              Offset: 0x{editDialog.entry.offset.toString(16)} | Type: {editDialog.entry.encoding}
+              {t('common.offset')}: 0x{editDialog.entry.offset.toString(16)} | {t('common.type')}: {editDialog.entry.encoding}
             </p>
             <input
               type="text"
@@ -384,8 +386,8 @@ export default function StringExtractor({ filePath, onHexJump, onDisasmJump }: S
               style={{ width: '100%', marginBottom: '8px' }}
             />
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setEditDialog(null)}>Cancel</button>
-              <button onClick={handleEditString}>Save (.bak backup)</button>
+              <button onClick={() => setEditDialog(null)}>{t('common.cancel')}</button>
+              <button onClick={handleEditString}>{t('strings.saveBak')}</button>
             </div>
           </div>
         </div>

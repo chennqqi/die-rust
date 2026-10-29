@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 
 interface SectionInfo {
   name: string;
@@ -24,6 +25,7 @@ interface FileInfo {
  *  Shows raw layout (file offsets) with entropy color coding.
  *  Mirrors upstream XVisualization widget. */
 export default function SectionVisualizer({ filePath }: { filePath: string }) {
+  const { t } = useTranslation();
   const [info, setInfo] = useState<FileInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,25 +54,25 @@ export default function SectionVisualizer({ filePath }: { filePath: string }) {
   }, [fetchInfo]);
 
   if (!filePath) {
-    return <div className="section-viz empty">No file selected.</div>;
+    return <div className="section-viz empty">{t('common.noFile')}</div>;
   }
 
   if (loading) {
-    return <div className="section-viz">Loading...</div>;
+    return <div className="section-viz">{t('common.loading')}</div>;
   }
 
   if (error) {
-    return <div className="section-viz error">Error: {error}</div>;
+    return <div className="section-viz error">{t('common.error', { error })}</div>;
   }
 
   if (!info || info.sections.length === 0) {
-    return <div className="section-viz empty">No sections available.</div>;
+    return <div className="section-viz empty">{t('viz.noSections')}</div>;
   }
 
   // Calculate total file size for proportional display.
   const fileSize = info.size;
   if (fileSize === 0) {
-    return <div className="section-viz empty">File size is zero.</div>;
+    return <div className="section-viz empty">{t('viz.zeroSize')}</div>;
   }
 
   // Color sections by entropy: blue (low) → green (medium) → red (high).
@@ -109,7 +111,7 @@ export default function SectionVisualizer({ filePath }: { filePath: string }) {
 
   return (
     <div className="section-viz">
-      <h3 className="viz-title">Section Layout (Raw File)</h3>
+      <h3 className="viz-title">{t('viz.title')}</h3>
 
       {/* Visual bar */}
       <div className="viz-bar-container">
@@ -121,7 +123,7 @@ export default function SectionVisualizer({ filePath }: { filePath: string }) {
               width: `${headerPct}%`,
               backgroundColor: '#888',
             }}
-            title={`Header: 0x0 - 0x${firstSectionStart.toString(16)} (${firstSectionStart} bytes)`}
+            title={t('viz.headerTip', { end: firstSectionStart.toString(16), size: firstSectionStart })}
           />
         )}
         {/* Section segments */}
@@ -135,7 +137,13 @@ export default function SectionVisualizer({ filePath }: { filePath: string }) {
             }}
             onMouseEnter={() => setHoveredSection(seg.index)}
             onMouseLeave={() => setHoveredSection(null)}
-            title={`${seg.name}: 0x${seg.section.raw_offset.toString(16)} - 0x${(seg.section.raw_offset + seg.section.raw_size).toString(16)} (${seg.section.raw_size} bytes, entropy: ${seg.section.entropy.toFixed(2)})`}
+            title={t('viz.segTip', {
+              name: seg.name,
+              start: seg.section.raw_offset.toString(16),
+              end: (seg.section.raw_offset + seg.section.raw_size).toString(16),
+              size: seg.section.raw_size,
+              entropy: seg.section.entropy.toFixed(2),
+            })}
           />
         ))}
         {/* Overlay region */}
@@ -146,7 +154,7 @@ export default function SectionVisualizer({ filePath }: { filePath: string }) {
               width: `${overlayPct}%`,
               backgroundColor: '#555',
             }}
-            title={`Overlay: ${overlaySize} bytes`}
+            title={t('viz.overlayTip', { size: overlaySize })}
           />
         )}
       </div>
@@ -162,28 +170,28 @@ export default function SectionVisualizer({ filePath }: { filePath: string }) {
       <div className="viz-legend">
         <div className="legend-item">
           <span className="legend-color" style={{ background: '#888' }} />
-          <span>Header</span>
+          <span>{t('viz.header')}</span>
         </div>
         <div className="legend-item">
           <span className="legend-color" style={{ background: '#4a90d9' }} />
-          <span>Low entropy (&lt;3)</span>
+          <span>{t('viz.legendLow')}</span>
         </div>
         <div className="legend-item">
           <span className="legend-color" style={{ background: '#50c878' }} />
-          <span>Medium (3-5)</span>
+          <span>{t('viz.legendMedium')}</span>
         </div>
         <div className="legend-item">
           <span className="legend-color" style={{ background: '#f0ad4e' }} />
-          <span>High (5-7)</span>
+          <span>{t('viz.legendHigh')}</span>
         </div>
         <div className="legend-item">
           <span className="legend-color" style={{ background: '#d9534f' }} />
-          <span>Very high (&ge;7)</span>
+          <span>{t('viz.legendVeryHigh')}</span>
         </div>
         {overlayPct > 0 && (
           <div className="legend-item">
             <span className="legend-color" style={{ background: '#555' }} />
-            <span>Overlay</span>
+            <span>{t('viz.overlay')}</span>
           </div>
         )}
       </div>
@@ -192,12 +200,12 @@ export default function SectionVisualizer({ filePath }: { filePath: string }) {
       <table className="viz-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Raw Offset</th>
-            <th>Raw Size</th>
+            <th>{t('common.name')}</th>
+            <th>{t('viz.rawOffset')}</th>
+            <th>{t('viz.rawSize')}</th>
             <th>VAddr</th>
             <th>VSize</th>
-            <th>Entropy</th>
+            <th>{t('common.entropy')}</th>
             <th>%</th>
           </tr>
         </thead>
@@ -227,7 +235,7 @@ export default function SectionVisualizer({ filePath }: { filePath: string }) {
           ))}
           {overlaySize > 0 && (
             <tr className="overlay-row">
-              <td className="sec-name">Overlay</td>
+              <td className="sec-name">{t('viz.overlay')}</td>
               <td className="mono">0x{lastSectionEnd.toString(16).padStart(8, '0')}</td>
               <td className="mono">{overlaySize.toLocaleString()}</td>
               <td colSpan={2}>—</td>

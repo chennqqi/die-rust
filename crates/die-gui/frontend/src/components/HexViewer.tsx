@@ -445,10 +445,10 @@ export function HexViewer({
           className="text-xs border border-border rounded px-1 py-0.5"
           title={t("hex.elementMode")}
         >
-          <option value="byte">Byte</option>
-          <option value="word">Word (16-bit)</option>
-          <option value="dword">DWord (32-bit)</option>
-          <option value="qword">QWord (64-bit)</option>
+          <option value="byte">{t("hex.elemByte")}</option>
+          <option value="word">{t("hex.elemWord")}</option>
+          <option value="dword">{t("hex.elemDword")}</option>
+          <option value="qword">{t("hex.elemQword")}</option>
         </select>
       </div>
 

@@ -50,7 +50,8 @@ pub struct ViewSettings {
     /// used when `theme == "custom"` (Phase 49).
     #[serde(default)]
     pub custom_theme: String,
-    /// Language code: "en", "zh-CN", "ru", etc.
+    /// Language code: "system" (follow OS locale, resolved in the
+    /// frontend), "en", "zh-CN", "ru", etc.
     pub language: String,
     /// Stay on top of other windows.
     pub stay_on_top: bool,
@@ -172,7 +173,7 @@ impl Default for ViewSettings {
         Self {
             theme: "system".to_string(),
             custom_theme: String::new(),
-            language: "en".to_string(),
+            language: "system".to_string(),
             stay_on_top: false,
             advanced: false,
         }

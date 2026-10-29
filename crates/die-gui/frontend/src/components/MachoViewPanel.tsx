@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { followInHex } from '../follow';
 
 /**
@@ -152,34 +153,34 @@ type MachSubView =
   | 'dyld_exports_trie'
   | 'stringtable';
 
-const SUB_VIEWS: { key: MachSubView; label: string }[] = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'load_commands', label: 'Load Commands' },
-  { key: 'segments', label: 'Segments' },
-  { key: 'sections', label: 'Sections' },
-  { key: 'libraries', label: 'Libraries' },
-  { key: 'uuid', label: 'UUID' },
-  { key: 'symtab', label: 'Symtab' },
-  { key: 'dysymtab', label: 'Dysymtab' },
-  { key: 'dyld_info', label: 'Dyld Info' },
-  { key: 'version', label: 'Version' },
-  { key: 'rpaths', label: 'Rpaths' },
-  { key: 'dylinker', label: 'Dylinker' },
-  { key: 'linkedit', label: 'Linkedit Data' },
-  { key: 'encryption', label: 'Encryption' },
-  { key: 'entrypoint', label: 'Entry Point' },
-  { key: 'weak_libraries', label: 'Weak Libs' },
-  { key: 'id_library', label: 'ID Library' },
-  { key: 'fvmlib', label: 'FVMLIB' },
-  { key: 'id_fvmlib', label: 'IDFVMLIB' },
-  { key: 'function_starts', label: 'Func Starts' },
-  { key: 'data_in_code', label: 'Data in Code' },
-  { key: 'code_signature', label: 'Code Sig' },
-  { key: 'superblob', label: 'SuperBlob' },
-  { key: 'unix_thread', label: 'Unix Thread' },
-  { key: 'dyld_chained_fixups', label: 'Chained Fixups' },
-  { key: 'dyld_exports_trie', label: 'Exports Trie' },
-  { key: 'stringtable', label: 'String Table' },
+const SUB_VIEWS: { key: MachSubView; labelKey: string }[] = [
+  { key: 'overview', labelKey: 'macho.tabOverview' },
+  { key: 'load_commands', labelKey: 'macho.tabLoadCommands' },
+  { key: 'segments', labelKey: 'macho.tabSegments' },
+  { key: 'sections', labelKey: 'macho.tabSections' },
+  { key: 'libraries', labelKey: 'macho.tabLibraries' },
+  { key: 'uuid', labelKey: 'macho.tabUuid' },
+  { key: 'symtab', labelKey: 'macho.tabSymtab' },
+  { key: 'dysymtab', labelKey: 'macho.tabDysymtab' },
+  { key: 'dyld_info', labelKey: 'macho.tabDyldInfo' },
+  { key: 'version', labelKey: 'macho.tabVersion' },
+  { key: 'rpaths', labelKey: 'macho.tabRpaths' },
+  { key: 'dylinker', labelKey: 'macho.tabDylinker' },
+  { key: 'linkedit', labelKey: 'macho.tabLinkedit' },
+  { key: 'encryption', labelKey: 'macho.tabEncryption' },
+  { key: 'entrypoint', labelKey: 'macho.tabEntrypoint' },
+  { key: 'weak_libraries', labelKey: 'macho.tabWeakLibraries' },
+  { key: 'id_library', labelKey: 'macho.tabIdLibrary' },
+  { key: 'fvmlib', labelKey: 'macho.tabFvmlib' },
+  { key: 'id_fvmlib', labelKey: 'macho.tabIdFvmlib' },
+  { key: 'function_starts', labelKey: 'macho.tabFunctionStarts' },
+  { key: 'data_in_code', labelKey: 'macho.tabDataInCode' },
+  { key: 'code_signature', labelKey: 'macho.tabCodeSignature' },
+  { key: 'superblob', labelKey: 'macho.tabSuperblob' },
+  { key: 'unix_thread', labelKey: 'macho.tabUnixThread' },
+  { key: 'dyld_chained_fixups', labelKey: 'macho.tabChainedFixups' },
+  { key: 'dyld_exports_trie', labelKey: 'macho.tabExportsTrie' },
+  { key: 'stringtable', labelKey: 'macho.tabStringTable' },
 ];
 
 function hex(n: string | number | bigint): string {
@@ -188,18 +189,19 @@ function hex(n: string | number | bigint): string {
 }
 
 function Overview({ view }: { view: MachView }) {
+  const { t } = useTranslation();
   const rows: [string, string][] = [
-    ['Architecture', view.is64 ? '64-bit' : '32-bit'],
-    ['Magic', `0x${view.magic.toString(16)}`],
-    ['CPU Type', view.cputype],
-    ['CPU Subtype', `0x${view.cpusubtype.toString(16)}`],
-    ['File Type', view.filetype],
-    ['Load Commands', view.ncmds.toString()],
-    ['Size of Cmds', view.sizeofcmds.toString()],
-    ['Segments', view.segments.length.toString()],
-    ['Sections', view.sections.length.toString()],
-    ['Libraries', view.libraries.length.toString()],
-    ['Entry', view.entry ? hex(view.entry) : '—'],
+    [t('macho.arch'), view.is64 ? t('common.bits64') : t('common.bits32')],
+    [t('macho.magic'), `0x${view.magic.toString(16)}`],
+    [t('macho.cpuType'), view.cputype],
+    [t('macho.cpuSubtype'), `0x${view.cpusubtype.toString(16)}`],
+    [t('macho.fileType'), view.filetype],
+    [t('macho.loadCommands'), view.ncmds.toString()],
+    [t('macho.sizeOfCmds'), view.sizeofcmds.toString()],
+    [t('macho.segments'), view.segments.length.toString()],
+    [t('macho.sections'), view.sections.length.toString()],
+    [t('macho.libraries'), view.libraries.length.toString()],
+    [t('macho.entry'), view.entry ? hex(view.entry) : '—'],
   ];
 
   return (
@@ -217,16 +219,17 @@ function Overview({ view }: { view: MachView }) {
 }
 
 function LoadCommands({ commands }: { commands: MachLoadCommand[] }) {
+  const { t } = useTranslation();
   if (commands.length === 0)
-    return <p className="text-xs text-muted-foreground">No load commands.</p>;
+    return <p className="text-xs text-muted-foreground">{t('macho.noLoadCommands')}</p>;
   return (
     <div className="overflow-auto max-h-96 border border-border rounded">
       <table className="w-full text-xs">
         <thead className="bg-muted/50 sticky top-0">
           <tr>
-            <th className="text-left px-2 py-1">Command</th>
-            <th className="text-right px-2 py-1">Size</th>
-            <th className="text-left px-2 py-1">Info</th>
+            <th className="text-left px-2 py-1">{t('macho.command')}</th>
+            <th className="text-right px-2 py-1">{t('common.size')}</th>
+            <th className="text-left px-2 py-1">{t('macho.info')}</th>
           </tr>
         </thead>
         <tbody>
@@ -244,14 +247,15 @@ function LoadCommands({ commands }: { commands: MachLoadCommand[] }) {
 }
 
 function Segments({ segments }: { segments: MachSegment[] }) {
+  const { t } = useTranslation();
   if (segments.length === 0)
-    return <p className="text-xs text-muted-foreground">No segments.</p>;
+    return <p className="text-xs text-muted-foreground">{t('macho.noSegments')}</p>;
   return (
     <div className="overflow-auto max-h-96 border border-border rounded">
       <table className="w-full text-xs">
         <thead className="bg-muted/50 sticky top-0">
           <tr>
-            <th className="text-left px-2 py-1">Name</th>
+            <th className="text-left px-2 py-1">{t('common.name')}</th>
             <th className="text-right px-2 py-1">VM Addr</th>
             <th className="text-right px-2 py-1">VM Size</th>
             <th className="text-right px-2 py-1">File Off</th>
@@ -281,18 +285,19 @@ function Segments({ segments }: { segments: MachSegment[] }) {
 }
 
 function Sections({ sections }: { sections: MachSection[] }) {
+  const { t } = useTranslation();
   if (sections.length === 0)
-    return <p className="text-xs text-muted-foreground">No sections.</p>;
+    return <p className="text-xs text-muted-foreground">{t('macho.noSections')}</p>;
   return (
     <div className="overflow-auto max-h-96 border border-border rounded">
       <table className="w-full text-xs">
         <thead className="bg-muted/50 sticky top-0">
           <tr>
-            <th className="text-left px-2 py-1">Section</th>
-            <th className="text-left px-2 py-1">Segment</th>
+            <th className="text-left px-2 py-1">{t('common.section')}</th>
+            <th className="text-left px-2 py-1">{t('common.segment')}</th>
             <th className="text-right px-2 py-1">Addr</th>
-            <th className="text-right px-2 py-1">Size</th>
-            <th className="text-right px-2 py-1">Offset</th>
+            <th className="text-right px-2 py-1">{t('common.size')}</th>
+            <th className="text-right px-2 py-1">{t('common.offset')}</th>
             <th className="text-right px-2 py-1">Align</th>
           </tr>
         </thead>
@@ -304,7 +309,7 @@ function Sections({ sections }: { sections: MachSection[] }) {
               <td className="px-2 py-0.5 text-right font-mono">{hex(sec.addr)}</td>
               <td className="px-2 py-0.5 text-right font-mono">{hex(sec.size)}</td>
               <td className="px-2 py-0.5 text-right font-mono">
-                <button className="hover:underline" title="Follow in Hex" onClick={() => followInHex(sec.offset)}>
+                <button className="hover:underline" title={t('common.followInHex')} onClick={() => followInHex(sec.offset)}>
                   {sec.offset}
                 </button>
               </td>
@@ -318,16 +323,17 @@ function Sections({ sections }: { sections: MachSection[] }) {
 }
 
 function Libraries({ libs }: { libs: MachLibrary[] }) {
+  const { t } = useTranslation();
   if (libs.length === 0)
-    return <p className="text-xs text-muted-foreground">No libraries.</p>;
+    return <p className="text-xs text-muted-foreground">{t('macho.noLibraries')}</p>;
   return (
     <div className="border border-border rounded">
       <table className="w-full text-xs">
         <thead className="bg-muted/50">
           <tr>
-            <th className="text-left px-2 py-1">Path</th>
-            <th className="text-right px-2 py-1">Current</th>
-            <th className="text-right px-2 py-1">Compat</th>
+            <th className="text-left px-2 py-1">{t('common.path')}</th>
+            <th className="text-right px-2 py-1">{t('macho.current')}</th>
+            <th className="text-right px-2 py-1">{t('macho.compat')}</th>
           </tr>
         </thead>
         <tbody>
@@ -366,12 +372,14 @@ function KeyValueView({ rows }: { rows: [string, string][] }) {
 }
 
 function UuidView({ uuid }: { uuid: MachUuid | null }) {
-  if (!uuid) return <p className="text-xs text-muted-foreground">No UUID.</p>;
+  const { t } = useTranslation();
+  if (!uuid) return <p className="text-xs text-muted-foreground">{t('macho.noUuid')}</p>;
   return <KeyValueView rows={[['UUID', uuid.uuid]]} />;
 }
 
 function SymtabView({ symtab }: { symtab: MachSymtab | null }) {
-  if (!symtab) return <p className="text-xs text-muted-foreground">No symbol table.</p>;
+  const { t } = useTranslation();
+  if (!symtab) return <p className="text-xs text-muted-foreground">{t('macho.noSymtab')}</p>;
   return (
     <KeyValueView rows={[
       ['SymOff', `0x${symtab.symoff.toString(16)}`],
@@ -383,7 +391,8 @@ function SymtabView({ symtab }: { symtab: MachSymtab | null }) {
 }
 
 function DysymtabView({ dysymtab }: { dysymtab: MachDysymtab | null }) {
-  if (!dysymtab) return <p className="text-xs text-muted-foreground">No dynamic symbol table.</p>;
+  const { t } = useTranslation();
+  if (!dysymtab) return <p className="text-xs text-muted-foreground">{t('macho.noDysymtab')}</p>;
   return (
     <KeyValueView rows={[
       ['iLocalSym', String(dysymtab.ilocalsym)],
@@ -409,7 +418,8 @@ function DysymtabView({ dysymtab }: { dysymtab: MachDysymtab | null }) {
 }
 
 function DyldInfoView({ info }: { info: MachDyldInfo | null }) {
-  if (!info) return <p className="text-xs text-muted-foreground">No dyld info.</p>;
+  const { t } = useTranslation();
+  if (!info) return <p className="text-xs text-muted-foreground">{t('macho.noDyldInfo')}</p>;
   return (
     <KeyValueView rows={[
       ['Rebase', `off=0x${info.rebase_off.toString(16)} size=${info.rebase_size}`],
@@ -422,6 +432,7 @@ function DyldInfoView({ info }: { info: MachDyldInfo | null }) {
 }
 
 function VersionView({ view }: { view: MachView }) {
+  const { t } = useTranslation();
   const rows: [string, string][] = [];
   if (view.version_min) {
     rows.push(['VersionMin Platform', view.version_min.platform]);
@@ -437,12 +448,13 @@ function VersionView({ view }: { view: MachView }) {
   if (view.source_version) {
     rows.push(['SourceVersion', view.source_version.version]);
   }
-  if (rows.length === 0) return <p className="text-xs text-muted-foreground">No version info.</p>;
+  if (rows.length === 0) return <p className="text-xs text-muted-foreground">{t('macho.noVersion')}</p>;
   return <KeyValueView rows={rows} />;
 }
 
 function RpathsView({ rpaths }: { rpaths: MachRpath[] }) {
-  if (rpaths.length === 0) return <p className="text-xs text-muted-foreground">No rpaths.</p>;
+  const { t } = useTranslation();
+  if (rpaths.length === 0) return <p className="text-xs text-muted-foreground">{t('macho.noRpaths')}</p>;
   return (
     <div className="border border-border rounded">
       <table className="w-full text-xs">
@@ -459,20 +471,22 @@ function RpathsView({ rpaths }: { rpaths: MachRpath[] }) {
 }
 
 function DylinkerView({ dylinker }: { dylinker: MachDylinker | null }) {
-  if (!dylinker) return <p className="text-xs text-muted-foreground">No dylinker.</p>;
+  const { t } = useTranslation();
+  if (!dylinker) return <p className="text-xs text-muted-foreground">{t('macho.noDylinker')}</p>;
   return <KeyValueView rows={[['Dylinker', dylinker.name]]} />;
 }
 
 function LinkeditDataView({ entries }: { entries: MachLinkeditData[] }) {
-  if (entries.length === 0) return <p className="text-xs text-muted-foreground">No linkedit data.</p>;
+  const { t } = useTranslation();
+  if (entries.length === 0) return <p className="text-xs text-muted-foreground">{t('macho.noLinkedit')}</p>;
   return (
     <div className="border border-border rounded">
       <table className="w-full text-xs">
         <thead className="bg-muted/50">
           <tr>
-            <th className="text-left px-2 py-1">Command</th>
-            <th className="text-right px-2 py-1">Offset</th>
-            <th className="text-right px-2 py-1">Size</th>
+            <th className="text-left px-2 py-1">{t('macho.command')}</th>
+            <th className="text-right px-2 py-1">{t('common.offset')}</th>
+            <th className="text-right px-2 py-1">{t('common.size')}</th>
           </tr>
         </thead>
         <tbody>
@@ -490,19 +504,21 @@ function LinkeditDataView({ entries }: { entries: MachLinkeditData[] }) {
 }
 
 function EncryptionView({ info }: { info: MachEncryptionInfo | null }) {
-  if (!info) return <p className="text-xs text-muted-foreground">No encryption info.</p>;
+  const { t } = useTranslation();
+  if (!info) return <p className="text-xs text-muted-foreground">{t('macho.noEncryption')}</p>;
   return (
     <KeyValueView rows={[
       ['CryptOffset', `0x${info.cryptoff.toString(16)}`],
       ['CryptSize', String(info.cryptsize)],
       ['CryptID', String(info.cryptid)],
-      ['Encrypted', info.cryptid !== 0 ? 'Yes' : 'No'],
+      [t('macho.encrypted'), info.cryptid !== 0 ? t('common.yes') : t('common.no')],
     ]} />
   );
 }
 
 function EntryPointView({ ep }: { ep: MachEntryPoint | null }) {
-  if (!ep) return <p className="text-xs text-muted-foreground">No entry point info.</p>;
+  const { t } = useTranslation();
+  if (!ep) return <p className="text-xs text-muted-foreground">{t('macho.noEntrypoint')}</p>;
   return (
     <KeyValueView rows={[
       ['EntryOffset', ep.entryoff],
@@ -512,6 +528,7 @@ function EntryPointView({ ep }: { ep: MachEntryPoint | null }) {
 }
 
 export function MachoViewPanel({ filePath }: { filePath: string | null }) {
+  const { t } = useTranslation();
   const [view, setView] = useState<MachView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -541,8 +558,8 @@ export function MachoViewPanel({ filePath }: { filePath: string | null }) {
 
   if (!filePath) return null;
   if (loading)
-    return <p className="text-xs text-muted-foreground p-2">Loading Mach-O view...</p>;
-  if (error) return <p className="text-xs text-red-500 p-2">Error: {error}</p>;
+    return <p className="text-xs text-muted-foreground p-2">{t('macho.loading')}</p>;
+  if (error) return <p className="text-xs text-red-500 p-2">{t('common.error', { error })}</p>;
   if (!view) return null;
 
   return (
@@ -556,7 +573,7 @@ export function MachoViewPanel({ filePath }: { filePath: string | null }) {
               subView === sv.key ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
             }`}
           >
-            {sv.label}
+            {t(sv.labelKey)}
           </button>
         ))}
       </div>
@@ -595,10 +612,11 @@ export function MachoViewPanel({ filePath }: { filePath: string | null }) {
 // --- New sub-view components for Batch B ---
 
 function WeakLibrariesView({ libs }: { libs: MachWeakLibrary[] }) {
-  if (libs.length === 0) return <p className="text-xs text-muted-foreground">No weak libraries.</p>;
+  const { t } = useTranslation();
+  if (libs.length === 0) return <p className="text-xs text-muted-foreground">{t('macho.noWeakLibraries')}</p>;
   return (
     <table className="w-full text-xs">
-      <thead><tr><th className="text-left">Name</th><th>Current</th><th>Compat</th></tr></thead>
+      <thead><tr><th className="text-left">{t('common.name')}</th><th>{t('macho.current')}</th><th>{t('macho.compat')}</th></tr></thead>
       <tbody>
         {libs.map((l, i) => (
           <tr key={i} className="border-b border-border/30">
@@ -613,23 +631,25 @@ function WeakLibrariesView({ libs }: { libs: MachWeakLibrary[] }) {
 }
 
 function IdLibraryView({ lib }: { lib: MachIdLibrary | null }) {
-  if (!lib) return <p className="text-xs text-muted-foreground">No ID library.</p>;
+  const { t } = useTranslation();
+  if (!lib) return <p className="text-xs text-muted-foreground">{t('macho.noIdLibrary')}</p>;
   return (
     <table className="w-full text-xs">
       <tbody>
-        <tr><td className="py-0.5 px-2 font-mono text-muted-foreground">Name</td><td className="py-0.5 px-2 font-mono">{lib.name}</td></tr>
-        <tr><td className="py-0.5 px-2 font-mono text-muted-foreground">Current Version</td><td className="py-0.5 px-2 font-mono">0x{lib.current_version.toString(16)}</td></tr>
-        <tr><td className="py-0.5 px-2 font-mono text-muted-foreground">Compatibility Version</td><td className="py-0.5 px-2 font-mono">0x{lib.compatibility_version.toString(16)}</td></tr>
+        <tr><td className="py-0.5 px-2 font-mono text-muted-foreground">{t('common.name')}</td><td className="py-0.5 px-2 font-mono">{lib.name}</td></tr>
+        <tr><td className="py-0.5 px-2 font-mono text-muted-foreground">{t('macho.currentVersion')}</td><td className="py-0.5 px-2 font-mono">0x{lib.current_version.toString(16)}</td></tr>
+        <tr><td className="py-0.5 px-2 font-mono text-muted-foreground">{t('macho.compatVersion')}</td><td className="py-0.5 px-2 font-mono">0x{lib.compatibility_version.toString(16)}</td></tr>
       </tbody>
     </table>
   );
 }
 
 function FvmlibView({ entries }: { entries: MachFvmlib[] }) {
-  if (entries.length === 0) return <p className="text-xs text-muted-foreground">No FVMLIB entries.</p>;
+  const { t } = useTranslation();
+  if (entries.length === 0) return <p className="text-xs text-muted-foreground">{t('macho.noFvmlib')}</p>;
   return (
     <table className="w-full text-xs">
-      <thead><tr><th className="text-left">Name</th><th>Minor Version</th><th>Header Addr</th></tr></thead>
+      <thead><tr><th className="text-left">{t('common.name')}</th><th>{t('macho.minorVersion')}</th><th>{t('macho.headerAddr')}</th></tr></thead>
       <tbody>
         {entries.map((e, i) => (
           <tr key={i} className="border-b border-border/30">
@@ -644,10 +664,11 @@ function FvmlibView({ entries }: { entries: MachFvmlib[] }) {
 }
 
 function IdFvmlibView({ entries }: { entries: MachIdFvmlib[] }) {
-  if (entries.length === 0) return <p className="text-xs text-muted-foreground">No IDFVMLIB entries.</p>;
+  const { t } = useTranslation();
+  if (entries.length === 0) return <p className="text-xs text-muted-foreground">{t('macho.noIdFvmlib')}</p>;
   return (
     <table className="w-full text-xs">
-      <thead><tr><th className="text-left">Name</th><th>Minor Version</th><th>Header Addr</th></tr></thead>
+      <thead><tr><th className="text-left">{t('common.name')}</th><th>{t('macho.minorVersion')}</th><th>{t('macho.headerAddr')}</th></tr></thead>
       <tbody>
         {entries.map((e, i) => (
           <tr key={i} className="border-b border-border/30">
@@ -662,13 +683,14 @@ function IdFvmlibView({ entries }: { entries: MachIdFvmlib[] }) {
 }
 
 function FunctionStartsView({ entries }: { entries: MachFunctionStart[] }) {
-  if (entries.length === 0) return <p className="text-xs text-muted-foreground">No function starts.</p>;
+  const { t } = useTranslation();
+  if (entries.length === 0) return <p className="text-xs text-muted-foreground">{t('macho.noFunctionStarts')}</p>;
   return (
     <div>
-      <p className="text-xs text-muted-foreground mb-1">{entries.length} functions</p>
+      <p className="text-xs text-muted-foreground mb-1">{t('macho.numFunctions', { count: entries.length })}</p>
       <div className="border border-border rounded overflow-auto max-h-96">
         <table className="w-full text-xs">
-          <thead className="bg-muted/50 sticky top-0"><tr><th className="text-right px-2 py-1">#</th><th className="text-right px-2 py-1">Address</th></tr></thead>
+          <thead className="bg-muted/50 sticky top-0"><tr><th className="text-right px-2 py-1">#</th><th className="text-right px-2 py-1">{t('common.address')}</th></tr></thead>
           <tbody>
             {entries.map((e, i) => (
               <tr key={i} className="border-b border-border/30">
@@ -684,10 +706,11 @@ function FunctionStartsView({ entries }: { entries: MachFunctionStart[] }) {
 }
 
 function DataInCodeView({ entries }: { entries: MachDataInCodeEntry[] }) {
-  if (entries.length === 0) return <p className="text-xs text-muted-foreground">No data-in-code entries.</p>;
+  const { t } = useTranslation();
+  if (entries.length === 0) return <p className="text-xs text-muted-foreground">{t('macho.noDataInCode')}</p>;
   return (
     <table className="w-full text-xs">
-      <thead><tr><th className="text-right">Offset</th><th className="text-right">Length</th><th>Kind</th></tr></thead>
+      <thead><tr><th className="text-right">{t('common.offset')}</th><th className="text-right">{t('common.length')}</th><th>{t('common.kind')}</th></tr></thead>
       <tbody>
         {entries.map((e, i) => (
           <tr key={i} className="border-b border-border/30">
@@ -702,19 +725,20 @@ function DataInCodeView({ entries }: { entries: MachDataInCodeEntry[] }) {
 }
 
 function CodeSignatureView({ sig }: { sig: MachCodeSignature | null }) {
-  if (!sig) return <p className="text-xs text-muted-foreground">No code signature.</p>;
+  const { t } = useTranslation();
+  if (!sig) return <p className="text-xs text-muted-foreground">{t('macho.noCodeSignature')}</p>;
   return (
     <div>
       <table className="w-full text-xs mb-2">
         <tbody>
-          <tr><td className="py-0.5 px-2 text-muted-foreground">Magic</td><td className="py-0.5 px-2 font-mono">0x{sig.magic.toString(16)}</td></tr>
-          <tr><td className="py-0.5 px-2 text-muted-foreground">Length</td><td className="py-0.5 px-2">{sig.length}</td></tr>
-          <tr><td className="py-0.5 px-2 text-muted-foreground">Count</td><td className="py-0.5 px-2">{sig.count}</td></tr>
+          <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.magic')}</td><td className="py-0.5 px-2 font-mono">0x{sig.magic.toString(16)}</td></tr>
+          <tr><td className="py-0.5 px-2 text-muted-foreground">{t('common.length')}</td><td className="py-0.5 px-2">{sig.length}</td></tr>
+          <tr><td className="py-0.5 px-2 text-muted-foreground">{t('common.count')}</td><td className="py-0.5 px-2">{sig.count}</td></tr>
         </tbody>
       </table>
       {sig.slots.length > 0 && (
         <table className="w-full text-xs">
-          <thead><tr><th>Type</th><th className="text-right">Offset</th></tr></thead>
+          <thead><tr><th>{t('common.type')}</th><th className="text-right">{t('common.offset')}</th></tr></thead>
           <tbody>
             {sig.slots.map((s, i) => (
               <tr key={i} className="border-b border-border/30">
@@ -730,19 +754,20 @@ function CodeSignatureView({ sig }: { sig: MachCodeSignature | null }) {
 }
 
 function SuperBlobView({ sb }: { sb: MachSuperBlob | null }) {
-  if (!sb) return <p className="text-xs text-muted-foreground">No SuperBlob.</p>;
+  const { t } = useTranslation();
+  if (!sb) return <p className="text-xs text-muted-foreground">{t('macho.noSuperblob')}</p>;
   return (
     <div>
       <table className="w-full text-xs mb-2">
         <tbody>
-          <tr><td className="py-0.5 px-2 text-muted-foreground">Magic</td><td className="py-0.5 px-2 font-mono">0x{sb.magic.toString(16)}</td></tr>
-          <tr><td className="py-0.5 px-2 text-muted-foreground">Length</td><td className="py-0.5 px-2">{sb.length}</td></tr>
-          <tr><td className="py-0.5 px-2 text-muted-foreground">Count</td><td className="py-0.5 px-2">{sb.count}</td></tr>
+          <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.magic')}</td><td className="py-0.5 px-2 font-mono">0x{sb.magic.toString(16)}</td></tr>
+          <tr><td className="py-0.5 px-2 text-muted-foreground">{t('common.length')}</td><td className="py-0.5 px-2">{sb.length}</td></tr>
+          <tr><td className="py-0.5 px-2 text-muted-foreground">{t('common.count')}</td><td className="py-0.5 px-2">{sb.count}</td></tr>
         </tbody>
       </table>
       {sb.entries.length > 0 && (
         <table className="w-full text-xs">
-          <thead><tr><th>Type</th><th className="text-right">Offset</th></tr></thead>
+          <thead><tr><th>{t('common.type')}</th><th className="text-right">{t('common.offset')}</th></tr></thead>
           <tbody>
             {sb.entries.map((e, i) => (
               <tr key={i} className="border-b border-border/30">
@@ -758,53 +783,57 @@ function SuperBlobView({ sb }: { sb: MachSuperBlob | null }) {
 }
 
 function UnixThreadView({ thread }: { thread: MachUnixThread | null }) {
-  if (!thread) return <p className="text-xs text-muted-foreground">No Unix thread.</p>;
+  const { t } = useTranslation();
+  if (!thread) return <p className="text-xs text-muted-foreground">{t('macho.noUnixThread')}</p>;
   return (
     <table className="w-full text-xs">
       <tbody>
-        <tr><td className="py-0.5 px-2 text-muted-foreground">CPU Type</td><td className="py-0.5 px-2">{thread.cputype}</td></tr>
-        <tr><td className="py-0.5 px-2 text-muted-foreground">Entry Point</td><td className="py-0.5 px-2 font-mono">0x{thread.entry.toString(16)}</td></tr>
+        <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.cpuType')}</td><td className="py-0.5 px-2">{thread.cputype}</td></tr>
+        <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.entryPoint')}</td><td className="py-0.5 px-2 font-mono">0x{thread.entry.toString(16)}</td></tr>
       </tbody>
     </table>
   );
 }
 
 function DyldChainedFixupsView({ fixups }: { fixups: MachDyldChainedFixups | null }) {
-  if (!fixups) return <p className="text-xs text-muted-foreground">No dyld chained fixups.</p>;
+  const { t } = useTranslation();
+  if (!fixups) return <p className="text-xs text-muted-foreground">{t('macho.noChainedFixups')}</p>;
   return (
     <table className="w-full text-xs">
       <tbody>
-        <tr><td className="py-0.5 px-2 text-muted-foreground">Data Offset</td><td className="py-0.5 px-2 font-mono">0x{fixups.dataoff.toString(16)}</td></tr>
-        <tr><td className="py-0.5 px-2 text-muted-foreground">Data Size</td><td className="py-0.5 px-2">{fixups.datasize}</td></tr>
-        <tr><td className="py-0.5 px-2 text-muted-foreground">Fixups Version</td><td className="py-0.5 px-2">{fixups.fixups_version}</td></tr>
-        <tr><td className="py-0.5 px-2 text-muted-foreground">Starts Offset</td><td className="py-0.5 px-2 font-mono">0x{fixups.starts_offset.toString(16)}</td></tr>
-        <tr><td className="py-0.5 px-2 text-muted-foreground">Image Base</td><td className="py-0.5 px-2 font-mono">0x{fixups.image_base.toString(16)}</td></tr>
+        <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.dataOffset')}</td><td className="py-0.5 px-2 font-mono">0x{fixups.dataoff.toString(16)}</td></tr>
+        <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.dataSize')}</td><td className="py-0.5 px-2">{fixups.datasize}</td></tr>
+        <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.fixupsVersion')}</td><td className="py-0.5 px-2">{fixups.fixups_version}</td></tr>
+        <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.startsOffset')}</td><td className="py-0.5 px-2 font-mono">0x{fixups.starts_offset.toString(16)}</td></tr>
+        <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.imageBase')}</td><td className="py-0.5 px-2 font-mono">0x{fixups.image_base.toString(16)}</td></tr>
       </tbody>
     </table>
   );
 }
 
 function DyldExportsTrieView({ trie }: { trie: MachDyldExportsTrie | null }) {
-  if (!trie) return <p className="text-xs text-muted-foreground">No dyld exports trie.</p>;
+  const { t } = useTranslation();
+  if (!trie) return <p className="text-xs text-muted-foreground">{t('macho.noExportsTrie')}</p>;
   return (
     <table className="w-full text-xs">
       <tbody>
-        <tr><td className="py-0.5 px-2 text-muted-foreground">Data Offset</td><td className="py-0.5 px-2 font-mono">0x{trie.dataoff.toString(16)}</td></tr>
-        <tr><td className="py-0.5 px-2 text-muted-foreground">Data Size</td><td className="py-0.5 px-2">{trie.datasize}</td></tr>
-        <tr><td className="py-0.5 px-2 text-muted-foreground">Export Count</td><td className="py-0.5 px-2">{trie.export_count}</td></tr>
+        <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.dataOffset')}</td><td className="py-0.5 px-2 font-mono">0x{trie.dataoff.toString(16)}</td></tr>
+        <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.dataSize')}</td><td className="py-0.5 px-2">{trie.datasize}</td></tr>
+        <tr><td className="py-0.5 px-2 text-muted-foreground">{t('macho.exportCount')}</td><td className="py-0.5 px-2">{trie.export_count}</td></tr>
       </tbody>
     </table>
   );
 }
 
 function StringTableView({ entries }: { entries: MachStringTableEntry[] }) {
-  if (entries.length === 0) return <p className="text-xs text-muted-foreground">No string table entries.</p>;
+  const { t } = useTranslation();
+  if (entries.length === 0) return <p className="text-xs text-muted-foreground">{t('macho.noStringTable')}</p>;
   return (
     <div>
-      <p className="text-xs text-muted-foreground mb-1">{entries.length} entries</p>
+      <p className="text-xs text-muted-foreground mb-1">{t('common.numEntries', { count: entries.length })}</p>
       <div className="border border-border rounded overflow-auto max-h-96">
         <table className="w-full text-xs">
-          <thead className="bg-muted/50 sticky top-0"><tr><th className="text-right px-2 py-1">Offset</th><th className="text-left px-2 py-1">Value</th></tr></thead>
+          <thead className="bg-muted/50 sticky top-0"><tr><th className="text-right px-2 py-1">{t('common.offset')}</th><th className="text-left px-2 py-1">{t('common.value')}</th></tr></thead>
           <tbody>
             {entries.map((e, i) => (
               <tr key={i} className="border-b border-border/30">

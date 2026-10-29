@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { useTranslation } from 'react-i18next';
 
 /**
  * File extractor — extracts overlay, resources, sections, and arbitrary byte ranges.
@@ -28,6 +29,7 @@ interface AnalyzeResult {
 }
 
 export default function ExtractorPanel({ filePath }: { filePath: string | null }) {
+  const { t } = useTranslation();
   const [list, setList] = useState<ExtractItemList | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
     const outputDir = await openDialog({
       directory: true,
       multiple: false,
-      title: 'Select output directory',
+      title: t('extractor.selectDir'),
     });
     if (!outputDir || typeof outputDir !== 'string') return;
 
@@ -78,9 +80,9 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
         itemName,
         outputDir,
       });
-      setResult(`Extracted to: ${outPath}`);
+      setResult(t('extractor.extractedTo', { path: outPath }));
     } catch (e) {
-      setResult(`Error: ${e}`);
+      setResult(t('common.error', { error: String(e) }));
     } finally {
       setExtracting(null);
     }
@@ -91,13 +93,13 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
     const offset = BigInt(rawOffset);
     const size = BigInt(rawSize);
     if (size <= 0n) {
-      setResult('Error: size must be > 0');
+      setResult(t('extractor.sizeErr'));
       return;
     }
     const outputDir = await openDialog({
       directory: true,
       multiple: false,
-      title: 'Select output directory',
+      title: t('extractor.selectDir'),
     });
     if (!outputDir || typeof outputDir !== 'string') return;
 
@@ -112,17 +114,17 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
         outputDir,
         outputName,
       });
-      setResult(`Extracted to: ${outPath}`);
+      setResult(t('extractor.extractedTo', { path: outPath }));
     } catch (e) {
-      setResult(`Error: ${e}`);
+      setResult(t('common.error', { error: String(e) }));
     } finally {
       setExtracting(null);
     }
   };
 
   if (!filePath) return null;
-  if (loading) return <p className="text-xs text-muted-foreground p-2">Loading extractable items...</p>;
-  if (error) return <p className="text-xs text-red-500 p-2">Error: {error}</p>;
+  if (loading) return <p className="text-xs text-muted-foreground p-2">{t('extractor.loadingItems')}</p>;
+  if (error) return <p className="text-xs text-red-500 p-2">{t('common.error', { error })}</p>;
   if (!list) return null;
 
   const handleHeuristicScan = async () => {
@@ -135,9 +137,9 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
         deepScan,
       });
       setHeuristicItems(items);
-      setResult(`Heuristic scan found ${items.length} embedded files.`);
+      setResult(t('extractor.heuristicFound', { count: items.length }));
     } catch (e) {
-      setResult(`Error: ${e}`);
+      setResult(t('common.error', { error: String(e) }));
     } finally {
       setExtracting(null);
     }
@@ -153,17 +155,17 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
       });
       setAnalyzeResults({ ...analyzeResults, [item.name]: result });
     } catch (e) {
-      setResult(`Analyze error: ${e}`);
+      setResult(t('extractor.analyzeErr', { error: String(e) }));
     }
   };
 
   return (
     <div className="space-y-3 p-2">
-      <h3 className="text-sm font-semibold">Extractor</h3>
+      <h3 className="text-sm font-semibold">{t('extractor.title')}</h3>
 
       {/* Heuristic extraction */}
       <div>
-        <h4 className="text-xs font-semibold mb-1">Heuristic Extraction</h4>
+        <h4 className="text-xs font-semibold mb-1">{t('extractor.heuristicTitle')}</h4>
         <div className="flex items-center gap-2 mb-2">
           <label className="flex items-center gap-1 text-xs">
             <input
@@ -171,14 +173,14 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
               checked={deepScan}
               onChange={(e) => setDeepScan(e.target.checked)}
             />
-            Deep Scan (entire file)
+            {t('extractor.deepScan')}
           </label>
           <button
             onClick={handleHeuristicScan}
             disabled={extracting !== null}
             className="px-2 py-0.5 text-xs border border-border rounded hover:bg-muted disabled:opacity-50"
           >
-            {extracting === 'heuristic' ? 'Scanning...' : 'Scan for Embedded Files'}
+            {extracting === 'heuristic' ? t('extractor.scanning') : t('extractor.scanEmbedded')}
           </button>
         </div>
         {heuristicItems.length > 0 && (
@@ -186,12 +188,12 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
             <table className="w-full text-xs">
               <thead className="bg-muted/50 sticky top-0">
                 <tr>
-                  <th className="text-left px-2 py-1">Name</th>
-                  <th className="text-left px-2 py-1">Type</th>
-                  <th className="text-right px-2 py-1">Offset</th>
-                  <th className="text-right px-2 py-1">Size</th>
-                  <th className="text-center px-2 py-1">Analyze</th>
-                  <th className="text-center px-2 py-1">Extract</th>
+                  <th className="text-left px-2 py-1">{t('common.name')}</th>
+                  <th className="text-left px-2 py-1">{t('common.type')}</th>
+                  <th className="text-right px-2 py-1">{t('common.offset')}</th>
+                  <th className="text-right px-2 py-1">{t('common.size')}</th>
+                  <th className="text-center px-2 py-1">{t('extractor.analyze')}</th>
+                  <th className="text-center px-2 py-1">{t('common.extract')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -208,7 +210,7 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
                       >
                         {analyzeResults[item.name]
                           ? `${analyzeResults[item.name].file_type} (H=${analyzeResults[item.name].entropy.toFixed(2)})`
-                          : 'Analyze'}
+                          : t('extractor.analyze')}
                       </button>
                     </td>
                     <td className="px-2 py-0.5 text-center">
@@ -217,7 +219,7 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
                         disabled={extracting !== null}
                         className="px-2 py-0.5 text-xs border border-border rounded hover:bg-muted disabled:opacity-50"
                       >
-                        {extracting === item.name ? '...' : 'Extract'}
+                        {extracting === item.name ? '...' : t('common.extract')}
                       </button>
                     </td>
                   </tr>
@@ -230,20 +232,20 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
 
       {/* Format-aware extraction */}
       <div>
-        <h4 className="text-xs font-semibold mb-1">Format-Aware Extraction</h4>
+        <h4 className="text-xs font-semibold mb-1">{t('extractor.formatTitle')}</h4>
         {list.items.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No extractable items found.</p>
+          <p className="text-xs text-muted-foreground">{t('extractor.noItems')}</p>
         ) : (
           <div className="border border-border rounded overflow-auto max-h-64">
             <table className="w-full text-xs">
               <thead className="bg-muted/50 sticky top-0">
                 <tr>
-                  <th className="text-left px-2 py-1">Name</th>
-                  <th className="text-left px-2 py-1">Type</th>
-                  <th className="text-right px-2 py-1">Offset</th>
-                  <th className="text-right px-2 py-1">Size</th>
-                  <th className="text-left px-2 py-1">Description</th>
-                  <th className="text-center px-2 py-1">Action</th>
+                  <th className="text-left px-2 py-1">{t('common.name')}</th>
+                  <th className="text-left px-2 py-1">{t('common.type')}</th>
+                  <th className="text-right px-2 py-1">{t('common.offset')}</th>
+                  <th className="text-right px-2 py-1">{t('common.size')}</th>
+                  <th className="text-left px-2 py-1">{t('common.description')}</th>
+                  <th className="text-center px-2 py-1">{t('extractor.action')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -260,7 +262,7 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
                         disabled={extracting !== null}
                         className="px-2 py-0.5 text-xs border border-border rounded hover:bg-muted disabled:opacity-50"
                       >
-                        {extracting === item.name ? '...' : 'Extract'}
+                        {extracting === item.name ? '...' : t('common.extract')}
                       </button>
                     </td>
                   </tr>
@@ -273,10 +275,10 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
 
       {/* Raw byte range extraction */}
       <div>
-        <h4 className="text-xs font-semibold mb-1">Raw Byte Range Extraction</h4>
+        <h4 className="text-xs font-semibold mb-1">{t('extractor.rawTitle')}</h4>
         <div className="flex items-center gap-2">
           <label className="text-xs">
-            Offset:
+            {t('common.offset')}:
             <input
               type="text"
               value={rawOffset}
@@ -286,7 +288,7 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
             />
           </label>
           <label className="text-xs">
-            Size:
+            {t('common.size')}:
             <input
               type="text"
               value={rawSize}
@@ -300,7 +302,7 @@ export default function ExtractorPanel({ filePath }: { filePath: string | null }
             disabled={extracting !== null}
             className="px-2 py-0.5 text-xs border border-border rounded hover:bg-muted disabled:opacity-50"
           >
-            {extracting === 'raw' ? 'Extracting...' : 'Extract Raw'}
+            {extracting === 'raw' ? t('extractor.extracting') : t('extractor.extractRaw')}
           </button>
         </div>
       </div>

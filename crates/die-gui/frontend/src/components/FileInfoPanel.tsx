@@ -117,16 +117,16 @@ export function FileInfoPanel({ path }: { path: string }) {
         <SubTabButton active={subTab === "symbols"} onClick={() => setSubTab("symbols")} icon={Code2} label={`${t("fileInfo.symbols")} (${info.symbols.length})`} />
         <SubTabButton active={subTab === "entropy"} onClick={() => setSubTab("entropy")} icon={Activity} label={t("fileInfo.entropy")} />
         {(info.format === "PE32" || info.format === "PE32+" || info.format === "PE") && (
-          <SubTabButton active={subTab === "pe"} onClick={() => setSubTab("pe")} icon={GitBranch} label="PE View" />
+          <SubTabButton active={subTab === "pe"} onClick={() => setSubTab("pe")} icon={GitBranch} label={t("fileInfo.peView")} />
         )}
         {(info.format === "ELF32" || info.format === "ELF64" || info.format === "ELF") && (
-          <SubTabButton active={subTab === "elf"} onClick={() => setSubTab("elf")} icon={GitBranch} label="ELF View" />
+          <SubTabButton active={subTab === "elf"} onClick={() => setSubTab("elf")} icon={GitBranch} label={t("fileInfo.elfView")} />
         )}
         {(info.format === "Mach-O 32" || info.format === "Mach-O 64" || info.format === "Mach-O FAT") && (
-          <SubTabButton active={subTab === "macho"} onClick={() => setSubTab("macho")} icon={GitBranch} label="Mach-O View" />
+          <SubTabButton active={subTab === "macho"} onClick={() => setSubTab("macho")} icon={GitBranch} label={t("fileInfo.machoView")} />
         )}
-        <SubTabButton active={subTab === "strings"} onClick={() => setSubTab("strings")} icon={Code2} label="Strings" />
-        <SubTabButton active={subTab === "visual"} onClick={() => setSubTab("visual")} icon={Activity} label="Visual" />
+        <SubTabButton active={subTab === "strings"} onClick={() => setSubTab("strings")} icon={Code2} label={t("tabs.strings")} />
+        <SubTabButton active={subTab === "visual"} onClick={() => setSubTab("visual")} icon={Activity} label={t("fileInfo.visual")} />
       </div>
 
       {/* Content */}
@@ -135,14 +135,14 @@ export function FileInfoPanel({ path }: { path: string }) {
           <div className="space-y-3 text-xs">
             <InfoRow label={t("fileInfo.name")} value={info.file_name} />
             <InfoRow label={t("fileInfo.title")} value={info.path} mono />
-            <InfoRow label={t("fileInfo.size")} value={`${info.size_human} (${info.size.toLocaleString()} bytes)`} />
+            <InfoRow label={t("fileInfo.size")} value={`${info.size_human} (${info.size.toLocaleString()} ${t("common.bytes")})`} />
             <InfoRow label={t("fileInfo.format")} value={info.format} />
             {info.mime_type && (
               <InfoRow label="MIME Type" value={info.mime_type} mono />
             )}
             <InfoRow
               label={t("fileInfo.entropy")}
-              value={`${info.entropy.toFixed(4)} ${entropyLabel(info.entropy)}`}
+              value={`${info.entropy.toFixed(4)} ${t(entropyLabelKey(info.entropy))}`}
             />
 
             <div className="pt-2 border-t border-border-c">
@@ -322,6 +322,7 @@ function HashRow({
   copied: boolean;
   onCopy: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 py-0.5 group">
       <span className="text-fg-secondary w-16 flex-shrink-0">{label}</span>
@@ -329,7 +330,7 @@ function HashRow({
       <button
         onClick={onCopy}
         className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-hover rounded"
-        title="Copy"
+        title={t("common.copy")}
       >
         {copied ? <Check size={12} className="text-accent-green" /> : <Copy size={12} />}
       </button>
@@ -353,6 +354,7 @@ function ExtraHashes({
   copied: string | null;
   copyHash: (hash: string, label: string) => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [algos, setAlgos] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(
@@ -396,7 +398,7 @@ function ExtraHashes({
         onClick={() => setOpen(!open)}
         className="text-fg-muted hover:text-fg-secondary text-[11px]"
       >
-        {open ? "▾" : "▸"} More hashes
+        {open ? "▾" : "▸"} {t("fileInfo.moreHashes")}
       </button>
       {open && (
         <div className="mt-1 pl-1">
@@ -417,7 +419,7 @@ function ExtraHashes({
             disabled={busy || selected.size === 0}
             className="px-2 py-0.5 bg-primary text-background rounded disabled:opacity-50"
           >
-            {busy ? "Computing..." : "Compute"}
+            {busy ? t("fileInfo.computing") : t("fileInfo.compute")}
           </button>
           {results &&
             results.map((r) => (
@@ -435,12 +437,12 @@ function ExtraHashes({
   );
 }
 
-function entropyLabel(e: number): string {
-  if (e < 1) return "(very low — likely text/data)";
-  if (e < 4) return "(low — structured data)";
-  if (e < 6) return "(medium — mixed content)";
-  if (e < 7.5) return "(high — possibly compressed/encrypted)";
-  return "(very high — likely encrypted/compressed)";
+function entropyLabelKey(e: number): string {
+  if (e < 1) return "fileInfo.entropyVeryLow";
+  if (e < 4) return "fileInfo.entropyLow";
+  if (e < 6) return "fileInfo.entropyMedium";
+  if (e < 7.5) return "fileInfo.entropyHigh";
+  return "fileInfo.entropyVeryHigh";
 }
 
 function entropyColor(e: number): string {
@@ -451,6 +453,7 @@ function entropyColor(e: number): string {
 
 /** Entropy graph view — renders a simple bar chart of block-level entropy. */
 function EntropyView({ path, overall }: { path: string; overall: number }) {
+  const { t } = useTranslation();
   const [graph, setGraph] = useState<{ blocks: number[]; block_size: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [blockSize, setBlockSize] = useState(256);
@@ -465,7 +468,7 @@ function EntropyView({ path, overall }: { path: string; overall: number }) {
   }, [path, blockSize]);
 
   if (error) return <p className="text-accent-red text-xs">{error}</p>;
-  if (!graph) return <p className="text-fg-muted text-xs">Computing entropy graph...</p>;
+  if (!graph) return <p className="text-fg-muted text-xs">{t("fileInfo.computingEntropy")}</p>;
 
   const maxBlocks = 200;
   const displayBlocks =
@@ -477,8 +480,8 @@ function EntropyView({ path, overall }: { path: string; overall: number }) {
     <div className="text-xs">
       <div className="mb-3">
         <div className="flex justify-between mb-1">
-          <span className="text-fg-secondary">Overall entropy: <span className={entropyColor(overall)}>{overall.toFixed(4)}</span></span>
-          <span className="text-fg-muted">{graph.blocks.length} blocks × {graph.block_size} bytes</span>
+          <span className="text-fg-secondary">{t("fileInfo.overallEntropy")} <span className={entropyColor(overall)}>{overall.toFixed(4)}</span></span>
+          <span className="text-fg-muted">{t("fileInfo.blocksFmt", { blocks: graph.blocks.length, size: graph.block_size })}</span>
           <select
             value={blockSize}
             onChange={(e) => setBlockSize(Number(e.target.value))}
@@ -508,7 +511,7 @@ function EntropyView({ path, overall }: { path: string; overall: number }) {
                 : "rgb(var(--accent-red))",
               minHeight: "1px",
             }}
-            title={`Block ${i}: ${e.toFixed(3)}`}
+            title={t("fileInfo.blockN", { n: i, v: e.toFixed(3) })}
           />
         ))}
       </div>
@@ -519,15 +522,15 @@ function EntropyView({ path, overall }: { path: string; overall: number }) {
       <div className="mt-3 flex gap-4 text-fg-secondary">
         <span className="flex items-center gap-1">
           <div className="w-3 h-3 rounded" style={{ background: "rgb(var(--accent-green))" }} />
-          &lt; 4.0 (low)
+          {t("fileInfo.entropyLowLegend")}
         </span>
         <span className="flex items-center gap-1">
           <div className="w-3 h-3 rounded" style={{ background: "rgb(var(--accent-yellow))" }} />
-          4.0–6.0 (medium)
+          {t("fileInfo.entropyMedLegend")}
         </span>
         <span className="flex items-center gap-1">
           <div className="w-3 h-3 rounded" style={{ background: "rgb(var(--accent-red))" }} />
-          &gt; 6.0 (high)
+          {t("fileInfo.entropyHighLegend")}
         </span>
       </div>
     </div>
@@ -613,7 +616,7 @@ function UpxUnpackSection({ path }: { path: string }) {
             {upx.filter !== 0 && <> · {t("upx.filter", "Filter")}: 0x{upx.filter.toString(16)}</>}
           </div>
           <div className="text-fg-muted mono">
-            {upx.compressedSize.toLocaleString()} → {upx.uncompressedSize.toLocaleString()} bytes
+            {upx.compressedSize.toLocaleString()} → {upx.uncompressedSize.toLocaleString()} {t("common.bytes")}
           </div>
         </>
       )}

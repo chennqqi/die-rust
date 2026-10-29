@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronRight, ChevronDown } from "lucide-react";
 
 /// Header field tree node — mirrors Rust `HeaderField` struct.
@@ -73,10 +74,11 @@ function TreeNode({ field, depth }: { field: HeaderField; depth: number }) {
 
 /// File header tree view — displays structured PE/ELF/Mach-O header fields.
 export function FileHeaderTree({ fields }: { fields: HeaderField[] }) {
+  const { t } = useTranslation();
   if (fields.length === 0) {
     return (
       <p className="text-fg-muted text-xs">
-        No header information available for this file format.
+        {t("headerTree.noHeader")}
       </p>
     );
   }

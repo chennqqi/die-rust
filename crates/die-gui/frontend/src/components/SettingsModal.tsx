@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { SUPPORTED_LANGUAGES } from '../i18n/config';
 
 // --- Settings types (mirror Rust AppSettings) ---
@@ -94,13 +95,22 @@ interface AppSettings {
 
 type SettingsTab = 'view' | 'scan' | 'database' | 'engine' | 'online' | 'shortcuts';
 
-const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
-  { key: 'view', label: 'View' },
-  { key: 'scan', label: 'Scan' },
-  { key: 'database', label: 'Database' },
-  { key: 'engine', label: 'Engine' },
-  { key: 'online', label: 'Online' },
-  { key: 'shortcuts', label: 'Shortcuts' },
+const SETTINGS_TABS: { key: SettingsTab; labelKey: string }[] = [
+  { key: 'view', labelKey: 'settings.tabView' },
+  { key: 'scan', labelKey: 'settings.tabScan' },
+  { key: 'database', labelKey: 'settings.tabDatabase' },
+  { key: 'engine', labelKey: 'settings.tabEngine' },
+  { key: 'online', labelKey: 'settings.tabOnline' },
+  { key: 'shortcuts', labelKey: 'settings.tabShortcuts' },
+];
+
+const BUILT_IN_THEMES = [
+  'solarized-dark',
+  'film-noir',
+  'midnight-elegance',
+  'lavender-dawn',
+  'emerald-dusk',
+  'cyber-noir',
 ];
 
 interface SettingsModalProps {
@@ -109,6 +119,7 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -159,7 +170,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="settings-modal-header">
-          <h2>Settings</h2>
+          <h2>{t('settings.title')}</h2>
           <button className="settings-close" onClick={onClose}>
             <X size={18} />
           </button>
@@ -167,8 +178,8 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
 
         {/* Body */}
         <div className="settings-modal-body">
-          {loading && <div>Loading settings...</div>}
-          {error && <div className="settings-error">Error: {error}</div>}
+          {loading && <div>{t('settings.loading')}</div>}
+          {error && <div className="settings-error">{t('settings.error', { error })}</div>}
           {!loading && settings && (
             <>
               {/* Tab bar */}
@@ -179,7 +190,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                     className={`settings-tab ${activeTab === tab.key ? 'active' : ''}`}
                     onClick={() => setActiveTab(tab.key)}
                   >
-                    {tab.label}
+                    {t(tab.labelKey)}
                   </button>
                 ))}
               </div>
@@ -189,7 +200,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 {activeTab === 'view' && (
                   <div className="settings-section">
                     <label>
-                      Theme:
+                      {t('settings.theme')}:
                       <select
                         value={settings.view.theme}
                         onChange={(e) =>
@@ -199,21 +210,20 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       >
-                        <option value="system">System</option>
-                        <option value="light">Light</option>
-                        <option value="dark">Dark</option>
-                        <option value="solarized-dark">Solarized Dark</option>
-                        <option value="film-noir">Film Noir</option>
-                        <option value="midnight-elegance">Midnight Elegance</option>
-                        <option value="lavender-dawn">Lavender Dawn</option>
-                        <option value="emerald-dusk">Emerald Dusk</option>
-                        <option value="cyber-noir">Cyber Noir</option>
-                        <option value="custom">Custom</option>
+                        <option value="system">{t('settings.system')}</option>
+                        <option value="light">{t('settings.light')}</option>
+                        <option value="dark">{t('settings.dark')}</option>
+                        {BUILT_IN_THEMES.map((theme) => (
+                          <option key={theme} value={theme}>
+                            {theme.split('-').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ')}
+                          </option>
+                        ))}
+                        <option value="custom">{t('settings.themeCustom')}</option>
                       </select>
                     </label>
                     {settings.view.theme === 'custom' && (
                       <label>
-                        Custom theme variables:
+                        {t('settings.customThemeVarsLabel')}
                         <textarea
                           rows={4}
                           className="w-full text-xs font-mono"
@@ -229,7 +239,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                       </label>
                     )}
                     <label>
-                      Language:
+                      {t('settings.language')}:
                       <select
                         value={settings.view.language}
                         onChange={(e) =>
@@ -239,6 +249,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       >
+                        <option value="system">{t('settings.system')}</option>
                         {SUPPORTED_LANGUAGES.map((l) => (
                           <option key={l.code} value={l.code}>{l.name}</option>
                         ))}
@@ -255,7 +266,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      Stay on top
+                      {t('settings.stayOnTop')}
                     </label>
                     <label>
                       <input
@@ -268,7 +279,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      Advanced mode
+                      {t('settings.advancedMode')}
                     </label>
                   </div>
                 )}
@@ -286,7 +297,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      Scan after open
+                      {t('settings.scanAfterOpen')}
                     </label>
                     <label>
                       <input
@@ -299,7 +310,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      Hide unknown
+                      {t('settings.hideUnknown')}
                     </label>
                     <label>
                       <input
@@ -312,7 +323,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      Sort results
+                      {t('settings.sortResults')}
                     </label>
                     <label>
                       <input
@@ -325,9 +336,9 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      Log profiling
+                      {t('settings.logProfiling')}
                     </label>
-                    <h4>Default Scan Flags</h4>
+                    <h4>{t('settings.defaultScanFlags')}</h4>
                     {Object.entries(settings.scan.flags).filter(([, value]) => typeof value === 'boolean').map(([key, value]) => (
                       <label key={key}>
                         <input
@@ -346,7 +357,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                             }))
                           }
                         />
-                        {key.replace(/_/g, ' ')}
+                        {t(`settings.flag_${key}`, { defaultValue: key.replace(/_/g, ' ') })}
                       </label>
                     ))}
                   </div>
@@ -355,7 +366,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 {activeTab === 'database' && (
                   <div className="settings-section">
                     <label>
-                      Main DB Path:
+                      {t('settings.mainDbPath')}:
                       <input
                         type="text"
                         value={settings.database.main_path}
@@ -378,10 +389,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      Extra DB enabled
+                      {t('settings.extraDbEnabled')}
                     </label>
                     <label>
-                      Extra DB Path:
+                      {t('settings.extraDbPath')}:
                       <input
                         type="text"
                         value={settings.database.extra_path}
@@ -404,10 +415,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      Custom DB enabled
+                      {t('settings.customDbEnabled')}
                     </label>
                     <label>
-                      Custom DB Path:
+                      {t('settings.customDbPath')}:
                       <input
                         type="text"
                         value={settings.database.custom_path}
@@ -435,7 +446,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      DIE engine
+                      {t('settings.engineDie')}
                     </label>
                     <label>
                       <input
@@ -448,7 +459,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      NFD engine
+                      {t('settings.engineNfd')}
                     </label>
                     <label>
                       <input
@@ -461,7 +472,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      PEID engine
+                      {t('settings.enginePeid')}
                     </label>
                     <label>
                       <input
@@ -474,7 +485,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                           }))
                         }
                       />
-                      YARA engine
+                      {t('settings.engineYara')}
                     </label>
                   </div>
                 )}
@@ -482,7 +493,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 {activeTab === 'online' && (
                   <div className="settings-section">
                     <label>
-                      VirusTotal API key:
+                      {t('settings.vtApiKey')}:
                       <input
                         type="password"
                         value={settings.online_tools?.virustotal_apikey ?? ''}
@@ -495,14 +506,12 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                             },
                           }))
                         }
-                        placeholder="Leave empty to use browser jump mode"
+                        placeholder={t('settings.vtApiKeyPlaceholder')}
                         className="w-full text-xs font-mono"
                       />
                     </label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      If empty, clicking VirusTotal opens the website with the
-                      file's MD5 hash. If set, in-app scan results are shown
-                      via the VirusTotal API v3.
+                      {t('settings.vtApiKeyHelp')}
                     </p>
                   </div>
                 )}
@@ -511,7 +520,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                   <div className="settings-section">
                     {Object.entries(settings.shortcuts).map(([key, value]) => (
                       <label key={key}>
-                        {key.replace(/_/g, ' ')}:
+                        {t(`settings.shortcut_${key}`, { defaultValue: key.replace(/_/g, ' ') })}:
                         <input
                           type="text"
                           value={value}
@@ -524,7 +533,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                               },
                             }))
                           }
-                          placeholder="e.g. Ctrl+O"
+                          placeholder={t('settings.shortcutPlaceholder')}
                         />
                       </label>
                     ))}
@@ -538,10 +547,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         {/* Footer */}
         <div className="settings-modal-footer">
           <button onClick={onClose} disabled={saving}>
-            Cancel
+            {t('settings.cancel')}
           </button>
           <button onClick={saveSettings} disabled={saving || !settings}>
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('settings.saving') : t('settings.save')}
           </button>
         </div>
       </div>

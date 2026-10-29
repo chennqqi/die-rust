@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 
 /**
  * DEX/MSDOS/NE/LE dedicated views.
@@ -137,6 +138,7 @@ const MAX_ROWS = 5000;
 
 /** Generic capped table renderer for DEX deep views. */
 function DexTable({ headers, rows, truncated }: { headers: string[]; rows: string[][]; truncated?: boolean }) {
+  const { t } = useTranslation();
   const shown = rows.slice(0, MAX_ROWS);
   return (
     <div className="border border-border rounded text-xs overflow-x-auto">
@@ -162,7 +164,7 @@ function DexTable({ headers, rows, truncated }: { headers: string[]; rows: strin
       </table>
       {(truncated || rows.length > MAX_ROWS) && (
         <p className="px-2 py-1 text-muted-foreground">
-          Showing {shown.length} of {rows.length} rows{truncated ? ' (parser-truncated)' : ''}.
+          {t('misc.showing', { shown: shown.length, total: rows.length })}{truncated ? t('misc.parserTruncated') : ''}
         </p>
       )}
     </div>
@@ -172,6 +174,7 @@ function DexTable({ headers, rows, truncated }: { headers: string[]; rows: strin
 /** Deep DEX tables panel (strings/types/protos/fields/methods/classes/map),
  *  mirroring upstream DEX widget sub-views. */
 function DexDeepPanel({ filePath }: { filePath: string }) {
+  const { t } = useTranslation();
   const [deep, setDeep] = useState<DexDeepView | null>(null);
   const [tab, setTab] = useState<DexTab>('strings');
   const [err, setErr] = useState<string | null>(null);
@@ -186,13 +189,13 @@ function DexDeepPanel({ filePath }: { filePath: string }) {
   if (!deep) return null;
 
   const TABS: { key: DexTab; label: string; count: number }[] = [
-    { key: 'strings', label: 'Strings', count: deep.strings.length },
-    { key: 'types', label: 'Types', count: deep.types.length },
-    { key: 'protos', label: 'Protos', count: deep.protos.length },
-    { key: 'fields', label: 'Fields', count: deep.fields.length },
-    { key: 'methods', label: 'Methods', count: deep.methods.length },
-    { key: 'classes', label: 'Classes', count: deep.class_defs.length },
-    { key: 'map', label: 'Map', count: deep.map_items.length },
+    { key: 'strings', label: t('misc.tabStrings'), count: deep.strings.length },
+    { key: 'types', label: t('misc.tabTypes'), count: deep.types.length },
+    { key: 'protos', label: t('misc.tabProtos'), count: deep.protos.length },
+    { key: 'fields', label: t('misc.tabFields'), count: deep.fields.length },
+    { key: 'methods', label: t('misc.tabMethods'), count: deep.methods.length },
+    { key: 'classes', label: t('misc.tabClasses'), count: deep.class_defs.length },
+    { key: 'map', label: t('misc.tabMap'), count: deep.map_items.length },
   ];
 
   return (
@@ -210,32 +213,32 @@ function DexDeepPanel({ filePath }: { filePath: string }) {
           </button>
         ))}
       </div>
-      {tab === 'strings' && <DexTable headers={['Value']} rows={deep.strings.map((s) => [s])} truncated={deep.truncated} />}
-      {tab === 'types' && <DexTable headers={['Descriptor']} rows={deep.types.map((x) => [x])} truncated={deep.truncated} />}
+      {tab === 'strings' && <DexTable headers={[t('common.value')]} rows={deep.strings.map((s) => [s])} truncated={deep.truncated} />}
+      {tab === 'types' && <DexTable headers={[t('misc.descriptor')]} rows={deep.types.map((x) => [x])} truncated={deep.truncated} />}
       {tab === 'protos' && (
         <DexTable
-          headers={['Shorty', 'Return', 'Parameters']}
+          headers={[t('misc.shorty'), t('misc.return'), t('misc.parameters')]}
           rows={deep.protos.map((p) => [p.shorty, p.return_type, p.parameters.join(' ')])}
           truncated={deep.truncated}
         />
       )}
       {tab === 'fields' && (
         <DexTable
-          headers={['Class', 'Type', 'Name']}
+          headers={[t('misc.class'), t('common.type'), t('common.name')]}
           rows={deep.fields.map((f) => [f.class, f.field_type, f.name])}
           truncated={deep.truncated}
         />
       )}
       {tab === 'methods' && (
         <DexTable
-          headers={['Class', 'Name', 'Proto']}
+          headers={[t('misc.class'), t('common.name'), t('misc.proto')]}
           rows={deep.methods.map((m) => [m.class, m.name, m.proto])}
           truncated={deep.truncated}
         />
       )}
       {tab === 'classes' && (
         <DexTable
-          headers={['Class', 'Access', 'Superclass', 'Source']}
+          headers={[t('misc.class'), t('misc.access'), t('misc.superclass'), t('misc.source')]}
           rows={deep.class_defs.map((c) => [
             c.class,
             `0x${c.access_flags.toString(16)}`,
@@ -247,7 +250,7 @@ function DexDeepPanel({ filePath }: { filePath: string }) {
       )}
       {tab === 'map' && (
         <DexTable
-          headers={['Type', 'Name', 'Size', 'Offset']}
+          headers={[t('common.type'), t('common.name'), t('common.size'), t('common.offset')]}
           rows={deep.map_items.map((m) => [
             `0x${m.item_type.toString(16).padStart(4, '0')}`,
             m.type_name,
@@ -261,33 +264,35 @@ function DexDeepPanel({ filePath }: { filePath: string }) {
 }
 
 function DexViewPanel({ view }: { view: DexView }) {
+  const { t } = useTranslation();
   return (
     <KeyValueTable rows={[
-      ['Magic', view.magic],
-      ['Version', view.version],
-      ['Checksum', `0x${view.checksum.toString(16)}`],
-      ['Signature', view.signature],
-      ['File Size', String(view.file_size)],
-      ['Header Size', `0x${view.header_size.toString(16)}`],
-      ['Endian Tag', `0x${view.endian_tag.toString(16)}`],
-      ['Link Size', String(view.link_size)],
-      ['Link Offset', `0x${view.link_off.toString(16)}`],
-      ['Map Offset', `0x${view.map_off.toString(16)}`],
-      ['String IDs', `${view.string_ids_size} @ 0x${view.string_ids_off.toString(16)}`],
-      ['Type IDs', `${view.type_ids_size} @ 0x${view.type_ids_off.toString(16)}`],
-      ['Proto IDs', `${view.proto_ids_size} @ 0x${view.proto_ids_off.toString(16)}`],
-      ['Field IDs', `${view.field_ids_size} @ 0x${view.field_ids_off.toString(16)}`],
-      ['Method IDs', `${view.method_ids_size} @ 0x${view.method_ids_off.toString(16)}`],
-      ['Class Defs', `${view.class_defs_size} @ 0x${view.class_defs_off.toString(16)}`],
-      ['Data', `${view.data_size} @ 0x${view.data_off.toString(16)}`],
+      [t('misc.magic'), view.magic],
+      [t('common.version'), view.version],
+      [t('misc.checksum'), `0x${view.checksum.toString(16)}`],
+      [t('misc.signature'), view.signature],
+      [t('misc.fileSize'), String(view.file_size)],
+      [t('misc.headerSize'), `0x${view.header_size.toString(16)}`],
+      [t('misc.endianTag'), `0x${view.endian_tag.toString(16)}`],
+      [t('misc.linkSize'), String(view.link_size)],
+      [t('misc.linkOffset'), `0x${view.link_off.toString(16)}`],
+      [t('misc.mapOffset'), `0x${view.map_off.toString(16)}`],
+      [t('misc.stringIds'), `${view.string_ids_size} @ 0x${view.string_ids_off.toString(16)}`],
+      [t('misc.typeIds'), `${view.type_ids_size} @ 0x${view.type_ids_off.toString(16)}`],
+      [t('misc.protoIds'), `${view.proto_ids_size} @ 0x${view.proto_ids_off.toString(16)}`],
+      [t('misc.fieldIds'), `${view.field_ids_size} @ 0x${view.field_ids_off.toString(16)}`],
+      [t('misc.methodIds'), `${view.method_ids_size} @ 0x${view.method_ids_off.toString(16)}`],
+      [t('misc.classDefs'), `${view.class_defs_size} @ 0x${view.class_defs_off.toString(16)}`],
+      [t('misc.data'), `${view.data_size} @ 0x${view.data_off.toString(16)}`],
     ]} />
   );
 }
 
 function MsdosViewPanel({ view }: { view: MsdosView }) {
+  const { t } = useTranslation();
   return (
     <KeyValueTable rows={[
-      ['Magic', view.magic],
+      [t('misc.magic'), view.magic],
       ['e_cblp', `0x${view.e_cblp.toString(16)}`],
       ['e_cp', `0x${view.e_cp.toString(16)}`],
       ['e_crlc', `0x${view.e_crlc.toString(16)}`],
@@ -304,63 +309,66 @@ function MsdosViewPanel({ view }: { view: MsdosView }) {
       ['e_oemid', `0x${view.e_oemid.toString(16)}`],
       ['e_oeminfo', `0x${view.e_oeminfo.toString(16)}`],
       ['e_lfanew', `0x${view.e_lfanew.toString(16)}`],
-      ['Has PE', view.has_pe ? 'Yes' : 'No'],
+      [t('misc.hasPe'), view.has_pe ? t('common.yes') : t('common.no')],
     ]} />
   );
 }
 
 function NeViewPanel({ view }: { view: NeView }) {
+  const { t } = useTranslation();
   const osName = { 1: 'DOS', 2: 'Windows', 3: 'OS/2', 4: 'Windows 386' }[view.target_os] ?? `0x${view.target_os.toString(16)}`;
   return (
     <KeyValueTable rows={[
-      ['Magic', view.magic],
-      ['Linker Version', `${view.linker_version}.${view.linker_revision}`],
-      ['Entry Table', `${view.entry_table_length} @ 0x${view.entry_table_offset.toString(16)}`],
-      ['File Load Size', String(view.file_load_size)],
-      ['Non-Resident Names', `${view.non_resident_name_length} @ 0x${view.non_resident_name_offset.toString(16)}`],
-      ['Module Description', `${view.module_description_length} @ 0x${view.module_description_offset.toString(16)}`],
-      ['Segments', String(view.segment_count)],
-      ['Module Refs', String(view.module_refs_count)],
-      ['Movable Segments', String(view.movable_segments)],
-      ['Alignment Shift', String(view.alignment_shift)],
-      ['Resource Segments', String(view.resource_segments)],
-      ['Target OS', osName],
-      ['OS Version', `0x${view.os_version.toString(16)}`],
-      ['Windows Version', `0x${view.windows_version.toString(16)}`],
+      [t('misc.magic'), view.magic],
+      [t('misc.linkerVersion'), `${view.linker_version}.${view.linker_revision}`],
+      [t('misc.entryTable'), `${view.entry_table_length} @ 0x${view.entry_table_offset.toString(16)}`],
+      [t('misc.fileLoadSize'), String(view.file_load_size)],
+      [t('misc.nonResidentNames'), `${view.non_resident_name_length} @ 0x${view.non_resident_name_offset.toString(16)}`],
+      [t('misc.moduleDescription'), `${view.module_description_length} @ 0x${view.module_description_offset.toString(16)}`],
+      [t('misc.segments'), String(view.segment_count)],
+      [t('misc.moduleRefs'), String(view.module_refs_count)],
+      [t('misc.movableSegments'), String(view.movable_segments)],
+      [t('misc.alignmentShift'), String(view.alignment_shift)],
+      [t('misc.resourceSegments'), String(view.resource_segments)],
+      [t('misc.targetOs'), osName],
+      [t('misc.osVersion'), `0x${view.os_version.toString(16)}`],
+      [t('misc.windowsVersion'), `0x${view.windows_version.toString(16)}`],
     ]} />
   );
 }
 
 function LeViewPanel({ view }: { view: LeView }) {
+  const { t } = useTranslation();
   const cpuName = { 1: '80286', 2: '80386', 3: '80486' }[view.cpu_type] ?? `0x${view.cpu_type.toString(16)}`;
   const osName = { 1: 'OS/2', 2: 'Windows', 3: 'DOS 4.x', 4: 'Windows 386' }[view.os_type] ?? `0x${view.os_type.toString(16)}`;
   return (
     <KeyValueTable rows={[
-      ['Magic', view.magic],
-      ['Byte Order', view.byte_order === 0 ? 'Little-endian' : 'Big-endian'],
-      ['Word Order', view.word_order === 0 ? 'Little-endian' : 'Big-endian'],
-      ['EXE Format Level', `0x${view.exe_format_level.toString(16)}`],
-      ['CPU Type', cpuName],
-      ['OS Type', osName],
-      ['Module Version', `0x${view.module_version.toString(16)}`],
-      ['Module Flags', `0x${view.module_flags.toString(16)}`],
-      ['Module Pages', String(view.module_page_count)],
-      ['Init Objects', String(view.init_object_count)],
-      ['Objects', String(view.object_count)],
-      ['Object Page Map', `0x${view.object_page_map_offset.toString(16)}`],
-      ['Iterated Data', `0x${view.object_iterated_data_offset.toString(16)}`],
-      ['Resource Table', `${view.resource_table_count} @ 0x${view.resource_table_offset.toString(16)}`],
-      ['Resident Names', `0x${view.resident_name_table_offset.toString(16)}`],
-      ['Entry Table', `0x${view.entry_table_offset.toString(16)}`],
-      ['Module Directives', `${view.module_directives_count} @ 0x${view.module_directives_offset.toString(16)}`],
-      ['Fixup Page Table', `0x${view.fixup_page_table_offset.toString(16)}`],
-      ['Fixup Record Table', `0x${view.fixup_record_table_offset.toString(16)}`],
-      ['Imported Modules', `${view.imported_modules_count} @ 0x${view.imported_modules_name_table_offset.toString(16)}`],
+      [t('misc.magic'), view.magic],
+      [t('misc.byteOrder'), view.byte_order === 0 ? t('misc.littleEndian') : t('misc.bigEndian')],
+      [t('misc.wordOrder'), view.word_order === 0 ? t('misc.littleEndian') : t('misc.bigEndian')],
+      [t('misc.exeFormatLevel'), `0x${view.exe_format_level.toString(16)}`],
+      [t('misc.cpuType'), cpuName],
+      [t('misc.osType'), osName],
+      [t('misc.moduleVersion'), `0x${view.module_version.toString(16)}`],
+      [t('misc.moduleFlags'), `0x${view.module_flags.toString(16)}`],
+      [t('misc.modulePages'), String(view.module_page_count)],
+      [t('misc.initObjects'), String(view.init_object_count)],
+      [t('misc.objects'), String(view.object_count)],
+      [t('misc.objectPageMap'), `0x${view.object_page_map_offset.toString(16)}`],
+      [t('misc.iteratedData'), `0x${view.object_iterated_data_offset.toString(16)}`],
+      [t('misc.resourceTable'), `${view.resource_table_count} @ 0x${view.resource_table_offset.toString(16)}`],
+      [t('misc.residentNames'), `0x${view.resident_name_table_offset.toString(16)}`],
+      [t('misc.entryTable'), `0x${view.entry_table_offset.toString(16)}`],
+      [t('misc.moduleDirectives'), `${view.module_directives_count} @ 0x${view.module_directives_offset.toString(16)}`],
+      [t('misc.fixupPageTable'), `0x${view.fixup_page_table_offset.toString(16)}`],
+      [t('misc.fixupRecordTable'), `0x${view.fixup_record_table_offset.toString(16)}`],
+      [t('misc.importedModules'), `${view.imported_modules_count} @ 0x${view.imported_modules_name_table_offset.toString(16)}`],
     ]} />
   );
 }
 
 export default function MiscViewPanel({ filePath }: { filePath: string | null }) {
+  const { t } = useTranslation();
   const [format, setFormat] = useState<MiscFormat>('dex');
   const [data, setData] = useState<DexView | MsdosView | NeView | LeView | null>(null);
   const [loading, setLoading] = useState(false);
@@ -390,8 +398,8 @@ export default function MiscViewPanel({ filePath }: { filePath: string | null })
   }, [fetchView]);
 
   if (!filePath) return null;
-  if (loading) return <p className="text-xs text-muted-foreground p-2">Loading {format.toUpperCase()} view...</p>;
-  if (error) return <p className="text-xs text-red-500 p-2">Error: {error}</p>;
+  if (loading) return <p className="text-xs text-muted-foreground p-2">{t('misc.loadingView', { format: format.toUpperCase() })}</p>;
+  if (error) return <p className="text-xs text-red-500 p-2">{t('common.error', { error })}</p>;
 
   const FORMATS: { key: MiscFormat; label: string }[] = [
     { key: 'dex', label: 'DEX' },
@@ -415,7 +423,7 @@ export default function MiscViewPanel({ filePath }: { filePath: string | null })
           </button>
         ))}
       </div>
-      {!data && <p className="text-xs text-muted-foreground">Not a {format.toUpperCase()} file.</p>}
+      {!data && <p className="text-xs text-muted-foreground">{t('misc.notFormat', { format: format.toUpperCase() })}</p>}
       {data && format === 'dex' && (
         <>
           <DexViewPanel view={data as DexView} />

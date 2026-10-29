@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import i18n from "../i18n/config";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Archive, AlertCircle, FileText, ChevronRight, ChevronDown, Download } from "lucide-react";
@@ -34,7 +35,7 @@ export function ArchiveViewer({ filePath }: { filePath: string }) {
     const outputDir = await openDialog({
       directory: true,
       multiple: false,
-      title: "Select output directory",
+      title: t("archive.selectOutputDir"),
     });
     if (!outputDir || typeof outputDir !== "string") return;
     setExtractMsg(null);
@@ -94,7 +95,7 @@ export function ArchiveViewer({ filePath }: { filePath: string }) {
     return (
       <div className="flex items-center justify-center h-full text-xs text-fg-secondary">
         <div className="w-3 h-3 border-2 border-accent-blue border-t-transparent rounded-full animate-spin mr-2" />
-        Reading archive...
+        {t("archive.reading")}
       </div>
     );
   }
@@ -230,7 +231,7 @@ function renderTree(
               <button
                 onClick={() => onExtract(fullPath)}
                 className="text-fg-muted hover:text-accent-blue"
-                title="Extract member"
+                title={i18n.t("archive.extractMember")}
               >
                 <Download size={11} />
               </button>

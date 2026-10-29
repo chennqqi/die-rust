@@ -207,7 +207,7 @@ export function SignatureBrowser() {
           onClick={() => runSignature(false)}
           disabled={!selectedSig || !targetFile || running}
           className="btn btn-primary text-xs py-1"
-          title="Run signature against target file"
+          title={t("sigBrowser.runTip")}
         >
           <Play size={12} /> {t("sigBrowser.run")}
         </button>
@@ -226,7 +226,7 @@ export function SignatureBrowser() {
         {/* Signature tree */}
         <div className="w-48 overflow-y-auto border-r border-border-c pr-1 flex-shrink-0">
           {loading && (
-            <div className="text-xs text-fg-secondary p-2">Loading...</div>
+            <div className="text-xs text-fg-secondary p-2">{t("common.loading")}</div>
           )}
           {filteredGroups.map((g) => {
             const expanded = expandedGroups.has(g.file_type);
@@ -341,10 +341,10 @@ export function SignatureBrowser() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-fg-muted border-b border-border-c">
-                  <th className="text-left py-0.5">Type</th>
-                  <th className="text-left py-0.5">Name</th>
-                  <th className="text-left py-0.5">Version</th>
-                  <th className="text-left py-0.5">Options</th>
+                  <th className="text-left py-0.5">{t("scan.type")}</th>
+                  <th className="text-left py-0.5">{t("common.name")}</th>
+                  <th className="text-left py-0.5">{t("scan.version")}</th>
+                  <th className="text-left py-0.5">{t("scan.options")}</th>
                 </tr>
               </thead>
               <tbody>

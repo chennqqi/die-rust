@@ -59,6 +59,56 @@ export const SUPPORTED_LANGUAGES: { code: string; name: string }[] = [
   { code: "fa", name: "فارسی" },
 ];
 
+/**
+ * Map a BCP-47 tag (e.g. "zh-TW", "pt-BR", "en-US") to a supported
+ * locale code, or null when nothing matches.
+ */
+function matchSupported(tag: string): string | null {
+  const lower = tag.trim().toLowerCase();
+  if (!lower) return null;
+  for (const { code } of SUPPORTED_LANGUAGES) {
+    if (code.toLowerCase() === lower) return code;
+  }
+  // Chinese: traditional scripts/regions -> zh-TW, everything else zh-CN.
+  if (lower.startsWith("zh")) {
+    return /tw|hk|mo|hant/.test(lower) ? "zh-TW" : "zh-CN";
+  }
+  // Region-qualified codes that only exist in qualified form.
+  if (lower.startsWith("pt")) return lower.includes("br") ? "pt-BR" : "pt-PT";
+  if (lower.startsWith("hi")) return "hi-IN";
+  // Fall back to the primary subtag ("en-US" -> "en").
+  const primary = lower.split("-")[0];
+  for (const { code } of SUPPORTED_LANGUAGES) {
+    if (code.toLowerCase() === primary) return code;
+  }
+  return null;
+}
+
+/**
+ * Detect the OS/WebView display language and map it to a supported
+ * locale. Iterates navigator.languages in preference order.
+ */
+export function detectSystemLanguage(): string {
+  const candidates =
+    typeof navigator !== "undefined"
+      ? navigator.languages?.length
+        ? navigator.languages
+        : [navigator.language]
+      : [];
+  for (const tag of candidates) {
+    const hit = matchSupported(tag);
+    if (hit) return hit;
+  }
+  return "en";
+}
+
+/** Resolve a stored language setting to a concrete locale code;
+ * "system" (or empty) triggers OS detection. */
+export function resolveLanguage(setting: string | undefined): string {
+  if (!setting || setting === "system") return detectSystemLanguage();
+  return setting;
+}
+
 i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
@@ -86,7 +136,7 @@ i18n.use(initReactI18next).init({
     vi: { translation: vi },
     "zh-TW": { translation: zhTW },
   },
-  lng: "en",
+  lng: detectSystemLanguage(),
   fallbackLng: "en",
   interpolation: { escapeValue: false },
 });

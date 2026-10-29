@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 /**
  * A vertical split pane with a draggable divider.
@@ -22,6 +23,7 @@ export function SplitPane({
   minBottomHeight?: number;
   showBottom: boolean;
 }) {
+  const { t } = useTranslation();
   const [bottomHeight, setBottomHeight] = useState(initialBottomHeight);
   const [dragging, setDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,7 +78,7 @@ export function SplitPane({
           <div
             onMouseDown={onMouseDown}
             className="splitter-h"
-            title="Drag to resize"
+            title={t("split.drag")}
           >
             <div className="splitter-h-grip" />
           </div>

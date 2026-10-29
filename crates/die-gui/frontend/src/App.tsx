@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getVersion } from "@tauri-apps/api/app";
 import {
   FileSearch,
   FolderOpen,
@@ -58,7 +59,7 @@ import { MemoryMapViewer } from "./components/MemoryMapViewer";
 import { ArchiveViewer } from "./components/ArchiveViewer";
 import { DataConverter } from "./components/DataConverter";
 import VisualizationPanel from "./components/VisualizationPanel";
-import { SUPPORTED_LANGUAGES } from "./i18n/config";
+import { SUPPORTED_LANGUAGES, resolveLanguage } from "./i18n/config";
 import ExtractorPanel from "./components/ExtractorPanel";
 import StringExtractor from "./components/StringExtractor";
 import MiscViewPanel from "./components/MiscViewPanel";
@@ -213,7 +214,7 @@ const defaultFlags: ScanFlagsDto = {
 };
 
 const defaultSettings: AppSettings = {
-  view: { theme: "system", language: "en", stay_on_top: false, advanced: false },
+  view: { theme: "system", language: "system", stay_on_top: false, advanced: false },
   file: { last_directory: "", recent_files: [], save_backup: true },
   scan: { scan_after_open: true, hide_unknown: false, sort: false, log_profiling: false, flags: defaultFlags },
   database: { main_path: "", extra_path: "", custom_path: "", extra_enabled: false, custom_enabled: false },
@@ -285,6 +286,7 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; detection: ScanDetectionDto } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [showExtraInfo, setShowExtraInfo] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
   const dragCounter = useRef(0);
 
   // Load settings on mount.
@@ -295,13 +297,18 @@ export default function App() {
         setFlags(s.scan.flags);
         // Apply saved advanced mode.
         setAdvancedMode(s.view.advanced);
-        // Apply saved language to i18n.
+        // Apply saved language to i18n ("system" resolves via OS locale).
         if (s.view.language) {
-          i18n.changeLanguage(s.view.language);
+          i18n.changeLanguage(resolveLanguage(s.view.language));
         }
       })
       .catch(() => {});
   }, [i18n]);
+
+  // Load the application version for the status bar.
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
+  }, []);
 
   // Fetch file info (format, base address, entry point) when file path changes.
   useEffect(() => {
@@ -338,8 +345,9 @@ export default function App() {
 
   // React to language setting changes.
   useEffect(() => {
-    if (settings.view.language && settings.view.language !== i18n.language) {
-      i18n.changeLanguage(settings.view.language);
+    const resolved = resolveLanguage(settings.view.language);
+    if (resolved !== i18n.language) {
+      i18n.changeLanguage(resolved);
     }
   }, [settings.view.language, i18n]);
 
@@ -593,7 +601,7 @@ export default function App() {
         } else if (msg.event === "finished") {
           setDirProgress(null);
         } else if (msg.event === "error") {
-          setError(msg.data.message ?? "Unknown error");
+          setError(msg.data.message ?? t("scan.unknownError"));
         }
       };
       const results = await invoke<ScanResultDto[]>("scan_directory", {
@@ -831,7 +839,7 @@ export default function App() {
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-blue-900/30 border-2 border-dashed border-accent-blue rounded">
           <div className="text-center">
             <FileSearch size={48} className="mx-auto mb-2 text-accent-blue" />
-            <p className="text-lg text-accent-blue">Drop file here to scan</p>
+            <p className="text-lg text-accent-blue">{t("scan.dropHere")}</p>
           </div>
         </div>
       )}
@@ -908,7 +916,7 @@ export default function App() {
           onClick={() => setShowExtraInfo(true)}
           disabled={!result || result.detections.length === 0}
           className="btn"
-          title="Extra Information"
+          title={t("app.extraInfo")}
         >
           <FileText size={14} />
         </button>
@@ -983,7 +991,7 @@ export default function App() {
                     onChange={(e) => setFlags({ ...flags, [key]: e.target.checked })}
                     className="accent-blue-500"
                   />
-                  {key}
+                  {t(`settings.flag_${key}`, { defaultValue: key.replace(/_/g, " ") })}
                 </label>
               ))}
           </div>
@@ -1050,6 +1058,7 @@ export default function App() {
                 onChange={(e) => setSettings({ ...settings, view: { ...settings.view, language: e.target.value } })}
                 style={{ width: "100px" }}
               >
+                <option value="system">{t("settings.system")}</option>
                 {SUPPORTED_LANGUAGES.map((lang) => (
                   <option key={lang.code} value={lang.code}>{lang.name}</option>
                 ))}
@@ -1166,16 +1175,16 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-3 py-2 border-b border-border-c">
-              <span className="text-xs font-medium">Extra Information</span>
+              <span className="text-xs font-medium">{t("app.extraInfo")}</span>
               <div className="flex items-center gap-1">
                 <button
                   className="btn"
                   onClick={() => navigator.clipboard.writeText(extraInfoText())}
-                  title="Copy"
+                  title={t("common.copy")}
                 >
                   <Copy size={12} />
                 </button>
-                <button className="btn" onClick={() => setShowExtraInfo(false)} title="Close">
+                <button className="btn" onClick={() => setShowExtraInfo(false)} title={t("common.close")}>
                   <XCircle size={12} />
                 </button>
               </div>
@@ -1224,10 +1233,10 @@ export default function App() {
           className={`flex items-center gap-1.5 px-3 py-1.5 text-xs ml-auto ${
             advancedMode ? "tab-active" : "tab-inactive"
           }`}
-          title={advancedMode ? "Switch to Basic mode" : "Switch to Advanced mode"}
+          title={advancedMode ? t("app.switchBasic") : t("app.switchAdvanced")}
         >
           <SettingsIcon size={13} />
-          {advancedMode ? "Basic" : "Advanced"}
+          {advancedMode ? t("app.basic") : t("app.advanced")}
         </button>
       </div>
 
@@ -1276,12 +1285,12 @@ export default function App() {
                     style={{ width: "80px", fontSize: "11px" }}
                     value={selectedDatabase}
                     onChange={(e) => setSelectedDatabase(e.target.value)}
-                    title="Database selection"
+                    title={t("app.dbSelection")}
                   >
-                    <option value="auto">Auto</option>
-                    <option value="main">Main</option>
-                    <option value="extra">Extra</option>
-                    <option value="custom">Custom</option>
+                    <option value="auto">{t("app.dbAuto")}</option>
+                    <option value="main">{t("app.dbMain")}</option>
+                    <option value="extra">{t("app.dbExtra")}</option>
+                    <option value="custom">{t("app.dbCustom")}</option>
                   </select>
                 </div>
               </div>
@@ -1298,19 +1307,19 @@ export default function App() {
                 className="flex items-center gap-3 px-3 py-1 border-b border-border-c text-xs text-fg-muted"
                 style={{ background: "rgb(var(--bg-panel))" }}
               >
-                <span>Format: <span className="text-fg-secondary font-mono">{fileInfo.format}</span></span>
+                <span>{t("fileInfo.format")}: <span className="text-fg-secondary font-mono">{fileInfo.format}</span></span>
                 {fileInfo.base_address !== 0 && (
-                  <span>Base: <span className="text-fg-secondary font-mono">0x{fileInfo.base_address.toString(16)}</span></span>
+                  <span>{t("app.base")}: <span className="text-fg-secondary font-mono">0x{fileInfo.base_address.toString(16)}</span></span>
                 )}
                 {fileInfo.entry_point !== 0 && (
-                  <span>Entry: <span className="text-fg-secondary font-mono">0x{fileInfo.entry_point.toString(16)}</span></span>
+                  <span>{t("app.entry")}: <span className="text-fg-secondary font-mono">0x{fileInfo.entry_point.toString(16)}</span></span>
                 )}
                 {fileInfo.format_counts && fileInfo.format_counts.length > 0
                   ? fileInfo.format_counts.map((c) => (
                       <span key={c.label}>{c.label}: <span className="text-fg-secondary font-mono">{c.count}</span></span>
                     ))
                   : fileInfo.format_count > 0 && (
-                      <span>Sections: <span className="text-fg-secondary font-mono">{fileInfo.format_count}</span></span>
+                      <span>{t("fileInfo.sections")}: <span className="text-fg-secondary font-mono">{fileInfo.format_count}</span></span>
                     )}
               </div>
             )}
@@ -1319,7 +1328,7 @@ export default function App() {
             {dirProgress && (
               <div className="px-3 py-1.5">
                 <div className="flex justify-between text-xs text-fg-secondary mb-1">
-                  <span>Scanning directory...</span>
+                  <span>{t("scan.scanningDir")}</span>
                   <span>{dirProgress.current} / {dirProgress.total}</span>
                 </div>
                 <div className="progress-bar">
@@ -1472,7 +1481,7 @@ export default function App() {
               setContextMenu(null);
             }}
           >
-            <Copy size={12} /> Copy detection
+            <Copy size={12} /> {t("contextMenu.copyDetection")}
           </button>
           <button
             className="w-full text-left px-3 py-1.5 text-xs hover:bg-hover flex items-center gap-2"
@@ -1481,7 +1490,7 @@ export default function App() {
               setContextMenu(null);
             }}
           >
-            <Code2 size={12} /> View signature source
+            <Code2 size={12} /> {t("contextMenu.viewSignature")}
           </button>
           <button
             className="w-full text-left px-3 py-1.5 text-xs hover:bg-hover flex items-center gap-2"
@@ -1492,7 +1501,7 @@ export default function App() {
               setContextMenu(null);
             }}
           >
-            <FileText size={12} /> Copy as path
+            <FileText size={12} /> {t("contextMenu.copyAsPath")}
           </button>
         </div>
       )}
@@ -1502,7 +1511,7 @@ export default function App() {
         {scanning ? (
           <>
             <div className="w-3 h-3 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
-            <span>Scanning...</span>
+            <span>{t("scan.phaseScanning")}</span>
           </>
         ) : result ? (
           <>
@@ -1523,7 +1532,7 @@ export default function App() {
         {result && <span className="text-fg-muted">| {result.scan_time_ms} ms</span>}
         {filePath && <span className="text-fg-muted selectable">| {fileName}</span>}
         <div className="flex-1" />
-        <span className="text-fg-muted">DIE v0.4.7</span>
+        <span className="text-fg-muted">{appVersion ? `DIE v${appVersion}` : t("app.title")}</span>
       </div>
 
       {/* Settings modal dialog */}
@@ -1667,10 +1676,10 @@ function DetectionTreeView({
         className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-fg-secondary border-b border-border-c"
       >
         <span className="w-6" />
-        <span className="flex-1">String</span>
-        <span className="w-20 text-center">Type</span>
-        <span className="w-24">Version</span>
-        <span className="w-32">Options</span>
+        <span className="flex-1">{t("scan.string")}</span>
+        <span className="w-20 text-center">{t("scan.type")}</span>
+        <span className="w-24">{t("scan.version")}</span>
+        <span className="w-32">{t("scan.options")}</span>
       </div>
 
       {/* Tree rows */}
@@ -1774,7 +1783,7 @@ function DetectionTreeView({
       {result.scan_log && result.scan_log.length > 0 && (
         <details className="mt-1">
           <summary className="cursor-pointer text-xs text-fg-secondary hover:text-fg flex items-center gap-1">
-            <FileText size={12} /> Scan Log ({result.scan_log.length})
+            <FileText size={12} /> {t("scan.scanLog", { count: result.scan_log.length })}
           </summary>
           <div className="mt-1 border border-border-c rounded p-2 bg-bg-secondary max-h-48 overflow-auto">
             <pre className="text-[10px] text-fg-muted whitespace-pre-wrap font-mono">
@@ -1793,7 +1802,7 @@ function DirectoryResultsView({ results }: { results: ScanResultDto[] }) {
   return (
     <div className="p-2 space-y-1 selectable">
       <div className="text-xs font-medium text-fg-secondary mb-2">
-        Directory Results ({results.length} files)
+        {t("scan.dirResults", { count: results.length })}
       </div>
       {results.map((r, i) => {
         const fileName = r.path.split(/[\\/]/).pop() || r.path;
@@ -1861,16 +1870,16 @@ function SignatureSourcePanel({ detection }: { detection: ScanDetectionDto }) {
 
   // Build extra info rows from detection metadata.
   const extraInfoRows: [string, string][] = [];
-  if (detection.version) extraInfoRows.push(["Version", detection.version]);
-  if (detection.options) extraInfoRows.push(["Options", detection.options]);
-  if (detection.offset != null) extraInfoRows.push(["Offset", `0x${detection.offset.toString(16)}`]);
-  if (detection.size != null) extraInfoRows.push(["Size", String(detection.size)]);
-  if (detection.file_part) extraInfoRows.push(["File Part", detection.file_part]);
-  if (detection.is_heuristic) extraInfoRows.push(["Heuristic", "Yes"]);
-  if (detection.is_a_heuristic) extraInfoRows.push(["A-Heuristic", "Yes"]);
-  if (detection.original_name) extraInfoRows.push(["Original Name", detection.original_name]);
+  if (detection.version) extraInfoRows.push([t("scan.version"), detection.version]);
+  if (detection.options) extraInfoRows.push([t("scan.options"), detection.options]);
+  if (detection.offset != null) extraInfoRows.push([t("common.offset"), `0x${detection.offset.toString(16)}`]);
+  if (detection.size != null) extraInfoRows.push([t("common.size"), String(detection.size)]);
+  if (detection.file_part) extraInfoRows.push([t("sigSource.filePart"), detection.file_part]);
+  if (detection.is_heuristic) extraInfoRows.push([t("sigSource.heuristic"), t("common.yes")]);
+  if (detection.is_a_heuristic) extraInfoRows.push([t("sigSource.aHeuristic"), t("common.yes")]);
+  if (detection.original_name) extraInfoRows.push([t("sigSource.originalName"), detection.original_name]);
   if (detection.id) extraInfoRows.push(["ID", detection.id]);
-  if (detection.parent_id) extraInfoRows.push(["Parent ID", detection.parent_id]);
+  if (detection.parent_id) extraInfoRows.push([t("sigSource.parentId"), detection.parent_id]);
 
   return (
     <div className="flex flex-col h-full" style={{ background: "rgb(var(--bg-panel))" }}>
@@ -1878,7 +1887,7 @@ function SignatureSourcePanel({ detection }: { detection: ScanDetectionDto }) {
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-border-c flex-shrink-0">
         <div className="flex items-center gap-2 text-xs">
           <Code2 size={13} className="text-accent-blue" />
-          <span className="font-medium text-fg-primary">Signature Source</span>
+          <span className="font-medium text-fg-primary">{t("sigSource.title")}</span>
           <span className="text-fg-muted">
             {detection.file_type} / {detection.name}
           </span>
@@ -1902,7 +1911,7 @@ function SignatureSourcePanel({ detection }: { detection: ScanDetectionDto }) {
         {loading && (
           <div className="flex items-center justify-center h-full text-xs text-fg-secondary">
             <div className="w-3 h-3 border-2 border-accent-blue border-t-transparent rounded-full animate-spin mr-2" />
-            Loading signature source...
+            {t("sigSource.loading")}
           </div>
         )}
         {error && !loading && (

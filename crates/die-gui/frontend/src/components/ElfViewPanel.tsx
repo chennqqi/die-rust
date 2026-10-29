@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { followInHex } from '../follow';
 
 /**
@@ -108,16 +109,16 @@ type ElfSubView =
   | 'relocations'
   | 'stringtable';
 
-const SUB_VIEWS: { key: ElfSubView; label: string }[] = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'program_headers', label: 'Program Headers' },
-  { key: 'section_headers', label: 'Section Headers' },
-  { key: 'dynamic', label: 'Dynamic' },
-  { key: 'libraries', label: 'Libraries' },
-  { key: 'notes', label: 'Notes' },
-  { key: 'symbols', label: 'Symbols' },
-  { key: 'relocations', label: 'Relocations' },
-  { key: 'stringtable', label: 'String Table' },
+const SUB_VIEWS: { key: ElfSubView; labelKey: string }[] = [
+  { key: 'overview', labelKey: 'elf.tabOverview' },
+  { key: 'program_headers', labelKey: 'elf.tabProgramHeaders' },
+  { key: 'section_headers', labelKey: 'elf.tabSectionHeaders' },
+  { key: 'dynamic', labelKey: 'elf.tabDynamic' },
+  { key: 'libraries', labelKey: 'elf.tabLibraries' },
+  { key: 'notes', labelKey: 'elf.tabNotes' },
+  { key: 'symbols', labelKey: 'elf.tabSymbols' },
+  { key: 'relocations', labelKey: 'elf.tabRelocations' },
+  { key: 'stringtable', labelKey: 'elf.tabStringTable' },
 ];
 
 function hex(n: string | number | bigint): string {
@@ -126,18 +127,19 @@ function hex(n: string | number | bigint): string {
 }
 
 function Overview({ view }: { view: ElfView }) {
+  const { t } = useTranslation();
   const rows: [string, string][] = [
-    ['Architecture', view.is64 ? '64-bit' : '32-bit'],
-    ['Endianness', view.is_le ? 'Little' : 'Big'],
-    ['Machine', view.machine],
-    ['Type', view.e_type],
-    ['Entry point', hex(view.entry)],
-    ['Program headers', view.program_headers.length.toString()],
-    ['Section headers', view.section_headers.length.toString()],
-    ['Libraries', view.libraries.length.toString()],
-    ['Symbols', view.symbols.length.toString()],
-    ['Interpreter', view.interpreter ?? '—'],
-    ['Runpath', view.runpath ?? '—'],
+    [t('elf.arch'), view.is64 ? t('common.bits64') : t('common.bits32')],
+    [t('elf.endianness'), view.is_le ? t('common.little') : t('common.big')],
+    [t('elf.machine'), view.machine],
+    [t('common.type'), view.e_type],
+    [t('elf.entryPoint'), hex(view.entry)],
+    [t('elf.programHeaders'), view.program_headers.length.toString()],
+    [t('elf.sectionHeaders'), view.section_headers.length.toString()],
+    [t('elf.libraries'), view.libraries.length.toString()],
+    [t('elf.symbols'), view.symbols.length.toString()],
+    [t('elf.interpreter'), view.interpreter ?? '—'],
+    [t('elf.runpath'), view.runpath ?? '—'],
   ];
 
   return (
@@ -155,16 +157,17 @@ function Overview({ view }: { view: ElfView }) {
 }
 
 function ProgramHeaders({ headers }: { headers: ElfProgramHeader[] }) {
+  const { t } = useTranslation();
   if (headers.length === 0)
-    return <p className="text-xs text-muted-foreground">No program headers.</p>;
+    return <p className="text-xs text-muted-foreground">{t('elf.noProgramHeaders')}</p>;
   return (
     <div className="overflow-auto max-h-96 border border-border rounded">
       <table className="w-full text-xs">
         <thead className="bg-muted/50 sticky top-0">
           <tr>
-            <th className="text-left px-2 py-1">Type</th>
-            <th className="text-left px-2 py-1">Flags</th>
-            <th className="text-right px-2 py-1">Offset</th>
+            <th className="text-left px-2 py-1">{t('common.type')}</th>
+            <th className="text-left px-2 py-1">{t('common.flags')}</th>
+            <th className="text-right px-2 py-1">{t('common.offset')}</th>
             <th className="text-right px-2 py-1">VAddr</th>
             <th className="text-right px-2 py-1">FileSz</th>
             <th className="text-right px-2 py-1">MemSz</th>
@@ -190,19 +193,20 @@ function ProgramHeaders({ headers }: { headers: ElfProgramHeader[] }) {
 }
 
 function SectionHeaders({ sections }: { sections: ElfSectionHeader[] }) {
+  const { t } = useTranslation();
   if (sections.length === 0)
-    return <p className="text-xs text-muted-foreground">No section headers.</p>;
+    return <p className="text-xs text-muted-foreground">{t('elf.noSectionHeaders')}</p>;
   return (
     <div className="overflow-auto max-h-96 border border-border rounded">
       <table className="w-full text-xs">
         <thead className="bg-muted/50 sticky top-0">
           <tr>
-            <th className="text-left px-2 py-1">Name</th>
-            <th className="text-left px-2 py-1">Type</th>
-            <th className="text-left px-2 py-1">Flags</th>
+            <th className="text-left px-2 py-1">{t('common.name')}</th>
+            <th className="text-left px-2 py-1">{t('common.type')}</th>
+            <th className="text-left px-2 py-1">{t('common.flags')}</th>
             <th className="text-right px-2 py-1">Addr</th>
-            <th className="text-right px-2 py-1">Offset</th>
-            <th className="text-right px-2 py-1">Size</th>
+            <th className="text-right px-2 py-1">{t('common.offset')}</th>
+            <th className="text-right px-2 py-1">{t('common.size')}</th>
           </tr>
         </thead>
         <tbody>
@@ -213,7 +217,7 @@ function SectionHeaders({ sections }: { sections: ElfSectionHeader[] }) {
               <td className="px-2 py-0.5 font-mono">{sh.sh_flags}</td>
               <td className="px-2 py-0.5 text-right font-mono">{hex(sh.sh_addr)}</td>
               <td className="px-2 py-0.5 text-right font-mono">
-                <button className="hover:underline" title="Follow in Hex" onClick={() => followInHex(sh.sh_offset)}>
+                <button className="hover:underline" title={t('common.followInHex')} onClick={() => followInHex(sh.sh_offset)}>
                   {hex(sh.sh_offset)}
                 </button>
               </td>
@@ -227,15 +231,16 @@ function SectionHeaders({ sections }: { sections: ElfSectionHeader[] }) {
 }
 
 function DynamicEntries({ entries }: { entries: ElfDynamicEntry[] }) {
+  const { t } = useTranslation();
   if (entries.length === 0)
-    return <p className="text-xs text-muted-foreground">No dynamic entries.</p>;
+    return <p className="text-xs text-muted-foreground">{t('elf.noDynamic')}</p>;
   return (
     <div className="overflow-auto max-h-96 border border-border rounded">
       <table className="w-full text-xs">
         <thead className="bg-muted/50 sticky top-0">
           <tr>
             <th className="text-left px-2 py-1">Tag</th>
-            <th className="text-right px-2 py-1">Value</th>
+            <th className="text-right px-2 py-1">{t('common.value')}</th>
           </tr>
         </thead>
         <tbody>
@@ -252,8 +257,9 @@ function DynamicEntries({ entries }: { entries: ElfDynamicEntry[] }) {
 }
 
 function Libraries({ libs }: { libs: ElfLibrary[] }) {
+  const { t } = useTranslation();
   if (libs.length === 0)
-    return <p className="text-xs text-muted-foreground">No libraries.</p>;
+    return <p className="text-xs text-muted-foreground">{t('elf.noLibraries')}</p>;
   return (
     <div className="border border-border rounded">
       <ul className="text-xs font-mono">
@@ -268,16 +274,17 @@ function Libraries({ libs }: { libs: ElfLibrary[] }) {
 }
 
 function Notes({ notes }: { notes: ElfNote[] }) {
+  const { t } = useTranslation();
   if (notes.length === 0)
-    return <p className="text-xs text-muted-foreground">No notes.</p>;
+    return <p className="text-xs text-muted-foreground">{t('elf.noNotes')}</p>;
   return (
     <div className="overflow-auto max-h-96 border border-border rounded">
       <table className="w-full text-xs">
         <thead className="bg-muted/50 sticky top-0">
           <tr>
-            <th className="text-left px-2 py-1">Name</th>
-            <th className="text-left px-2 py-1">Type</th>
-            <th className="text-left px-2 py-1">Description</th>
+            <th className="text-left px-2 py-1">{t('common.name')}</th>
+            <th className="text-left px-2 py-1">{t('common.type')}</th>
+            <th className="text-left px-2 py-1">{t('common.description')}</th>
           </tr>
         </thead>
         <tbody>
@@ -295,18 +302,19 @@ function Notes({ notes }: { notes: ElfNote[] }) {
 }
 
 function Symbols({ symbols }: { symbols: ElfSymbol[] }) {
+  const { t } = useTranslation();
   if (symbols.length === 0)
-    return <p className="text-xs text-muted-foreground">No symbols.</p>;
+    return <p className="text-xs text-muted-foreground">{t('elf.noSymbols')}</p>;
   return (
     <div className="overflow-auto max-h-96 border border-border rounded">
       <table className="w-full text-xs">
         <thead className="bg-muted/50 sticky top-0">
           <tr>
-            <th className="text-left px-2 py-1">Name</th>
-            <th className="text-right px-2 py-1">Value</th>
-            <th className="text-right px-2 py-1">Size</th>
-            <th className="text-left px-2 py-1">Binding</th>
-            <th className="text-left px-2 py-1">Type</th>
+            <th className="text-left px-2 py-1">{t('common.name')}</th>
+            <th className="text-right px-2 py-1">{t('common.value')}</th>
+            <th className="text-right px-2 py-1">{t('common.size')}</th>
+            <th className="text-left px-2 py-1">{t('elf.binding')}</th>
+            <th className="text-left px-2 py-1">{t('common.type')}</th>
             <th className="text-left px-2 py-1">Vis</th>
             <th className="text-left px-2 py-1">Ndx</th>
           </tr>
@@ -330,15 +338,16 @@ function Symbols({ symbols }: { symbols: ElfSymbol[] }) {
 }
 
 function Relocations({ relocs }: { relocs: ElfRelocation[] }) {
+  const { t } = useTranslation();
   if (relocs.length === 0)
-    return <p className="text-xs text-muted-foreground">No relocations.</p>;
+    return <p className="text-xs text-muted-foreground">{t('elf.noRelocs')}</p>;
   return (
     <div className="overflow-auto max-h-96 border border-border rounded">
       <table className="w-full text-xs">
         <thead className="bg-muted/50 sticky top-0">
           <tr>
-            <th className="text-left px-2 py-1">Type</th>
-            <th className="text-right px-2 py-1">Offset</th>
+            <th className="text-left px-2 py-1">{t('common.type')}</th>
+            <th className="text-right px-2 py-1">{t('common.offset')}</th>
             <th className="text-right px-2 py-1">SymIdx</th>
             <th className="text-right px-2 py-1">RelType</th>
             <th className="text-right px-2 py-1">Addend</th>
@@ -361,6 +370,7 @@ function Relocations({ relocs }: { relocs: ElfRelocation[] }) {
 }
 
 export function ElfViewPanel({ filePath }: { filePath: string | null }) {
+  const { t } = useTranslation();
   const [view, setView] = useState<ElfView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -391,9 +401,9 @@ export function ElfViewPanel({ filePath }: { filePath: string | null }) {
   if (!filePath) return null;
 
   if (loading)
-    return <p className="text-xs text-muted-foreground p-2">Loading ELF view...</p>;
+    return <p className="text-xs text-muted-foreground p-2">{t('elf.loading')}</p>;
 
-  if (error) return <p className="text-xs text-red-500 p-2">Error: {error}</p>;
+  if (error) return <p className="text-xs text-red-500 p-2">{t('common.error', { error })}</p>;
 
   if (!view) return null;
 
@@ -408,7 +418,7 @@ export function ElfViewPanel({ filePath }: { filePath: string | null }) {
               subView === sv.key ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
             }`}
           >
-            {sv.label}
+            {t(sv.labelKey)}
           </button>
         ))}
       </div>
@@ -427,14 +437,15 @@ export function ElfViewPanel({ filePath }: { filePath: string | null }) {
 }
 
 function StringTableView({ entries }: { entries: ElfStringTableEntry[] }) {
-  if (entries.length === 0) return <p className="text-xs text-muted-foreground">No string table entries.</p>;
+  const { t } = useTranslation();
+  if (entries.length === 0) return <p className="text-xs text-muted-foreground">{t('elf.noStringTable')}</p>;
   return (
     <div>
-      <p className="text-xs text-muted-foreground mb-1">{entries.length} entries</p>
+      <p className="text-xs text-muted-foreground mb-1">{t('common.numEntries', { count: entries.length })}</p>
       <div className="border border-border rounded overflow-auto max-h-96">
         <table className="w-full text-xs">
           <thead className="bg-muted/50 sticky top-0">
-            <tr><th className="text-right px-2 py-1">Offset</th><th className="text-left px-2 py-1">Section</th><th className="text-left px-2 py-1">Value</th></tr>
+            <tr><th className="text-right px-2 py-1">{t('common.offset')}</th><th className="text-left px-2 py-1">{t('common.section')}</th><th className="text-left px-2 py-1">{t('common.value')}</th></tr>
           </thead>
           <tbody>
             {entries.map((e, i) => (

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { followInHex } from '../follow';
 
 // --- PE view data types (mirror Rust PeView struct) ---
@@ -294,8 +295,9 @@ interface PeView {
 // --- Sub-components ---
 
 function ImportTable({ imports }: { imports: PeImportEntry[] }) {
+  const { t } = useTranslation();
   if (imports.length === 0) {
-    return <div className="pe-empty">No imports found.</div>;
+    return <div className="pe-empty">{t('pe.noImports')}</div>;
   }
   // Group by DLL
   const grouped = imports.reduce<Record<string, string[]>>((acc, imp) => {
@@ -320,15 +322,16 @@ function ImportTable({ imports }: { imports: PeImportEntry[] }) {
 }
 
 function ExportTable({ exports: exportsList }: { exports: PeExportEntry[] }) {
+  const { t } = useTranslation();
   if (exportsList.length === 0) {
-    return <div className="pe-empty">No exports found.</div>;
+    return <div className="pe-empty">{t('pe.noExports')}</div>;
   }
   return (
     <table className="pe-table">
       <thead>
         <tr>
-          <th>Ordinal</th>
-          <th>Name</th>
+          <th>{t('pe.ordinal')}</th>
+          <th>{t('common.name')}</th>
           <th>RVA</th>
         </tr>
       </thead>
@@ -346,8 +349,9 @@ function ExportTable({ exports: exportsList }: { exports: PeExportEntry[] }) {
 }
 
 function ResourceTree({ nodes, depth = 0 }: { nodes: PeResourceNode[]; depth?: number }) {
+  const { t } = useTranslation();
   if (nodes.length === 0) {
-    return <div className="pe-empty">No resources found.</div>;
+    return <div className="pe-empty">{t('pe.noResources')}</div>;
   }
   return (
     <ul className="pe-resource-tree" style={{ paddingLeft: depth * 20 }}>
@@ -367,16 +371,17 @@ function ResourceTree({ nodes, depth = 0 }: { nodes: PeResourceNode[]; depth?: n
 }
 
 function DotNetInfo({ dotnet }: { dotnet: PeDotNetInfo | null }) {
+  const { t } = useTranslation();
   if (!dotnet) {
-    return <div className="pe-empty">Not a .NET assembly.</div>;
+    return <div className="pe-empty">{t('pe.notDotNet')}</div>;
   }
   return (
     <div className="pe-dotnet">
       <table className="pe-table">
         <tbody>
-          <tr><td>CLR Header</td><td>Present</td></tr>
+          <tr><td>{t('pe.clrHeader')}</td><td>{t('common.present')}</td></tr>
           <tr><td>CLR RVA</td><td>0x{dotnet.clr_rva.toString(16).padStart(8, '0')}</td></tr>
-          <tr><td>CLR Size</td><td>{dotnet.clr_size} bytes</td></tr>
+          <tr><td>{t('pe.clrSize')}</td><td>{dotnet.clr_size} {t('common.bytes')}</td></tr>
         </tbody>
       </table>
     </div>
@@ -384,8 +389,9 @@ function DotNetInfo({ dotnet }: { dotnet: PeDotNetInfo | null }) {
 }
 
 function ManifestView({ manifest }: { manifest: string | null }) {
+  const { t } = useTranslation();
   if (!manifest) {
-    return <div className="pe-empty">No manifest embedded.</div>;
+    return <div className="pe-empty">{t('pe.noManifest')}</div>;
   }
   return (
     <pre className="pe-manifest">{manifest}</pre>
@@ -393,8 +399,9 @@ function ManifestView({ manifest }: { manifest: string | null }) {
 }
 
 function VersionInfoView({ versionInfo }: { versionInfo: PeVersionEntry[] }) {
+  const { t } = useTranslation();
   if (versionInfo.length === 0) {
-    return <div className="pe-empty">No version info found.</div>;
+    return <div className="pe-empty">{t('pe.noVersionInfo')}</div>;
   }
   return (
     <div className="pe-version-info">
@@ -415,27 +422,29 @@ function VersionInfoView({ versionInfo }: { versionInfo: PeVersionEntry[] }) {
 }
 
 function OverlayView({ offset, size }: { offset: number; size: number }) {
+  const { t } = useTranslation();
   if (size === 0) {
-    return <div className="pe-empty">No overlay data.</div>;
+    return <div className="pe-empty">{t('pe.noOverlay')}</div>;
   }
   return (
     <table className="pe-table">
       <tbody>
-        <tr><td>Offset</td><td>0x{offset.toString(16).padStart(8, '0')} ({offset})</td></tr>
-        <tr><td>Size</td><td>{size} bytes ({(size / 1024).toFixed(2)} KB)</td></tr>
+        <tr><td>{t('common.offset')}</td><td>0x{offset.toString(16).padStart(8, '0')} ({offset})</td></tr>
+        <tr><td>{t('common.size')}</td><td>{size} {t('common.bytes')} ({(size / 1024).toFixed(2)} KB)</td></tr>
       </tbody>
     </table>
   );
 }
 
 function TlsView({ callbacks }: { callbacks: number[] }) {
+  const { t } = useTranslation();
   if (callbacks.length === 0) {
-    return <div className="pe-empty">No TLS directory.</div>;
+    return <div className="pe-empty">{t('pe.noTls')}</div>;
   }
   return (
     <table className="pe-table">
       <thead>
-        <tr><th>TLS Directory RVA</th></tr>
+        <tr><th>{t('pe.tlsRva')}</th></tr>
       </thead>
       <tbody>
         {callbacks.map((rva, i) => (
@@ -449,35 +458,37 @@ function TlsView({ callbacks }: { callbacks: number[] }) {
 }
 
 function RichHeaderView({ hasRich }: { hasRich: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className="pe-rich-header">
       {hasRich ? (
-        <span className="pe-rich-present">Rich Header: Present</span>
+        <span className="pe-rich-present">{t('pe.richPresent')}</span>
       ) : (
-        <span className="pe-rich-absent">Rich Header: Absent</span>
+        <span className="pe-rich-absent">{t('pe.richAbsent')}</span>
       )}
     </div>
   );
 }
 
 function NtHeadersView({ headers }: { headers: PeNtHeaders | null }) {
-  if (!headers) return <div className="pe-empty">No NT headers.</div>;
+  const { t } = useTranslation();
+  if (!headers) return <div className="pe-empty">{t('pe.noNtHeaders')}</div>;
   const rows: [string, string][] = [
-    ['Signature', `${headers.signature} (0x${headers.signature_val.toString(16).padStart(8, '0')})`],
-    ['Offset', `0x${headers.offset.toString(16)}`],
-    ['Machine', headers.file_header_summary.machine],
-    ['Sections', String(headers.number_of_sections)],
+    [t('pe.signature'), `${headers.signature} (0x${headers.signature_val.toString(16).padStart(8, '0')})`],
+    [t('common.offset'), `0x${headers.offset.toString(16)}`],
+    [t('pe.machine'), headers.file_header_summary.machine],
+    [t('pe.sections'), String(headers.number_of_sections)],
     ['TimeDateStamp', `0x${headers.file_header_summary.time_date_stamp.toString(16).padStart(8, '0')}`],
     ['Characteristics', headers.file_header_summary.characteristics],
-    ['Optional Header Magic', headers.optional_header_summary.magic],
-    ['Entry Point', `0x${headers.optional_header_summary.entry_point.toString(16)}`],
-    ['Image Base', headers.optional_header_summary.image_base],
-    ['Section Alignment', `0x${headers.optional_header_summary.section_alignment.toString(16)}`],
-    ['File Alignment', `0x${headers.optional_header_summary.file_alignment.toString(16)}`],
-    ['Size of Image', `0x${headers.optional_header_summary.size_of_image.toString(16)}`],
-    ['Size of Headers', `0x${headers.optional_header_summary.size_of_headers.toString(16)}`],
-    ['Subsystem', headers.optional_header_summary.subsystem],
-    ['Data Directories', String(headers.number_of_data_directories)],
+    [t('pe.optHeaderMagic'), headers.optional_header_summary.magic],
+    [t('pe.entryPoint'), `0x${headers.optional_header_summary.entry_point.toString(16)}`],
+    [t('pe.imageBase'), headers.optional_header_summary.image_base],
+    [t('pe.sectionAlignment'), `0x${headers.optional_header_summary.section_alignment.toString(16)}`],
+    [t('pe.fileAlignment'), `0x${headers.optional_header_summary.file_alignment.toString(16)}`],
+    [t('pe.sizeOfImage'), `0x${headers.optional_header_summary.size_of_image.toString(16)}`],
+    [t('pe.sizeOfHeaders'), `0x${headers.optional_header_summary.size_of_headers.toString(16)}`],
+    [t('pe.subsystem'), headers.optional_header_summary.subsystem],
+    [t('pe.dataDirectories'), String(headers.number_of_data_directories)],
   ];
   return (
     <table className="pe-table">
@@ -491,10 +502,11 @@ function NtHeadersView({ headers }: { headers: PeNtHeaders | null }) {
 }
 
 function ResourceStringsView({ entries }: { entries: PeResourceStringEntry[] }) {
-  if (entries.length === 0) return <div className="pe-empty">No resource string table entries.</div>;
+  const { t } = useTranslation();
+  if (entries.length === 0) return <div className="pe-empty">{t('pe.noResourceStrings')}</div>;
   return (
     <table className="pe-table">
-      <thead><tr><th>ID</th><th>Value</th></tr></thead>
+      <thead><tr><th>ID</th><th>{t('common.value')}</th></tr></thead>
       <tbody>
         {entries.map((e, i) => (
           <tr key={i}>
@@ -508,17 +520,18 @@ function ResourceStringsView({ entries }: { entries: PeResourceStringEntry[] }) 
 }
 
 function DotNetStreamDetailsView({ details }: { details: PeDotNetStreamDetail[] }) {
-  if (details.length === 0) return <div className="pe-empty">No .NET metadata streams.</div>;
+  const { t } = useTranslation();
+  if (details.length === 0) return <div className="pe-empty">{t('pe.noDotNetStreams')}</div>;
   return (
     <div>
       {details.map((d, i) => (
         <div key={i} className="mb-2">
           <table className="pe-table">
             <tbody>
-              <tr><td className="pe-field-name">Name</td><td>{d.name}</td></tr>
-              <tr><td className="pe-field-name">Type</td><td>{d.stream_type}</td></tr>
-              <tr><td className="pe-field-name">Offset</td><td>0x{d.offset.toString(16)}</td></tr>
-              <tr><td className="pe-field-name">Size</td><td>{d.size} bytes</td></tr>
+              <tr><td className="pe-field-name">{t('common.name')}</td><td>{d.name}</td></tr>
+              <tr><td className="pe-field-name">{t('common.type')}</td><td>{d.stream_type}</td></tr>
+              <tr><td className="pe-field-name">{t('common.offset')}</td><td>0x{d.offset.toString(16)}</td></tr>
+              <tr><td className="pe-field-name">{t('common.size')}</td><td>{d.size} {t('common.bytes')}</td></tr>
             </tbody>
           </table>
           {d.hex_preview && (
@@ -531,18 +544,19 @@ function DotNetStreamDetailsView({ details }: { details: PeDotNetStreamDetail[] 
 }
 
 function DotNetMetadataTableView({ table }: { table: PeDotNetMetadataTable | null }) {
-  if (!table) return <div className="pe-empty">No .NET metadata table.</div>;
+  const { t } = useTranslation();
+  if (!table) return <div className="pe-empty">{t('pe.noDotNetTable')}</div>;
   return (
     <div>
-      <h4 className="text-xs font-semibold mb-1">Present Tables ({table.present_tables.length})</h4>
+      <h4 className="text-xs font-semibold mb-1">{t('pe.presentTables', { count: table.present_tables.length })}</h4>
       <div className="flex flex-wrap gap-1 mb-2">
-        {table.present_tables.map((t, i) => (
-          <span key={i} className="px-1 py-0.5 text-xs bg-muted rounded">{t}</span>
+        {table.present_tables.map((tbl, i) => (
+          <span key={i} className="px-1 py-0.5 text-xs bg-muted rounded">{tbl}</span>
         ))}
       </div>
-      <h4 className="text-xs font-semibold mb-1">Row Counts</h4>
+      <h4 className="text-xs font-semibold mb-1">{t('pe.rowCounts')}</h4>
       <table className="pe-table">
-        <thead><tr><th>Table</th><th>Rows</th></tr></thead>
+        <thead><tr><th>{t('pe.table')}</th><th>{t('pe.rows')}</th></tr></thead>
         <tbody>
           {table.row_counts.map(([name, count], i) => (
             <tr key={i}><td>{name}</td><td>{count}</td></tr>
@@ -554,18 +568,19 @@ function DotNetMetadataTableView({ table }: { table: PeDotNetMetadataTable | nul
 }
 
 function PeToolsView({ filePath }: { filePath: string }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const runTool = async (cmd: string, label: string) => {
-    if (!confirm(`${label}?\n\nThis will modify the file (a .bak backup will be created).`)) return;
+    if (!confirm(t('pe.confirmModify', { label }))) return;
     setBusy(true);
     setError(null);
     setStatus(null);
     try {
       await invoke(cmd, { path: filePath });
-      setStatus(`${label} completed successfully.`);
+      setStatus(t('pe.toolDone', { label }));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -588,7 +603,7 @@ function PeToolsView({ filePath }: { filePath: string }) {
       a.download = saveName;
       a.click();
       URL.revokeObjectURL(url);
-      setStatus(`${label} completed (${bytes.length} bytes).`);
+      setStatus(t('pe.dumpDone', { label, count: bytes.length }));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -609,22 +624,22 @@ function PeToolsView({ filePath }: { filePath: string }) {
   return (
     <div className="space-y-3 p-2">
       <div>
-        <h4 className="text-xs font-semibold mb-1">DOS Stub</h4>
+        <h4 className="text-xs font-semibold mb-1">{t('pe.dosStub')}</h4>
         <div className="flex gap-1">
-          <Btn cmd="pe_dump_dos_stub" label="Dump" variant="dump" />
-          <Btn cmd="pe_remove_dos_stub" label="Remove" variant="remove" />
-          <Btn cmd="pe_add_dos_stub" label="Add" variant="add" />
+          <Btn cmd="pe_dump_dos_stub" label={t('pe.dump')} variant="dump" />
+          <Btn cmd="pe_remove_dos_stub" label={t('pe.remove')} variant="remove" />
+          <Btn cmd="pe_add_dos_stub" label={t('pe.add')} variant="add" />
         </div>
       </div>
       <div>
-        <h4 className="text-xs font-semibold mb-1">Overlay</h4>
+        <h4 className="text-xs font-semibold mb-1">{t('pe.overlay')}</h4>
         <div className="flex gap-1">
-          <Btn cmd="pe_dump_overlay" label="Dump" variant="dump" />
-          <Btn cmd="pe_remove_overlay" label="Remove" variant="remove" />
-          <Btn cmd="pe_add_overlay" label="Add" variant="add" />
+          <Btn cmd="pe_dump_overlay" label={t('pe.dump')} variant="dump" />
+          <Btn cmd="pe_remove_overlay" label={t('pe.remove')} variant="remove" />
+          <Btn cmd="pe_add_overlay" label={t('pe.add')} variant="add" />
         </div>
       </div>
-      {busy && <p className="text-xs text-muted-foreground">Working...</p>}
+      {busy && <p className="text-xs text-muted-foreground">{t('pe.working')}</p>}
       {status && <p className="text-xs text-green-600">{status}</p>}
       {error && <p className="text-xs text-red-500">{error}</p>}
     </div>
@@ -632,13 +647,14 @@ function PeToolsView({ filePath }: { filePath: string }) {
 }
 
 function DataDirectoryView({ entries }: { entries: PeDataDirectoryEntry[] }) {
+  const { t } = useTranslation();
   if (entries.length === 0) {
-    return <div className="pe-empty">No data directory entries.</div>;
+    return <div className="pe-empty">{t('pe.noDataDirs')}</div>;
   }
   return (
     <table className="pe-table">
       <thead>
-        <tr><th>#</th><th>Name</th><th>RVA</th><th>Size</th></tr>
+        <tr><th>#</th><th>{t('common.name')}</th><th>RVA</th><th>{t('common.size')}</th></tr>
       </thead>
       <tbody>
         {entries.map((d) => (
@@ -655,13 +671,14 @@ function DataDirectoryView({ entries }: { entries: PeDataDirectoryEntry[] }) {
 }
 
 function DebugView({ entries }: { entries: PeDebugEntry[] }) {
+  const { t } = useTranslation();
   if (entries.length === 0) {
-    return <div className="pe-empty">No debug directory entries.</div>;
+    return <div className="pe-empty">{t('pe.noDebug')}</div>;
   }
   return (
     <table className="pe-table">
       <thead>
-        <tr><th>Type</th><th>SizeOfData</th><th>Address</th><th>Pointer</th></tr>
+        <tr><th>{t('common.type')}</th><th>SizeOfData</th><th>{t('common.address')}</th><th>Pointer</th></tr>
       </thead>
       <tbody>
         {entries.map((d, i) => (
@@ -678,13 +695,14 @@ function DebugView({ entries }: { entries: PeDebugEntry[] }) {
 }
 
 function RelocsView({ blocks }: { blocks: PeRelocBlock[] }) {
+  const { t } = useTranslation();
   if (blocks.length === 0) {
-    return <div className="pe-empty">No relocation blocks.</div>;
+    return <div className="pe-empty">{t('pe.noRelocs')}</div>;
   }
   return (
     <table className="pe-table">
       <thead>
-        <tr><th>VirtualAddress</th><th>BlockSize</th><th>Count</th></tr>
+        <tr><th>VirtualAddress</th><th>BlockSize</th><th>{t('common.count')}</th></tr>
       </thead>
       <tbody>
         {blocks.map((b, i) => (
@@ -700,13 +718,14 @@ function RelocsView({ blocks }: { blocks: PeRelocBlock[] }) {
 }
 
 function LoadConfigView({ config }: { config: PeLoadConfig | null }) {
+  const { t } = useTranslation();
   if (!config) {
-    return <div className="pe-empty">No load config directory.</div>;
+    return <div className="pe-empty">{t('pe.noLoadConfig')}</div>;
   }
   return (
     <table className="pe-table">
       <tbody>
-        <tr><td>Size</td><td>{config.size}</td></tr>
+        <tr><td>{t('common.size')}</td><td>{config.size}</td></tr>
         <tr><td>SecurityCookie</td><td>0x{config.security_cookie}</td></tr>
         <tr><td>SEHandlerTable</td><td>0x{config.se_handler_table}</td></tr>
         <tr><td>SEHandlerCount</td><td>{config.se_handler_count}</td></tr>
@@ -716,20 +735,21 @@ function LoadConfigView({ config }: { config: PeLoadConfig | null }) {
 }
 
 function CertificatesView({ certs }: { certs: PeCertificate[] }) {
+  const { t } = useTranslation();
   if (certs.length === 0) {
-    return <div className="pe-empty">No certificate directory.</div>;
+    return <div className="pe-empty">{t('pe.noCerts')}</div>;
   }
   return (
     <table className="pe-table">
       <thead>
-        <tr><th>Type</th><th>DataLength</th><th>HasData</th></tr>
+        <tr><th>{t('common.type')}</th><th>DataLength</th><th>HasData</th></tr>
       </thead>
       <tbody>
         {certs.map((c, i) => (
           <tr key={i}>
             <td>0x{c.certificate_type.toString(16).padStart(4, '0')}</td>
             <td>{c.data_length}</td>
-            <td>{c.has_data ? 'Yes' : 'No'}</td>
+            <td>{c.has_data ? t('common.yes') : t('common.no')}</td>
           </tr>
         ))}
       </tbody>
@@ -738,13 +758,14 @@ function CertificatesView({ certs }: { certs: PeCertificate[] }) {
 }
 
 function DosHeaderView({ fields }: { fields: PeDosHeaderField[] }) {
+  const { t } = useTranslation();
   if (fields.length === 0) {
-    return <div className="pe-empty">No DOS header.</div>;
+    return <div className="pe-empty">{t('pe.noDosHeader')}</div>;
   }
   return (
     <table className="pe-table">
       <thead>
-        <tr><th>Field</th><th>Value</th><th>Description</th></tr>
+        <tr><th>{t('pe.field')}</th><th>{t('common.value')}</th><th>{t('common.description')}</th></tr>
       </thead>
       <tbody>
         {fields.map((f, i) => (
@@ -760,20 +781,22 @@ function DosHeaderView({ fields }: { fields: PeDosHeaderField[] }) {
 }
 
 function DosStubView({ stub }: { stub: PeDosStub | null }) {
+  const { t } = useTranslation();
   if (!stub) {
-    return <div className="pe-empty">No DOS stub.</div>;
+    return <div className="pe-empty">{t('pe.noDosStub')}</div>;
   }
   return (
     <div className="pe-dos-stub">
-      <p>Offset: 0x{stub.offset.toString(16)} | Size: {stub.size} bytes</p>
+      <p>{t('common.offset')}: 0x{stub.offset.toString(16)} | {t('common.size')}: {stub.size} {t('common.bytes')}</p>
       <pre className="pe-hex-dump">{stub.hex_dump}</pre>
     </div>
   );
 }
 
 function FileHeaderView({ fh }: { fh: PeFileHeader | null }) {
+  const { t } = useTranslation();
   if (!fh) {
-    return <div className="pe-empty">No file header.</div>;
+    return <div className="pe-empty">{t('pe.noFileHeader')}</div>;
   }
   return (
     <table className="pe-table">
@@ -791,8 +814,9 @@ function FileHeaderView({ fh }: { fh: PeFileHeader | null }) {
 }
 
 function OptionalHeaderView({ oh }: { oh: PeOptionalHeader | null }) {
+  const { t } = useTranslation();
   if (!oh) {
-    return <div className="pe-empty">No optional header.</div>;
+    return <div className="pe-empty">{t('pe.noOptHeader')}</div>;
   }
   return (
     <table className="pe-table">
@@ -829,13 +853,14 @@ function OptionalHeaderView({ oh }: { oh: PeOptionalHeader | null }) {
 }
 
 function SectionsDetailView({ sections }: { sections: PeSectionDetail[] }) {
+  const { t } = useTranslation();
   if (sections.length === 0) {
-    return <div className="pe-empty">No sections.</div>;
+    return <div className="pe-empty">{t('pe.noSections')}</div>;
   }
   return (
     <table className="pe-table">
       <thead>
-        <tr><th>Name</th><th>VirtAddr</th><th>VirtSize</th><th>RawAddr</th><th>RawSize</th><th>Entropy</th><th>Characteristics</th></tr>
+        <tr><th>{t('common.name')}</th><th>VirtAddr</th><th>VirtSize</th><th>RawAddr</th><th>RawSize</th><th>{t('pe.entropy')}</th><th>Characteristics</th></tr>
       </thead>
       <tbody>
         {sections.map((s, i) => (
@@ -846,7 +871,7 @@ function SectionsDetailView({ sections }: { sections: PeSectionDetail[] }) {
             <td>
               <button
                 className="hover:underline text-accent-blue"
-                title="Follow in Hex"
+                title={t('common.followInHex')}
                 onClick={() => followInHex(s.pointer_to_raw_data)}
               >
                 0x{s.pointer_to_raw_data.toString(16).padStart(8, '0')}
@@ -863,38 +888,40 @@ function SectionsDetailView({ sections }: { sections: PeSectionDetail[] }) {
 }
 
 function SectionsInfoView({ stats }: { stats: PeSectionStats | null }) {
+  const { t } = useTranslation();
   if (!stats) {
-    return <div className="pe-empty">No section statistics.</div>;
+    return <div className="pe-empty">{t('pe.noSectionStats')}</div>;
   }
   return (
     <table className="pe-table">
       <tbody>
-        <tr><td>Total Sections</td><td>{stats.total_sections}</td></tr>
-        <tr><td>Total Virtual Size</td><td>{stats.total_virtual_size} ({(stats.total_virtual_size / 1024).toFixed(2)} KB)</td></tr>
-        <tr><td>Total Raw Size</td><td>{stats.total_raw_size} ({(stats.total_raw_size / 1024).toFixed(2)} KB)</td></tr>
-        <tr><td>Min Entropy</td><td>{stats.min_entropy !== null ? stats.min_entropy.toFixed(4) : '—'}</td></tr>
-        <tr><td>Max Entropy</td><td>{stats.max_entropy !== null ? stats.max_entropy.toFixed(4) : '—'}</td></tr>
-        <tr><td>Avg Entropy</td><td>{stats.avg_entropy !== null ? stats.avg_entropy.toFixed(4) : '—'}</td></tr>
+        <tr><td>{t('pe.totalSections')}</td><td>{stats.total_sections}</td></tr>
+        <tr><td>{t('pe.totalVirtualSize')}</td><td>{stats.total_virtual_size} ({(stats.total_virtual_size / 1024).toFixed(2)} KB)</td></tr>
+        <tr><td>{t('pe.totalRawSize')}</td><td>{stats.total_raw_size} ({(stats.total_raw_size / 1024).toFixed(2)} KB)</td></tr>
+        <tr><td>{t('pe.minEntropy')}</td><td>{stats.min_entropy !== null ? stats.min_entropy.toFixed(4) : '—'}</td></tr>
+        <tr><td>{t('pe.maxEntropy')}</td><td>{stats.max_entropy !== null ? stats.max_entropy.toFixed(4) : '—'}</td></tr>
+        <tr><td>{t('pe.avgEntropy')}</td><td>{stats.avg_entropy !== null ? stats.avg_entropy.toFixed(4) : '—'}</td></tr>
       </tbody>
     </table>
   );
 }
 
 function ImportInfoView({ info }: { info: PeImportInfo | null }) {
+  const { t } = useTranslation();
   if (!info) {
-    return <div className="pe-empty">No import info.</div>;
+    return <div className="pe-empty">{t('pe.noImportInfo')}</div>;
   }
   return (
     <div>
       <table className="pe-table">
         <tbody>
-          <tr><td>Total DLLs</td><td>{info.total_dlls}</td></tr>
-          <tr><td>Total Functions</td><td>{info.total_functions}</td></tr>
+          <tr><td>{t('pe.totalDlls')}</td><td>{info.total_dlls}</td></tr>
+          <tr><td>{t('pe.totalFunctions')}</td><td>{info.total_functions}</td></tr>
         </tbody>
       </table>
-      <h4>DLL Summary</h4>
+      <h4>{t('pe.dllSummary')}</h4>
       <table className="pe-table">
-        <thead><tr><th>DLL Name</th><th>Function Count</th></tr></thead>
+        <thead><tr><th>{t('pe.dllName')}</th><th>{t('pe.functionCount')}</th></tr></thead>
         <tbody>
           {info.dlls.map((d, i) => (
             <tr key={i}><td>{d.dll_name}</td><td>{d.function_count}</td></tr>
@@ -906,8 +933,9 @@ function ImportInfoView({ info }: { info: PeImportInfo | null }) {
 }
 
 function ExceptionsView({ entries }: { entries: PeExceptionEntry[] }) {
+  const { t } = useTranslation();
   if (entries.length === 0) {
-    return <div className="pe-empty">No exception table entries.</div>;
+    return <div className="pe-empty">{t('pe.noExceptions')}</div>;
   }
   return (
     <table className="pe-table">
@@ -926,12 +954,13 @@ function ExceptionsView({ entries }: { entries: PeExceptionEntry[] }) {
 }
 
 function BoundImportsView({ entries }: { entries: PeBoundImportEntry[] }) {
+  const { t } = useTranslation();
   if (entries.length === 0) {
-    return <div className="pe-empty">No bound imports.</div>;
+    return <div className="pe-empty">{t('pe.noBoundImports')}</div>;
   }
   return (
     <table className="pe-table">
-      <thead><tr><th>Module</th><th>TimeDateStamp</th><th>ForwarderRefs</th></tr></thead>
+      <thead><tr><th>{t('pe.module')}</th><th>TimeDateStamp</th><th>ForwarderRefs</th></tr></thead>
       <tbody>
         {entries.map((e, i) => (
           <tr key={i}>
@@ -946,8 +975,9 @@ function BoundImportsView({ entries }: { entries: PeBoundImportEntry[] }) {
 }
 
 function DelayImportsView({ entries }: { entries: PeDelayImportEntry[] }) {
+  const { t } = useTranslation();
   if (entries.length === 0) {
-    return <div className="pe-empty">No delay imports.</div>;
+    return <div className="pe-empty">{t('pe.noDelayImports')}</div>;
   }
   return (
     <table className="pe-table">
@@ -966,23 +996,24 @@ function DelayImportsView({ entries }: { entries: PeDelayImportEntry[] }) {
 }
 
 function DotNetMetadataView({ meta }: { meta: PeDotNetMetadata | null }) {
+  const { t } = useTranslation();
   if (!meta) {
-    return <div className="pe-empty">No .NET metadata.</div>;
+    return <div className="pe-empty">{t('pe.noDotNetMeta')}</div>;
   }
   return (
     <div>
       <table className="pe-table">
         <tbody>
-          <tr><td>Runtime Version</td><td>{meta.runtime_version}</td></tr>
-          <tr><td>Metadata RVA</td><td>0x{meta.metadata_rva.toString(16).padStart(8, '0')}</td></tr>
-          <tr><td>Metadata Size</td><td>{meta.metadata_size}</td></tr>
-          <tr><td>Flags</td><td>0x{meta.flags.toString(16)}</td></tr>
-          <tr><td>EntryPoint Token</td><td>0x{meta.entry_point_token.toString(16)}</td></tr>
+          <tr><td>{t('pe.runtimeVersion')}</td><td>{meta.runtime_version}</td></tr>
+          <tr><td>{t('pe.metadataRva')}</td><td>0x{meta.metadata_rva.toString(16).padStart(8, '0')}</td></tr>
+          <tr><td>{t('pe.metadataSize')}</td><td>{meta.metadata_size}</td></tr>
+          <tr><td>{t('common.flags')}</td><td>0x{meta.flags.toString(16)}</td></tr>
+          <tr><td>{t('pe.entryPointToken')}</td><td>0x{meta.entry_point_token.toString(16)}</td></tr>
         </tbody>
       </table>
-      <h4>Streams</h4>
+      <h4>{t('pe.streams')}</h4>
       <table className="pe-table">
-        <thead><tr><th>Name</th><th>Offset</th><th>Size</th></tr></thead>
+        <thead><tr><th>{t('common.name')}</th><th>{t('common.offset')}</th><th>{t('common.size')}</th></tr></thead>
         <tbody>
           {meta.streams.map((s, i) => (
             <tr key={i}>
@@ -1031,37 +1062,37 @@ type SubTab =
   | 'resourcestrings'
   | 'tools';
 
-const SUB_TABS: { key: SubTab; label: string }[] = [
-  { key: 'dosheader', label: 'DOS Header' },
-  { key: 'dosstub', label: 'DOS Stub' },
-  { key: 'fileheader', label: 'File Header' },
-  { key: 'optionalheader', label: 'Optional Header' },
-  { key: 'sections', label: 'Sections' },
-  { key: 'sectionsinfo', label: 'Sections Info' },
-  { key: 'imports', label: 'Imports' },
-  { key: 'importinfo', label: 'Import Info' },
-  { key: 'exports', label: 'Exports' },
-  { key: 'resources', label: 'Resources' },
-  { key: 'directories', label: 'Directories' },
-  { key: 'debug', label: 'Debug' },
-  { key: 'relocs', label: 'Relocs' },
-  { key: 'exceptions', label: 'Exceptions' },
-  { key: 'loadconfig', label: 'LoadConfig' },
-  { key: 'boundimports', label: 'Bound Imports' },
-  { key: 'delayimports', label: 'Delay Imports' },
-  { key: 'certificates', label: 'Certificates' },
-  { key: 'dotnet', label: '.NET' },
-  { key: 'dotnetmeta', label: '.NET Metadata' },
-  { key: 'dotnetstream', label: '.NET Streams' },
-  { key: 'dotnettable', label: '.NET Tables' },
-  { key: 'manifest', label: 'Manifest' },
-  { key: 'version', label: 'Version Info' },
-  { key: 'overlay', label: 'Overlay' },
-  { key: 'tls', label: 'TLS' },
-  { key: 'rich', label: 'Rich Header' },
-  { key: 'ntheaders', label: 'NT Headers' },
-  { key: 'resourcestrings', label: 'Resource Strings' },
-  { key: 'tools', label: 'Tools' },
+const SUB_TABS: { key: SubTab; labelKey: string }[] = [
+  { key: 'dosheader', labelKey: 'pe.tabDosHeader' },
+  { key: 'dosstub', labelKey: 'pe.tabDosStub' },
+  { key: 'fileheader', labelKey: 'pe.tabFileHeader' },
+  { key: 'optionalheader', labelKey: 'pe.tabOptionalHeader' },
+  { key: 'sections', labelKey: 'pe.tabSections' },
+  { key: 'sectionsinfo', labelKey: 'pe.tabSectionsInfo' },
+  { key: 'imports', labelKey: 'pe.tabImports' },
+  { key: 'importinfo', labelKey: 'pe.tabImportInfo' },
+  { key: 'exports', labelKey: 'pe.tabExports' },
+  { key: 'resources', labelKey: 'pe.tabResources' },
+  { key: 'directories', labelKey: 'pe.tabDirectories' },
+  { key: 'debug', labelKey: 'pe.tabDebug' },
+  { key: 'relocs', labelKey: 'pe.tabRelocs' },
+  { key: 'exceptions', labelKey: 'pe.tabExceptions' },
+  { key: 'loadconfig', labelKey: 'pe.tabLoadConfig' },
+  { key: 'boundimports', labelKey: 'pe.tabBoundImports' },
+  { key: 'delayimports', labelKey: 'pe.tabDelayImports' },
+  { key: 'certificates', labelKey: 'pe.tabCertificates' },
+  { key: 'dotnet', labelKey: 'pe.tabDotNet' },
+  { key: 'dotnetmeta', labelKey: 'pe.tabDotNetMeta' },
+  { key: 'dotnetstream', labelKey: 'pe.tabDotNetStreams' },
+  { key: 'dotnettable', labelKey: 'pe.tabDotNetTables' },
+  { key: 'manifest', labelKey: 'pe.tabManifest' },
+  { key: 'version', labelKey: 'pe.tabVersionInfo' },
+  { key: 'overlay', labelKey: 'pe.tabOverlay' },
+  { key: 'tls', labelKey: 'pe.tabTls' },
+  { key: 'rich', labelKey: 'pe.tabRichHeader' },
+  { key: 'ntheaders', labelKey: 'pe.tabNtHeaders' },
+  { key: 'resourcestrings', labelKey: 'pe.tabResourceStrings' },
+  { key: 'tools', labelKey: 'pe.tabTools' },
 ];
 
 interface PeViewPanelProps {
@@ -1069,6 +1100,7 @@ interface PeViewPanelProps {
 }
 
 export default function PeViewPanel({ filePath }: PeViewPanelProps) {
+  const { t } = useTranslation();
   const [peView, setPeView] = useState<PeView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1097,19 +1129,19 @@ export default function PeViewPanel({ filePath }: PeViewPanelProps) {
   }, [fetchPeView]);
 
   if (!filePath) {
-    return <div className="pe-view-panel pe-empty">No file selected.</div>;
+    return <div className="pe-view-panel pe-empty">{t('common.noFileSelected')}</div>;
   }
 
   if (loading) {
-    return <div className="pe-view-panel">Loading PE view...</div>;
+    return <div className="pe-view-panel">{t('pe.loading')}</div>;
   }
 
   if (error) {
-    return <div className="pe-view-panel pe-error">Error: {error}</div>;
+    return <div className="pe-view-panel pe-error">{t('common.error', { error })}</div>;
   }
 
   if (!peView) {
-    return <div className="pe-view-panel pe-empty">Not a valid PE file.</div>;
+    return <div className="pe-view-panel pe-empty">{t('pe.notPe')}</div>;
   }
 
   return (
@@ -1121,7 +1153,7 @@ export default function PeViewPanel({ filePath }: PeViewPanelProps) {
             className={`pe-sub-tab ${activeTab === tab.key ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.key)}
           >
-            {tab.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>
