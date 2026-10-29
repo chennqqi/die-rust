@@ -1,5 +1,34 @@
 # Release Notes
 
+## die-rust v1.0.4
+
+Patch release — auto-update channel fix plus a large GUI
+internationalization pass.
+
+- Updater: `latest.json` generated for v1.0.3 was unusable — asset
+  URLs carried raw bundle filenames with spaces (GitHub sanitizes
+  them to dots on upload, so `Url::parse` failed during manifest
+  deserialization and every platform's update check errored), and
+  `signature` was double-base64-encoded. `tools/updater/
+  gen_latest_json.py` now applies GitHub's asset-name sanitization
+  and emits `.sig` content in the format the plugin expects. The
+  regenerated v1.0.3 manifest is already live, so v1.0.1/v1.0.2
+  installs self-update to v1.0.3 (and onward to this release).
+  **Known limitation:** v1.0.0 embeds the pre-rotation updater
+  pubkey and can never verify post-rotation signatures — those
+  installs require a manual download.
+- GUI: follow-system language detection actually works now —
+  `detectSystemLanguage()` walks `navigator.languages` in
+  preference order and maps BCP-47 tags onto the supported catalogs
+  (zh-Hant/HK/MO → zh-TW, pt-BR vs pt-PT, hi → hi-IN); `view.language`
+  defaults to `"system"` and the settings dropdown exposes it.
+- GUI: new surfaces (settings, PE/ELF/Mach-O/misc panels, extractor,
+  search, strings, visualizer, online tools, signature browser, hex,
+  file info, archive viewer) were hard-coded English; they now use
+  react-i18next keys. Catalogs grew from 285 to 895 keys with real
+  zh-CN/ru/de/fr translations and regenerated draft catalogs for the
+  other 19 locales.
+
 ## die-rust v1.0.3
 
 Patch release — two bug fixes reported as GitHub issues #1 and #2.
